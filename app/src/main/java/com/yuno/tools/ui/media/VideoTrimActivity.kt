@@ -98,7 +98,6 @@ class VideoTrimActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnPickVideo.setOnClickListener { pickVideo.launch("video/*") }
         binding.fabTrim.setOnClickListener { onTrimGenerateClicked() }
-        binding.btnGenerateTrim.setOnClickListener { onTrimGenerateClicked() }
 
         binding.rangeSlider.addOnChangeListener { slider, _, _ ->
             if (isAdjustingSlider || slider.values.size < 2) return@addOnChangeListener
@@ -179,18 +178,12 @@ class VideoTrimActivity : AppCompatActivity() {
             .setDuration(180L)
             .setInterpolator(OvershootInterpolator())
             .start()
-        binding.btnGenerateTrim.animate().cancel()
-        binding.btnGenerateTrim.alpha = 0.78f
-        binding.btnGenerateTrim.animate().alpha(1f).setDuration(160L).start()
     }
 
     private fun setTrimProcessing(processing: Boolean) {
         binding.fabTrim.isEnabled = !processing
-        binding.btnGenerateTrim.isEnabled = !processing
-        binding.btnGenerateTrim.text = if (processing) "正在生成..." else "生成剪切视频"
         binding.progressTrim.visibility = if (processing) View.VISIBLE else View.GONE
         binding.fabTrim.alpha = if (processing) 0.55f else 1f
-        binding.btnGenerateTrim.alpha = if (processing) 0.75f else 1f
     }
 
     private fun trimSelectedVideo() {
@@ -250,7 +243,8 @@ class VideoTrimActivity : AppCompatActivity() {
             muxer.start()
 
             // 必须按 MediaExtractor 输出顺序一次性写入所有已选轨道。
-            // 旧实现逐轨道分别 seek/read，部分机型会导致音频轨没有被正确写入或播放器识别不到声音。
+            // 使用 PREVIOUS_SYNC 时，视频关键帧可能早于用户选择的开始点；这类关键帧必须写入，
+            // 否则输出文件会没有可解码的视频样本，表现为“剪切区间内没有可写入的视频数据”。
             extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             val buffer = ByteBuffer.allocate(2 * 1024 * 1024)
             val info = MediaCodec.BufferInfo()
@@ -269,7 +263,7 @@ class VideoTrimActivity : AppCompatActivity() {
                 if (size < 0) break
 
                 val dstTrack = trackMap[srcTrack]
-                if (dstTrack != null && sampleTime >= startUs) {
+                if (dstTrack != null) {
                     if (firstPts < 0) firstPts = sampleTime
                     val format = extractor.getTrackFormat(srcTrack)
                     val mime = format.getString(MediaFormat.KEY_MIME) ?: ""

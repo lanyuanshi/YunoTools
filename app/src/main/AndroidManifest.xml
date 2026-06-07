@@ -66,7 +66,7 @@
             android:name=".ui.media.AudioSeparateActivity"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".ui.media.VideoMD5Activity"
+            android:name=".ui.media.VideoTrimActivity"
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.BarrageActivity"

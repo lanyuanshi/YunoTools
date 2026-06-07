@@ -11,7 +11,7 @@ import com.yuno.tools.ui.image.ImageCompressActivity
 import com.yuno.tools.ui.image.QRCodeActivity
 import com.yuno.tools.ui.image.GridCropActivity
 import com.yuno.tools.ui.media.AudioSeparateActivity
-import com.yuno.tools.ui.media.VideoMD5Activity
+import com.yuno.tools.ui.media.VideoTrimActivity
 import com.yuno.tools.ui.tools.AnswerBookActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialCardView>(R.id.cardVideoMD5).setOnClickListener {
-            startActivity(Intent(this, VideoMD5Activity::class.java))
+            startActivity(Intent(this, VideoTrimActivity::class.java))
         }
 
         findViewById<MaterialCardView>(R.id.cardBarrage).setOnClickListener {

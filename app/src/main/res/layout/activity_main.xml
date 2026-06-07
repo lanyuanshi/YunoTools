@@ -357,7 +357,7 @@
                                 android:layout_width="24dp"
                                 android:layout_height="24dp"
                                 android:layout_gravity="center"
-                                android:src="@drawable/ic_md5"
+                                android:src="@drawable/ic_video_watermark"
                                 app:tint="@android:color/white" />
                         </FrameLayout>
 
@@ -365,7 +365,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="改视频 MD5"
+                            android:text="视频剪切"
                             android:textColor="#1C1C1E"
                             android:textSize="13sp" />
                     </LinearLayout>

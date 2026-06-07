@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Yuno工具</string>
+    <string name="title_home">首页</string>
+    <string name="title_profile">我的</string>
+</resources>

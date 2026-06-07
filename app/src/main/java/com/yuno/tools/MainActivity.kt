@@ -7,7 +7,6 @@ import com.google.android.material.card.MaterialCardView
 import android.widget.LinearLayout
 import com.yuno.tools.ui.video.VideoParseActivity
 import com.yuno.tools.ui.tools.RandomQuoteActivity
-import com.yuno.tools.ui.image.ImageWatermarkActivity
 import com.yuno.tools.ui.image.ImageCompressActivity
 import com.yuno.tools.ui.image.QRCodeActivity
 import com.yuno.tools.ui.image.GridCropActivity
@@ -32,10 +31,6 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<MaterialCardView>(R.id.cardLiveParse).setOnClickListener {
             startActivity(Intent(this, RandomQuoteActivity::class.java))
-        }
-
-        findViewById<MaterialCardView>(R.id.cardImageWatermark).setOnClickListener {
-            startActivity(Intent(this, ImageWatermarkActivity::class.java))
         }
 
         findViewById<MaterialCardView>(R.id.cardImageCompress).setOnClickListener {
@@ -75,7 +70,7 @@ class MainActivity : AppCompatActivity() {
             overridePendingTransition(R.anim.profile_slide_up_in, R.anim.profile_stay)
         }
         findViewById<LinearLayout>(R.id.navChat).setOnClickListener {
-            // 当前页就是聊天/首页，保持轻微反馈，不做跳转
+            // 当前页就是首页，保持轻微反馈，不做跳转
         }
     }
     override fun onResume() {

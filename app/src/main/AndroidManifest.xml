@@ -54,9 +54,6 @@
             android:name=".ui.profile.SettingsActivity"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".ui.image.ImageWatermarkActivity"
-            android:screenOrientation="portrait" />
-        <activity
             android:name=".ui.image.ImageCompressActivity"
             android:screenOrientation="portrait" />
         <activity

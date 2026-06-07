@@ -43,7 +43,15 @@ class SettingsActivity : AppCompatActivity() {
     private fun loadAvatar() {
         val iv = findViewById<ImageView>(R.id.ivAvatarPreview)
         val uri = UserSettingsStore.getAvatarUri(this)
-        if (uri.isNotBlank()) Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).into(iv) else iv.setImageResource(R.drawable.ic_profile)
+        iv.imageTintList = null
+        iv.clearColorFilter()
+        iv.setPadding(0,0,0,0)
+        if (uri.isNotBlank()) {
+            Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).into(iv)
+        } else {
+            iv.setImageResource(R.drawable.ic_profile)
+            iv.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+        }
     }
     private fun refreshThemeState() {
         val current = UserSettingsStore.getTheme(this)

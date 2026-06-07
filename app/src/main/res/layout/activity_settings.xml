@@ -72,10 +72,8 @@
                             android:layout_width="78dp"
                             android:layout_height="78dp"
                             android:layout_gravity="center"
-                            android:padding="17dp"
                             android:scaleType="centerCrop"
-                            android:src="@drawable/ic_profile"
-                            app:tint="#FFFFFF" />
+                            android:src="@drawable/ic_profile" />
                     </FrameLayout>
 
                     <LinearLayout

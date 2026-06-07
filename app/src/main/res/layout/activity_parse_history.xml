@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/historyRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F2F2F7"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="88dp"
+        android:gravity="bottom|center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_bottom_nav_capsule"
+            android:padding="10dp"
+            android:src="@drawable/ic_back"
+            app:tint="#1C1C1E" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="解析历史"
+                android:textColor="#111827"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvHistoryCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="共 0 条"
+                android:textColor="#8E8E93"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnClearHistory"
+            android:layout_width="wrap_content"
+            android:layout_height="42dp"
+            android:text="清空"
+            android:textColor="#007AFF"
+            android:textSize="14sp"
+            app:backgroundTint="#FFFFFF"
+            app:cornerRadius="21dp"
+            app:elevation="0dp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvHistory"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="4dp" />
+
+        <LinearLayout
+            android:id="@+id/emptyHistory"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:layout_width="76dp"
+                android:layout_height="76dp"
+                android:background="@drawable/bg_circle_blue_light">
+                <ImageView
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_history"
+                    app:tint="#007AFF" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="暂无解析历史"
+                android:textColor="#111827"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="解析成功后会自动保存到这里"
+                android:textColor="#8E8E93"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

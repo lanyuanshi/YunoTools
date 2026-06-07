@@ -17,12 +17,14 @@ import com.yuno.tools.ui.tools.AnswerBookActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
 import com.yuno.tools.ui.profile.ProfileActivity
+import com.yuno.tools.util.ThemeApplier
 
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        ThemeApplier.apply(this)
 
         findViewById<MaterialCardView>(R.id.cardVideoParse).setOnClickListener {
             startActivity(Intent(this, VideoParseActivity::class.java))
@@ -75,5 +77,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<LinearLayout>(R.id.navChat).setOnClickListener {
             // 当前页就是聊天/首页，保持轻微反馈，不做跳转
         }
+    }
+    override fun onResume() {
+        super.onResume()
+        ThemeApplier.apply(this)
     }
 }

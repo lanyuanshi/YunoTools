@@ -48,6 +48,12 @@
             android:name=".ui.profile.ProfileActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.profile.ParseHistoryActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.profile.SettingsActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.image.ImageWatermarkActivity"
             android:screenOrientation="portrait" />
         <activity

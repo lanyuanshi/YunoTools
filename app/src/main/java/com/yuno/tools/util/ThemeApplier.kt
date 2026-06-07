@@ -15,7 +15,7 @@ import com.yuno.tools.data.UserSettingsStore
 data class YunoTheme(val bg:Int, val card:Int, val primary:Int, val text:Int, val sub:Int)
 
 object ThemeApplier {
-    private val skipTintIds = setOf("ivAvatar", "ivAvatarPreview", "ivCover")
+    private val skipTintIds = setOf("ivAvatar", "ivAvatarPreview", "ivCover", "ivPreview", "ivCompressed", "ivQRCode", "ivGridItem")
     fun current(activity: Activity): YunoTheme = when (UserSettingsStore.getTheme(activity)) {
         UserSettingsStore.THEME_BLACK -> YunoTheme(Color.parseColor("#111114"), Color.parseColor("#1F1F24"), Color.parseColor("#8AB4FF"), Color.WHITE, Color.parseColor("#B8BBC2"))
         UserSettingsStore.THEME_PINK -> YunoTheme(Color.parseColor("#FFF1F7"), Color.WHITE, Color.parseColor("#FF5FA2"), Color.parseColor("#231824"), Color.parseColor("#8B6475"))

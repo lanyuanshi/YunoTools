@@ -12,6 +12,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp">
+
         <ImageButton
             android:id="@+id/btnBack"
             android:layout_width="40dp"
@@ -19,6 +20,7 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_back"
             app:tint="#1C1C1E" />
+
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -28,6 +30,7 @@
             android:textColor="#1C1C1E"
             android:textSize="17sp"
             android:textStyle="bold" />
+
         <View
             android:layout_width="40dp"
             android:layout_height="40dp" />
@@ -48,6 +51,22 @@
             android:textSize="16sp"
             app:backgroundTint="#007AFF"
             app:cornerRadius="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="切图模式"
+            android:textColor="#1C1C1E"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/spMode"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:paddingHorizontal="12dp" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerView"

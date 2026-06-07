@@ -13,6 +13,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -48,6 +49,7 @@ class VideoTrimActivity : AppCompatActivity() {
                     p.pause()
                     p.seekTo(startMs)
                 }
+                binding.btnPlayOverlay.visibility = if (p.isPlaying) View.GONE else View.VISIBLE
             }
             handler.postDelayed(this, 250)
         }
@@ -70,18 +72,25 @@ class VideoTrimActivity : AppCompatActivity() {
 
     private fun initPlayer() {
         player = ExoPlayer.Builder(this).build().also { binding.playerView.player = it }
-        binding.playerView.setOnClickListener {
-            val p = player ?: return@setOnClickListener
-            if (selectedUri == null) {
-                pickVideo.launch("video/*")
-            } else if (p.isPlaying) {
-                p.pause()
-            } else {
-                if (p.currentPosition < startMs || (endMs > 0 && p.currentPosition >= endMs)) p.seekTo(startMs)
-                p.play()
-            }
-        }
+        binding.playerView.setOnClickListener { togglePlayback() }
+        binding.btnPlayOverlay.setOnClickListener { togglePlayback() }
         handler.post(tick)
+    }
+
+    private fun togglePlayback() {
+        val p = player ?: return
+        if (selectedUri == null) {
+            pickVideo.launch("video/*")
+            return
+        }
+        if (p.isPlaying) {
+            p.pause()
+            binding.btnPlayOverlay.visibility = View.VISIBLE
+        } else {
+            if (p.currentPosition < startMs || (endMs > 0 && p.currentPosition >= endMs)) p.seekTo(startMs)
+            p.play()
+            binding.btnPlayOverlay.visibility = View.GONE
+        }
     }
 
     private fun initControls() {
@@ -122,6 +131,7 @@ class VideoTrimActivity : AppCompatActivity() {
         player?.setMediaItem(MediaItem.fromUri(uri))
         player?.prepare()
         player?.seekTo(0)
+        binding.btnPlayOverlay.visibility = View.VISIBLE
         Toast.makeText(this, "已选择：$displayName", Toast.LENGTH_SHORT).show()
     }
 

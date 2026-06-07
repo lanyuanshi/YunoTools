@@ -3,8 +3,12 @@ package com.yuno.tools.ui.video
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContentValues
 import android.os.Bundle
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
+import android.webkit.MimeTypeMap
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,8 +28,10 @@ import com.yuno.tools.data.VideoParseResult
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 class ImageSetResultActivity : AppCompatActivity() {
 
@@ -113,44 +119,102 @@ class ImageSetResultActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             var success = 0
             var failed = 0
+            var lastError = ""
 
             toDownload.forEach { index ->
                 val url = images.getOrNull(index) ?: return@forEach
                 try {
-                    val conn = URL(url).openConnection() as HttpURLConnection
-                    conn.requestMethod = "GET"
-                    conn.connectTimeout = 30000
-                    conn.readTimeout = 30000
-                    conn.connect()
-
-                    if (conn.responseCode == 200) {
-                        val ext = url.substringAfterLast('.', "jpg")
-                        val fileName = "img_${System.currentTimeMillis()}_${index}.${ext}"
-                        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                        val file = File(downloadsDir, fileName)
-                        FileOutputStream(file).use { output ->
-                            conn.inputStream.use { input -> input.copyTo(output) }
-                        }
-                        android.media.MediaScannerConnection.scanFile(
-                            this@ImageSetResultActivity,
-                            arrayOf(file.absolutePath), null, null
-                        )
-                        success++
-                    } else {
-                        failed++
-                    }
+                    downloadImageToGallery(url, index)
+                    success++
                 } catch (e: Exception) {
                     failed++
+                    lastError = e.message ?: e.javaClass.simpleName
                 }
             }
 
             withContext(Dispatchers.Main) {
-                Toast.makeText(
-                    this@ImageSetResultActivity,
-                    "下载完成: ${success}成功 ${failed}失败",
-                    Toast.LENGTH_LONG
-                ).show()
+                val msg = if (failed > 0 && lastError.isNotBlank()) {
+                    "下载完成: ${success}成功 ${failed}失败，原因: $lastError"
+                } else {
+                    "下载完成: ${success}成功 ${failed}失败"
+                }
+                Toast.makeText(this@ImageSetResultActivity, msg, Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private fun downloadImageToGallery(imageUrl: String, index: Int) {
+        val conn = (URL(imageUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            instanceFollowRedirects = true
+            connectTimeout = 30000
+            readTimeout = 60000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+            setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+            setRequestProperty("Connection", "close")
+            runCatching {
+                val u = URL(imageUrl)
+                setRequestProperty("Referer", "${u.protocol}://${u.host}/")
+            }
+        }
+
+        try {
+            val code = conn.responseCode
+            if (code !in 200..299) throw IllegalStateException("HTTP $code")
+
+            val contentType = conn.contentType?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT)
+            val ext = guessImageExtension(imageUrl, contentType)
+            val mimeType = contentType?.takeIf { it.startsWith("image/") } ?: MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(ext) ?: "image/jpeg"
+            val fileName = "yunotools_img_${System.currentTimeMillis()}_${index}.$ext"
+
+            conn.inputStream.use { input ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                        put(MediaStore.Images.Media.MIME_TYPE, mimeType)
+                        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/YunoTools/ImageSets")
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IllegalStateException("无法创建图片文件")
+                    try {
+                        contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output) }
+                            ?: throw IllegalStateException("无法写入图片文件")
+                        values.clear()
+                        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                        contentResolver.update(uri, values, null, null)
+                    } catch (e: Exception) {
+                        contentResolver.delete(uri, null, null)
+                        throw e
+                    }
+                } else {
+                    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "YunoTools/ImageSets")
+                    if (!dir.exists()) dir.mkdirs()
+                    val file = File(dir, fileName)
+                    FileOutputStream(file).use { output: OutputStream -> input.copyTo(output) }
+                    android.media.MediaScannerConnection.scanFile(
+                        this@ImageSetResultActivity,
+                        arrayOf(file.absolutePath),
+                        arrayOf(mimeType),
+                        null
+                    )
+                }
+            }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun guessImageExtension(imageUrl: String, contentType: String?): String {
+        val fromMime = contentType?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        if (!fromMime.isNullOrBlank()) return if (fromMime == "jpeg") "jpg" else fromMime
+
+        val cleanPath = runCatching { URL(imageUrl).path }.getOrDefault(imageUrl).substringBefore('?').substringBefore('#')
+        val ext = cleanPath.substringAfterLast('.', "jpg").lowercase(Locale.ROOT)
+        return when (ext) {
+            "jpg", "jpeg", "png", "webp", "gif", "bmp" -> if (ext == "jpeg") "jpg" else ext
+            else -> "jpg"
         }
     }
 

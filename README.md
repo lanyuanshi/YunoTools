@@ -114,3 +114,6 @@ private const val BASE_URL = "https://your-api-domain.com/"
 
 ## 许可证
 MIT License
+### v1.0.30
+- 修复视频剪切页开始/结束时长控制条过宽，需要左右滑动且显示不完整的问题。
+- 时间调节控件改为屏幕内自适应双分组布局，缩小按钮与时间字号，确保一屏完整显示。

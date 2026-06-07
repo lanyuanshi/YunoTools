@@ -1,55 +1,90 @@
 package com.yuno.tools.util
+
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowInsetsController
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.view.WindowCompat
 import com.google.android.material.card.MaterialCardView
+import com.yuno.tools.R
 import com.yuno.tools.data.UserSettingsStore
 
-data class YunoTheme(val bg:Int, val card:Int, val primary:Int, val text:Int, val sub:Int)
+data class YunoTheme(
+    val bg: Int,
+    val card: Int,
+    val primary: Int,
+    val text: Int,
+    val sub: Int,
+    val imageBg: Boolean = false
+)
 
 object ThemeApplier {
+    private const val AMIS_BG_TAG = "amis_theme_background"
     private val skipTintIds = setOf("ivAvatar", "ivAvatarPreview", "ivCover", "ivPreview", "ivCompressed", "ivQRCode", "ivGridItem")
+
     fun current(activity: Activity): YunoTheme = when (UserSettingsStore.getTheme(activity)) {
         UserSettingsStore.THEME_BLACK -> YunoTheme(Color.parseColor("#111114"), Color.parseColor("#1F1F24"), Color.parseColor("#8AB4FF"), Color.WHITE, Color.parseColor("#B8BBC2"))
         UserSettingsStore.THEME_PINK -> YunoTheme(Color.parseColor("#FFF1F7"), Color.WHITE, Color.parseColor("#FF5FA2"), Color.parseColor("#231824"), Color.parseColor("#8B6475"))
         UserSettingsStore.THEME_BLUE -> YunoTheme(Color.parseColor("#EFF6FF"), Color.WHITE, Color.parseColor("#007AFF"), Color.parseColor("#111827"), Color.parseColor("#64748B"))
+        UserSettingsStore.THEME_AMIS -> YunoTheme(Color.parseColor("#EAF4FF"), Color.argb(218, 255, 255, 255), Color.parseColor("#FB7DB8"), Color.parseColor("#223044"), Color.parseColor("#6D7890"), true)
         else -> YunoTheme(Color.parseColor("#F2F2F7"), Color.WHITE, Color.parseColor("#007AFF"), Color.parseColor("#1C1C1E"), Color.parseColor("#8E8E93"))
     }
+
     fun apply(activity: Activity) {
         val theme = current(activity)
         val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
-        root.setBackgroundColor(theme.bg)
+        if (theme.imageBg) applyAmisBackground(root) else clearAmisBackground(root)
+        root.setBackgroundColor(if (theme.imageBg) Color.TRANSPARENT else theme.bg)
         applyView(root, theme)
 
-        // 系统状态栏 & 导航栏
         val window = activity.window
-        window.statusBarColor = theme.bg
-        window.navigationBarColor = theme.bg
+        window.statusBarColor = if (theme.imageBg) Color.argb(88, 255, 255, 255) else theme.bg
+        window.navigationBarColor = if (theme.imageBg) Color.argb(232, 255, 255, 255) else theme.bg
         val isLightBg = isLight(theme.bg)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = isLightBg
             isAppearanceLightNavigationBars = isLightBg
         }
     }
-    private fun applyView(v: View, t: YunoTheme) {
-        val idName = runCatching { v.resources.getResourceEntryName(v.id) }.getOrNull().orEmpty()
-        if (idName.endsWith("Root") || idName == "mainRoot") v.setBackgroundColor(t.bg)
 
-        // 首页顶部元素
+    private fun applyAmisBackground(root: ViewGroup) {
+        val frame = root as? FrameLayout ?: return
+        val exists = (0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it.tag == AMIS_BG_TAG }
+        if (exists != null) return
+        val bg = ImageView(frame.context).apply {
+            tag = AMIS_BG_TAG
+            setImageResource(R.drawable.theme_amis_bg)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            alpha = 0.38f
+            clearColorFilter()
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        frame.addView(bg, 0)
+    }
+
+    private fun clearAmisBackground(root: ViewGroup) {
+        val frame = root as? FrameLayout ?: return
+        for (i in frame.childCount - 1 downTo 0) {
+            if (frame.getChildAt(i).tag == AMIS_BG_TAG) frame.removeViewAt(i)
+        }
+    }
+
+    private fun applyView(v: View, t: YunoTheme) {
+        if (v.tag == AMIS_BG_TAG) return
+        val idName = runCatching { v.resources.getResourceEntryName(v.id) }.getOrNull().orEmpty()
+        if (idName.endsWith("Root") || idName == "mainRoot") v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
+
         when (idName) {
-            "statusBarPlaceholder" -> v.setBackgroundColor(t.bg)
+            "statusBarPlaceholder" -> v.setBackgroundColor(if (t.imageBg) Color.argb(88, 255, 255, 255) else t.bg)
             "tvMainTitle" -> {
-                v.setBackgroundColor(t.bg)
+                v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
                 (v as? TextView)?.setTextColor(t.text)
             }
-            "bottomNavContainer" -> v.setBackgroundColor(t.bg)
+            "bottomNavContainer" -> v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
             "bottomNavInner" -> {
                 applyBottomNav(v, t)
                 return
@@ -57,17 +92,22 @@ object ThemeApplier {
         }
 
         when (v) {
-            is MaterialCardView -> v.setCardBackgroundColor(t.card)
+            is MaterialCardView -> {
+                v.setCardBackgroundColor(t.card)
+                if (t.imageBg) {
+                    v.strokeWidth = (0.7f * v.resources.displayMetrics.density).toInt().coerceAtLeast(1)
+                    v.strokeColor = blend(t.primary, Color.WHITE, 0.30f)
+                }
+            }
             is TextView -> {
-                if (idName == "tvMainTitle") { /* 已精确处理 */ }
-                else {
+                if (idName != "tvMainTitle") {
                     val text = v.text?.toString() ?: ""
-                    val small = v.textSize <= 42f || text.contains("共 ") || text.contains("暂无") || text.contains("点击") || text.contains("条")
+                    val small = v.textSize <= 42f || text.contains("共 ") || text.contains("暂无") || text.contains("点击") || text.contains("条") || text.startsWith("当前：")
                     v.setTextColor(if (small && !v.typeface?.isBold.orFalse()) t.sub else t.text)
                 }
             }
             is ImageView -> {
-                if (idName in skipTintIds) v.clearColorFilter() else try { v.setColorFilter(t.primary) } catch (_: Exception) {}
+                if (idName in skipTintIds || v.tag == AMIS_BG_TAG) v.clearColorFilter() else runCatching { v.setColorFilter(t.primary) }
             }
         }
         if (v is ViewGroup) for (i in 0 until v.childCount) applyView(v.getChildAt(i), t)
@@ -75,12 +115,11 @@ object ThemeApplier {
 
     private fun applyBottomNav(v: View, t: YunoTheme) {
         val density = v.resources.displayMetrics.density
-        val isDefault = t.bg == Color.parseColor("#F2F2F7")
+        val isDefault = !t.imageBg && t.bg == Color.parseColor("#F2F2F7")
         val capsuleColor = t.card
         val selectedBg = if (isDefault) Color.parseColor("#E8F3FF") else blend(t.primary, t.card, 0.18f)
         val selectedColor = if (isDefault) Color.parseColor("#1E88E5") else t.primary
         val unselectedColor = if (isDefault) Color.parseColor("#A0A7B3") else t.sub
-
         v.background = roundRect(capsuleColor, 28f * density)
         val group = v as? ViewGroup ?: return
         for (i in 0 until group.childCount) {
@@ -120,4 +159,3 @@ object ThemeApplier {
 
     private fun Boolean?.orFalse() = this ?: false
 }
-

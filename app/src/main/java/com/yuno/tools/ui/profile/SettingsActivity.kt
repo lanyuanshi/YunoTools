@@ -30,6 +30,7 @@ class SettingsActivity : AppCompatActivity() {
         bindTheme(R.id.themeBlack, UserSettingsStore.THEME_BLACK)
         bindTheme(R.id.themePink, UserSettingsStore.THEME_PINK)
         bindTheme(R.id.themeBlue, UserSettingsStore.THEME_BLUE)
+        bindTheme(R.id.themeAmis, UserSettingsStore.THEME_AMIS)
         loadAvatar(); refreshThemeState()
     }
     override fun onResume() { super.onResume(); ThemeApplier.apply(this); loadAvatar(); refreshThemeState() }
@@ -55,11 +56,11 @@ class SettingsActivity : AppCompatActivity() {
     }
     private fun refreshThemeState() {
         val current = UserSettingsStore.getTheme(this)
-        listOf(R.id.themeDefault to UserSettingsStore.THEME_DEFAULT, R.id.themeBlack to UserSettingsStore.THEME_BLACK, R.id.themePink to UserSettingsStore.THEME_PINK, R.id.themeBlue to UserSettingsStore.THEME_BLUE).forEach { (id, key) ->
+        listOf(R.id.themeDefault to UserSettingsStore.THEME_DEFAULT, R.id.themeBlack to UserSettingsStore.THEME_BLACK, R.id.themePink to UserSettingsStore.THEME_PINK, R.id.themeBlue to UserSettingsStore.THEME_BLUE, R.id.themeAmis to UserSettingsStore.THEME_AMIS).forEach { (id, key) ->
             val card = findViewById<MaterialCardView>(id)
             card.strokeWidth = if (key == current) (2 * resources.displayMetrics.density).toInt() else 0
             card.strokeColor = ThemeApplier.current(this).primary
         }
-        findViewById<TextView>(R.id.tvCurrentTheme).text = when(current){ UserSettingsStore.THEME_BLACK -> "当前：黑色主题"; UserSettingsStore.THEME_PINK -> "当前：粉色主题"; UserSettingsStore.THEME_BLUE -> "当前：蓝色主题"; else -> "当前：默认主题" }
+        findViewById<TextView>(R.id.tvCurrentTheme).text = when(current){ UserSettingsStore.THEME_BLACK -> "当前：黑色主题"; UserSettingsStore.THEME_PINK -> "当前：粉色主题"; UserSettingsStore.THEME_BLUE -> "当前：蓝色主题"; UserSettingsStore.THEME_AMIS -> "当前：爱弥斯主题"; else -> "当前：默认主题" }
     }
 }

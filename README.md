@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.0.38**
+**当前版本：v1.0.39**
 
-安装包下载：[`release/YunoTools-v1.0.38.apk`](release/YunoTools-v1.0.38.apk)
+安装包下载：[`release/YunoTools-v1.0.39.apk`](release/YunoTools-v1.0.39.apk)
 
-本版本紧急修复视频剪切：彻底放弃 `MediaExtractor` + `MediaMuxer` 剪切方案，改用 AndroidX Media3 Transformer 导出剪切视频，以绕过部分异常视频 seek 表导致无法生成或无声音的问题。
+本版本新增「爱弥斯」动漫主题：使用用户提供插画作为低透明度沉浸背景，配合粉蓝主色、半透明卡片与轻描边，形成接近哔哩哔哩风格的年轻化主题体验。
 
 一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。
 
@@ -37,7 +37,7 @@
 
 ### 个人中心
 - **解析历史** - 查看过往的解析记录，点击可直接回放结果
-- **设置** - 自定义头像、四主题切换（默认/黑色/粉色/蓝色）
+- **设置** - 自定义头像、五主题切换（默认/黑色/粉色/蓝色/爱弥斯）
 
 ## 技术栈
 - **语言**: Kotlin

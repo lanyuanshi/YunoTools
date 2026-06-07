@@ -39,19 +39,13 @@ class AIChatActivity : AppCompatActivity() {
 
     private val messages = mutableListOf<ChatMessage>()
     private val modelOptions = listOf(
-        "deepseek/deepseek-chat-v3-0324",
-        "deepseek-chat",
-        "gpt-4o-mini",
-        "gpt-4o",
-        "gpt-4.1-mini",
-        "gpt-4.1",
-        "gpt-4-turbo",
-        "gpt-4",
-        "gpt-3.5-turbo",
-        "o4-mini",
-        "o3-mini",
-        "claude-3-5-sonnet",
-        "gemini-1.5-flash"
+        "gpt-5.5",
+        "gpt-5.4-mini",
+        "gpt-5.4",
+        "gpt-5.2-chat-latest",
+        "gpt-5.2",
+        "gpt-4o-realtime-preview",
+        "gpt-4o-audio-preview"
     )
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)

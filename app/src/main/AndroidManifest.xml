@@ -70,12 +70,12 @@
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.BarrageActivity"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="landscape" />
         <activity
             android:name=".ui.tools.ClockActivity"
             android:screenOrientation="landscape" />
         <activity
-            android:name=".ui.tools.AnswerBookActivity"
+            android:name=".ui.tools.AnimeSearchActivity"
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.video.PlayerActivity"

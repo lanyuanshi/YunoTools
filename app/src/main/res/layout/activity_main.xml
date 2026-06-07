@@ -472,7 +472,7 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardAnswerBook"
+                    android:id="@+id/cardAnimeSearch"
                     android:layout_width="0dp"
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"
@@ -499,14 +499,14 @@
                                 android:layout_height="24dp"
                                 android:layout_gravity="center"
                                 android:src="@drawable/ic_answer"
-                                app:tint="#FF9500" />
+                                app:tint="#32ADE6" />
                         </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="答案之书"
+                            android:text="以图搜番"
                             android:textColor="#1C1C1E"
                             android:textSize="13sp" />
                     </LinearLayout>

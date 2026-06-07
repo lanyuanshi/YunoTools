@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#F2F2F7" android:orientation="vertical" android:padding="20dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageButton android:id="@+id/btnBack" android:layout_width="44dp" android:layout_height="44dp" android:background="@android:color/transparent" android:src="@drawable/ic_back" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="center" android:text="以图搜番" android:textColor="#1C1C1E" android:textSize="22sp" android:textStyle="bold" />
+        <Space android:layout_width="44dp" android:layout_height="44dp" />
+    </LinearLayout>
+    <ImageView android:id="@+id/ivAnimePreview" android:layout_width="match_parent" android:layout_height="240dp" android:layout_marginTop="16dp" android:background="#FFFFFF" android:scaleType="centerCrop" android:visibility="gone" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="上传动漫截图，自动识别番剧名称、集数、出现时间与相似度。" android:textColor="#636366" android:textSize="15sp" />
+    <Button android:id="@+id/btnPickAnimeImage" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="20dp" android:text="选择动漫截图" />
+    <Button android:id="@+id/btnSearchAnime" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="10dp" android:text="开始以图搜番" />
+    <TextView android:id="@+id/tvAnimeStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:text="请选择一张动漫截图" android:textColor="#8E8E93" android:textSize="14sp" />
+    <TextView android:id="@+id/tvAnimeResult" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="#FFFFFF" android:padding="16dp" android:textColor="#1C1C1E" android:textSize="17sp" android:lineSpacingExtra="6dp" />
+</LinearLayout>

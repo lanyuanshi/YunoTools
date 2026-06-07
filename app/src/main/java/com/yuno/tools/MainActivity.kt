@@ -12,7 +12,7 @@ import com.yuno.tools.ui.image.QRCodeActivity
 import com.yuno.tools.ui.image.GridCropActivity
 import com.yuno.tools.ui.media.AudioSeparateActivity
 import com.yuno.tools.ui.media.VideoTrimActivity
-import com.yuno.tools.ui.tools.AnswerBookActivity
+import com.yuno.tools.ui.tools.AnimeSearchActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
 import com.yuno.tools.ui.profile.ProfileActivity
@@ -61,8 +61,8 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ClockActivity::class.java))
         }
 
-        findViewById<MaterialCardView>(R.id.cardAnswerBook).setOnClickListener {
-            startActivity(Intent(this, AnswerBookActivity::class.java))
+        findViewById<MaterialCardView>(R.id.cardAnimeSearch).setOnClickListener {
+            startActivity(Intent(this, AnimeSearchActivity::class.java))
         }
 
         findViewById<LinearLayout>(R.id.navProfile).setOnClickListener {

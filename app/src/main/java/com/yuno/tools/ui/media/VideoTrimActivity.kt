@@ -217,24 +217,11 @@ class VideoTrimActivity : AppCompatActivity() {
         var outUri: Uri? = null
         var outFile: File? = null
         try {
-            val probe = MediaExtractor()
-            val writableTracks = linkedMapOf<Int, String>()
+            val extractor = MediaExtractor()
             try {
                 contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
-                    probe.setDataSource(pfd.fileDescriptor)
+                    extractor.setDataSource(pfd.fileDescriptor)
                 } ?: error("无法读取视频文件")
-
-                var sourceHasVideo = false
-                for (i in 0 until probe.trackCount) {
-                    val format = probe.getTrackFormat(i)
-                    val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
-                    if (mime.startsWith("video/")) sourceHasVideo = true
-                    if ((mime.startsWith("video/") || mime.startsWith("audio/")) && hasWritableSample(inputUri, i, mime, startUs, endUs)) {
-                        writableTracks[i] = mime
-                    }
-                }
-                if (!sourceHasVideo) error("没有可剪切的视频轨道")
-                if (writableTracks.none { it.value.startsWith("video/") }) error("剪切区间内没有可写入的视频数据")
 
                 val output = createOutput("$outputName.mp4", "video/mp4", Environment.DIRECTORY_MOVIES, "YunoTools/Trim")
                 outUri = output.uri
@@ -243,35 +230,65 @@ class VideoTrimActivity : AppCompatActivity() {
                 muxer = localMuxer
 
                 val trackMap = linkedMapOf<Int, Pair<Int, String>>()
-                writableTracks.forEach { (srcTrack, mime) ->
-                    val format = probe.getTrackFormat(srcTrack)
-                    trackMap[srcTrack] = localMuxer.addTrack(format) to mime
+                var hasVideoTrack = false
+                for (i in 0 until extractor.trackCount) {
+                    val format = extractor.getTrackFormat(i)
+                    val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                    if (mime.startsWith("video/")) hasVideoTrack = true
+                    if (mime.startsWith("video/") || mime.startsWith("audio/")) {
+                        trackMap[i] = localMuxer.addTrack(format) to mime
+                        extractor.selectTrack(i)
+                    }
                 }
+                if (!hasVideoTrack) error("没有可剪切的视频轨道")
                 if (trackMap.isEmpty()) error("没有可剪切的音视频轨道")
 
                 localMuxer.start()
                 muxerStarted = true
 
-                var wroteVideoSample = false
-                trackMap.forEach { (srcTrack, dst) ->
-                    val (dstTrack, mime) = dst
-                    val wrote = writeTrimTrackSamples(
-                        inputUri = inputUri,
-                        srcTrack = srcTrack,
-                        dstTrack = dstTrack,
-                        mime = mime,
-                        startUs = startUs,
-                        endUs = endUs,
-                        muxer = localMuxer
-                    )
-                    if (mime.startsWith("video/")) wroteVideoSample = wroteVideoSample || wrote
+                val wrote = writeInterleavedSamples(
+                    extractor = extractor,
+                    trackMap = trackMap,
+                    startUs = startUs,
+                    endUs = endUs,
+                    muxer = localMuxer,
+                    forceFromBeginning = false
+                )
+                var wroteVideoSample = wrote.first
+                var wroteAudioSample = wrote.second
+
+                // 有些视频 seek 表不标准，按开始点 seek 后直接落到结束点后。此时重新打开 extractor 从 0 扫描兜底。
+                if (!wroteVideoSample) {
+                    extractor.release()
+                    val fallbackExtractor = MediaExtractor()
+                    try {
+                        contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
+                            fallbackExtractor.setDataSource(pfd.fileDescriptor)
+                        } ?: error("无法读取视频文件")
+                        trackMap.keys.forEach { fallbackExtractor.selectTrack(it) }
+                        val fallbackWrote = writeInterleavedSamples(
+                            extractor = fallbackExtractor,
+                            trackMap = trackMap,
+                            startUs = startUs,
+                            endUs = endUs,
+                            muxer = localMuxer,
+                            forceFromBeginning = true
+                        )
+                        wroteVideoSample = fallbackWrote.first
+                        wroteAudioSample = wroteAudioSample || fallbackWrote.second
+                    } finally {
+                        fallbackExtractor.release()
+                    }
                 }
 
                 if (!wroteVideoSample) error("剪切区间内没有可写入的视频数据")
+
+                // 音频不是硬失败条件：如果源视频本身音频 sample 极少或该区间确实无音频，允许输出视频。
+                // 正常情况下交错写入会保留声音。
                 localMuxer.stop()
                 muxerStopped = true
             } finally {
-                probe.release()
+                try { extractor.release() } catch (_: Exception) {}
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && outUri != null) {
@@ -286,12 +303,11 @@ class VideoTrimActivity : AppCompatActivity() {
             }
             throw e
         } finally {
-            try {
-                if (muxerStarted && !muxerStopped) {
+            if (muxerStarted && !muxerStopped) {
+                try {
                     muxer?.stop()
+                } catch (_: Exception) {
                 }
-            } catch (_: Exception) {
-                // stop 失败时不要再覆盖前面的真实异常，输出文件会在 catch 中清理。
             }
             try {
                 muxer?.release()
@@ -300,107 +316,68 @@ class VideoTrimActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasWritableSample(inputUri: Uri, srcTrack: Int, mime: String, startUs: Long, endUs: Long): Boolean {
-        fun scan(seekUs: Long, seekMode: Int, skipEarlyAudio: Boolean): Boolean {
-            val extractor = MediaExtractor()
-            return try {
-                contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
-                    extractor.setDataSource(pfd.fileDescriptor)
-                } ?: return false
-                extractor.selectTrack(srcTrack)
-                extractor.seekTo(seekUs, seekMode)
-                while (true) {
-                    val sampleTime = extractor.sampleTime
-                    if (sampleTime < 0 || sampleTime > endUs) return false
-                    if (extractor.sampleTrackIndex == srcTrack) {
-                        if (skipEarlyAudio && mime.startsWith("audio/") && sampleTime < startUs) {
-                            if (!extractor.advance()) return false
-                            continue
-                        }
-                        val flags = extractor.sampleFlags
-                        // 视频必须至少有一个同步帧或从 0 开始的首帧，否则 muxer 可能生成不可播放文件。
-                        if (!mime.startsWith("video/") || flags and MediaExtractor.SAMPLE_FLAG_SYNC != 0 || sampleTime == 0L) {
-                            return true
-                        }
-                    }
-                    if (!extractor.advance()) return false
-                }
-            } finally {
-                extractor.release()
-            }
-        }
-        return if (mime.startsWith("video/")) {
-            scan(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC, skipEarlyAudio = false) ||
-                scan(0L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC, skipEarlyAudio = false)
-        } else {
-            scan(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC, skipEarlyAudio = true) ||
-                scan(0L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC, skipEarlyAudio = true)
-        }
-    }
-
-    private fun writeTrimTrackSamples(
-        inputUri: Uri,
-        srcTrack: Int,
-        dstTrack: Int,
-        mime: String,
+    private fun writeInterleavedSamples(
+        extractor: MediaExtractor,
+        trackMap: Map<Int, Pair<Int, String>>,
         startUs: Long,
         endUs: Long,
-        muxer: MediaMuxer
-    ): Boolean {
-        fun writeOnce(seekUs: Long, seekMode: Int, skipEarlyAudio: Boolean): Boolean {
-            val extractor = MediaExtractor()
-            return try {
-                contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
-                    extractor.setDataSource(pfd.fileDescriptor)
-                } ?: return false
-                extractor.selectTrack(srcTrack)
-                extractor.seekTo(seekUs, seekMode)
-
-                val buffer = ByteBuffer.allocate(2 * 1024 * 1024)
-                val info = MediaCodec.BufferInfo()
-                var firstPts = -1L
-                var lastPts = -1L
-                var wrote = false
-
-                while (true) {
-                    val sampleTime = extractor.sampleTime
-                    if (sampleTime < 0 || sampleTime > endUs) break
-                    if (extractor.sampleTrackIndex != srcTrack) {
-                        if (!extractor.advance()) break
-                        continue
-                    }
-                    if (skipEarlyAudio && mime.startsWith("audio/") && sampleTime < startUs) {
-                        if (!extractor.advance()) break
-                        continue
-                    }
-                    buffer.clear()
-                    val size = extractor.readSampleData(buffer, 0)
-                    if (size <= 0) {
-                        if (!extractor.advance()) break
-                        continue
-                    }
-                    if (firstPts < 0) firstPts = sampleTime
-                    var pts = (sampleTime - firstPts).coerceAtLeast(0L)
-                    if (pts <= lastPts) pts = lastPts + 1L
-                    lastPts = pts
-                    info.set(0, size, pts, extractor.sampleFlags)
-                    muxer.writeSampleData(dstTrack, buffer, info)
-                    wrote = true
-                    if (!extractor.advance()) break
-                }
-                wrote
-            } finally {
-                extractor.release()
-            }
-        }
-
-        return if (mime.startsWith("video/")) {
-            writeOnce(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC, skipEarlyAudio = false) ||
-                writeOnce(0L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC, skipEarlyAudio = false)
+        muxer: MediaMuxer,
+        forceFromBeginning: Boolean
+    ): Pair<Boolean, Boolean> {
+        if (forceFromBeginning) {
+            extractor.seekTo(0L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
         } else {
-            writeOnce(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC, skipEarlyAudio = true) ||
-                writeOnce(0L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC, skipEarlyAudio = true)
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
         }
+
+        val buffer = ByteBuffer.allocate(4 * 1024 * 1024)
+        val info = MediaCodec.BufferInfo()
+        val firstPts = mutableMapOf<Int, Long>()
+        val lastPts = mutableMapOf<Int, Long>()
+        var wroteVideoSample = false
+        var wroteAudioSample = false
+
+        while (true) {
+            val srcTrack = extractor.sampleTrackIndex
+            if (srcTrack < 0) break
+            val sampleTime = extractor.sampleTime
+            if (sampleTime < 0 || sampleTime > endUs) break
+
+            val dst = trackMap[srcTrack]
+            if (dst == null) {
+                if (!extractor.advance()) break
+                continue
+            }
+            val (dstTrack, mime) = dst
+
+            // 音频不需要关键帧预卷，跳过开始点之前的音频，避免前置声音。
+            // 视频必须允许写入开始点之前的同步帧，否则长 GOP 视频无法解码。
+            if (mime.startsWith("audio/") && sampleTime < startUs) {
+                if (!extractor.advance()) break
+                continue
+            }
+
+            buffer.clear()
+            val size = extractor.readSampleData(buffer, 0)
+            if (size <= 0) {
+                if (!extractor.advance()) break
+                continue
+            }
+
+            val basePts = firstPts.getOrPut(srcTrack) { sampleTime }
+            var pts = (sampleTime - basePts).coerceAtLeast(0L)
+            val previousPts = lastPts[srcTrack]
+            if (previousPts != null && pts <= previousPts) pts = previousPts + 1L
+            lastPts[srcTrack] = pts
+
+            info.set(0, size, pts, extractor.sampleFlags)
+            muxer.writeSampleData(dstTrack, buffer, info)
+            if (mime.startsWith("video/")) wroteVideoSample = true
+            if (mime.startsWith("audio/")) wroteAudioSample = true
+
+            if (!extractor.advance()) break
+        }
+        return wroteVideoSample to wroteAudioSample
     }
 
     private data class OutputInfo(val path: String, val displayPath: String, val uri: Uri?, val file: File?)

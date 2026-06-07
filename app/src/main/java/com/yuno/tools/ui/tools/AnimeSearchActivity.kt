@@ -1,12 +1,14 @@
 package com.yuno.tools.ui.tools
 
 import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,9 +38,8 @@ class AnimeSearchActivity : AppCompatActivity() {
             visibility = View.VISIBLE
             Glide.with(this@AnimeSearchActivity).load(uri).centerCrop().into(this)
         }
-        findViewById<ImageView>(R.id.ivAnimeMatchedClip).visibility = View.GONE
         findViewById<TextView>(R.id.tvAnimeStatus).text = "已选择图片，点击开始搜索"
-        findViewById<TextView>(R.id.tvAnimeResult).text = ""
+        findViewById<LinearLayout>(R.id.llAnimeResults).removeAllViews()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,70 +58,28 @@ class AnimeSearchActivity : AppCompatActivity() {
         }
         val btn = findViewById<Button>(R.id.btnSearchAnime)
         val status = findViewById<TextView>(R.id.tvAnimeStatus)
-        val result = findViewById<TextView>(R.id.tvAnimeResult)
-        val clip = findViewById<ImageView>(R.id.ivAnimeMatchedClip)
+        val container = findViewById<LinearLayout>(R.id.llAnimeResults)
         btn.isEnabled = false
         status.text = "正在以图搜番，请稍候..."
-        result.text = ""
-        clip.visibility = View.GONE
+        container.removeAllViews()
 
         Thread {
             try {
                 val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw IOException("无法读取图片")
-                val body = MultipartBody.Builder().setType(MultipartBody.FORM)
-                    .addFormDataPart(
-                        "image",
-                        "anime_search.jpg",
-                        bytes.toRequestBody("image/*".toMediaTypeOrNull())
-                    ).build()
-                val request = Request.Builder()
-                    .url("https://api.trace.moe/search?anilistInfo")
-                    .post(body)
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw IOException("搜索失败：HTTP ${response.code}")
-                    val json = JSONObject(response.body?.string().orEmpty())
-                    val arr = json.optJSONArray("result")
-                    if (arr == null || arr.length() == 0) throw IOException("没有找到匹配番剧，请换一张更清晰截图")
 
-                    val top = arr.getJSONObject(0)
-                    val anilist = top.optJSONObject("anilist")
-                    val title = anilist?.optJSONObject("title")
-                    val name = title?.optString("native").orEmpty().ifBlank { title?.optString("romaji").orEmpty() }
-                    val episodeRaw = top.opt("episode")
-                    val episode = if (episodeRaw == null || episodeRaw.toString() == "null") "未知" else episodeRaw.toString()
-                    val totalEpisodes = anilist?.optInt("episodes", 0)?.takeIf { it > 0 }?.toString() ?: "未知"
-                    val episodeInfo = when {
-                        episode != "未知" && totalEpisodes != "未知" -> "第 $episode 集 / 约共 $totalEpisodes 集"
-                        episode != "未知" -> "大概第 $episode 集"
-                        else -> "未知"
-                    }
-                    val from = formatTime(top.optDouble("from", 0.0))
-                    val to = formatTime(top.optDouble("to", 0.0))
-                    val similarity = (top.optDouble("similarity", 0.0) * 100).roundToInt().coerceIn(0, 100)
-                    val type = anilist?.optString("type", "").orEmpty().ifBlank { "未知" }
-                    val imageUrl = top.optString("image", "").orEmpty()
-                    val videoUrl = top.optString("video", "").orEmpty()
-                    val resultText = "番剧：${name.ifBlank { "未知番剧" }}\n类型：$type\n大概集数：$episodeInfo\n片段时间：$from - $to\n相似度：$similarity%" +
-                        if (videoUrl.isNotBlank()) "\n预览片段：已获取" else ""
+                val results = requestTraceMoe(bytes, true).ifEmpty { requestTraceMoe(bytes, false) }
+                if (results.isEmpty()) throw IOException("没有找到匹配番剧，请换一张更清晰截图")
 
-                    runOnUiThread {
-                        status.text = "搜索完成"
-                        result.text = resultText
-                        if (imageUrl.isNotBlank()) {
-                            clip.visibility = View.VISIBLE
-                            Glide.with(this@AnimeSearchActivity).load(imageUrl).centerCrop().into(clip)
-                        } else {
-                            clip.visibility = View.GONE
-                        }
-                    }
+                runOnUiThread {
+                    status.text = "搜索完成，共展示 ${results.size} 个可能结果（包含低概率匹配）"
+                    renderResults(results)
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     status.text = "搜索失败"
-                    result.text = e.message ?: "请换一张更清晰的动漫截图重试"
-                    clip.visibility = View.GONE
+                    container.removeAllViews()
+                    addTextOnlyCard(e.message ?: "请换一张更清晰的动漫截图重试")
                 }
             } finally {
                 runOnUiThread { btn.isEnabled = true }
@@ -128,8 +87,137 @@ class AnimeSearchActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun requestTraceMoe(bytes: ByteArray, cutBorders: Boolean): List<AnimeMatch> {
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "image",
+                "anime_search.jpg",
+                bytes.toRequestBody("image/*".toMediaTypeOrNull())
+            ).build()
+
+        val url = if (cutBorders) {
+            "https://api.trace.moe/search?anilistInfo&cutBorders"
+        } else {
+            "https://api.trace.moe/search?anilistInfo"
+        }
+        val request = Request.Builder()
+            .url(url)
+            .post(body)
+            .addHeader("User-Agent", "YunoTools/1.0.43")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("搜索失败：HTTP ${response.code}")
+            val json = JSONObject(response.body?.string().orEmpty())
+            val arr = json.optJSONArray("result") ?: return emptyList()
+            val list = mutableListOf<AnimeMatch>()
+            val count = minOf(arr.length(), 8)
+            for (i in 0 until count) {
+                val item = arr.optJSONObject(i) ?: continue
+                val anilist = item.optJSONObject("anilist")
+                val title = anilist?.optJSONObject("title")
+                val name = title?.optString("native").orEmpty().ifBlank {
+                    title?.optString("romaji").orEmpty().ifBlank { title?.optString("english").orEmpty() }
+                }.ifBlank { "未知番剧" }
+                val episodeRaw = item.opt("episode")
+                val episode = if (episodeRaw == null || episodeRaw.toString() == "null") "未知" else episodeRaw.toString()
+                val totalEpisodes = anilist?.optInt("episodes", 0)?.takeIf { it > 0 }?.toString() ?: "未知"
+                val episodeInfo = when {
+                    episode != "未知" && totalEpisodes != "未知" -> "第 $episode 集 / 约共 $totalEpisodes 集"
+                    episode != "未知" -> "大概第 $episode 集"
+                    else -> "未知"
+                }
+                list += AnimeMatch(
+                    rank = i + 1,
+                    title = name,
+                    type = anilist?.optString("type", "").orEmpty().ifBlank { "未知" },
+                    episodeInfo = episodeInfo,
+                    timeRange = "${formatTime(item.optDouble("from", 0.0))} - ${formatTime(item.optDouble("to", 0.0))}",
+                    similarity = (item.optDouble("similarity", 0.0) * 100).roundToInt().coerceIn(0, 100),
+                    imageUrl = item.optString("image", "").orEmpty(),
+                    videoUrl = item.optString("video", "").orEmpty()
+                )
+            }
+            return list
+        }
+    }
+
+    private fun renderResults(results: List<AnimeMatch>) {
+        val container = findViewById<LinearLayout>(R.id.llAnimeResults)
+        container.removeAllViews()
+        results.forEach { match ->
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(14), dp(14), dp(14))
+                setBackgroundColor(0xFFFFFFFF.toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(12) }
+            }
+            if (match.imageUrl.isNotBlank()) {
+                val image = ImageView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(178)
+                    )
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setBackgroundColor(0xFFF2F2F7.toInt())
+                }
+                card.addView(image)
+                Glide.with(this).load(match.imageUrl).centerCrop().into(image)
+            }
+            val text = TextView(this).apply {
+                text = buildString {
+                    append("#${match.rank}  ${match.title}\n")
+                    append("类型：${match.type}\n")
+                    append("大概集数：${match.episodeInfo}\n")
+                    append("片段时间：${match.timeRange}\n")
+                    append("匹配概率：${match.similarity}%")
+                    if (match.videoUrl.isNotBlank()) append("\n预览片段：已获取")
+                }
+                textSize = 16f
+                setTextColor(0xFF1C1C1E.toInt())
+                setLineSpacing(dp(4).toFloat(), 1.0f)
+                typeface = Typeface.DEFAULT
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = if (match.imageUrl.isNotBlank()) dp(12) else 0 }
+            }
+            card.addView(text)
+            container.addView(card)
+        }
+    }
+
+    private fun addTextOnlyCard(message: String) {
+        val container = findViewById<LinearLayout>(R.id.llAnimeResults)
+        container.removeAllViews()
+        val text = TextView(this).apply {
+            text = message
+            setTextColor(0xFF1C1C1E.toInt())
+            textSize = 16f
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setBackgroundColor(0xFFFFFFFF.toInt())
+        }
+        container.addView(text)
+    }
+
     private fun formatTime(seconds: Double): String {
         val total = seconds.toInt().coerceAtLeast(0)
         return "%02d:%02d".format(total / 60, total % 60)
     }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
+
+    private data class AnimeMatch(
+        val rank: Int,
+        val title: String,
+        val type: String,
+        val episodeInfo: String,
+        val timeRange: String,
+        val similarity: Int,
+        val imageUrl: String,
+        val videoUrl: String
+    )
 }

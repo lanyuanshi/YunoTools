@@ -1,18 +1,150 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/profileRoot" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#F2F2F7" android:orientation="vertical">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="88dp" android:gravity="bottom|center_vertical" android:orientation="horizontal" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="12dp">
-        <ImageButton android:id="@+id/btnBack" android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_bottom_nav_capsule" android:padding="10dp" android:src="@drawable/ic_back" app:tint="#1C1C1E" />
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:text="个人资料" android:textColor="#111827" android:textSize="24sp" android:textStyle="bold" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/profileRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F2F2F7"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="88dp"
+        android:gravity="bottom|center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_bottom_nav_capsule"
+            android:padding="10dp"
+            android:src="@drawable/ic_back"
+            app:tint="#1C1C1E" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:text="个人中心"
+            android:textColor="#111827"
+            android:textSize="24sp"
+            android:textStyle="bold" />
     </LinearLayout>
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="112dp" app:cardBackgroundColor="@android:color/white" app:cardCornerRadius="24dp" app:cardElevation="0dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:padding="18dp">
-                <FrameLayout android:layout_width="72dp" android:layout_height="72dp" android:background="@drawable/bg_circle_blue"><ImageView android:id="@+id/ivAvatar" android:layout_width="44dp" android:layout_height="44dp" android:layout_gravity="center" android:scaleType="centerCrop" android:src="@drawable/ic_profile" app:tint="#FFFFFF" /></FrameLayout>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:orientation="vertical"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="YunoTools" android:textColor="#111827" android:textSize="22sp" android:textStyle="bold"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="个人中心 · 功能入口" android:textColor="#8E8E93" android:textSize="14sp"/></LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardAvatarHeader"
+            android:layout_width="match_parent"
+            android:layout_height="132dp"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="18dp">
+
+                <FrameLayout
+                    android:layout_width="92dp"
+                    android:layout_height="92dp"
+                    android:background="@drawable/bg_circle_blue"
+                    android:clipChildren="true"
+                    android:clipToPadding="true">
+
+                    <ImageView
+                        android:id="@+id/ivAvatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="center"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/ic_profile"
+                        app:tint="#FFFFFF" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="18dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="YunoTools"
+                        android:textColor="#111827"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvAvatarHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="点击选择头像，支持 GIF / WebP 动态头像"
+                        android:textColor="#8E8E93"
+                        android:textSize="14sp" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:layout_marginBottom="12dp" android:text="功能" android:textColor="#111827" android:textSize="18sp" android:textStyle="bold"/>
-        <com.google.android.material.card.MaterialCardView android:id="@+id/cardParseHistory" android:layout_width="match_parent" android:layout_height="72dp" android:foreground="?attr/selectableItemBackground" app:cardBackgroundColor="@android:color/white" app:cardCornerRadius="18dp" app:cardElevation="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp"><FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_history" app:tint="#007AFF"/></FrameLayout><TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="解析历史" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8E8E93" android:textSize="14sp"/></LinearLayout></com.google.android.material.card.MaterialCardView>
-        <com.google.android.material.card.MaterialCardView android:id="@+id/cardSettings" android:layout_width="match_parent" android:layout_height="72dp" android:layout_marginTop="12dp" android:foreground="?attr/selectableItemBackground" app:cardBackgroundColor="@android:color/white" app:cardCornerRadius="18dp" app:cardElevation="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp"><FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_cyan_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_nav_settings" app:tint="#007AFF"/></FrameLayout><TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="设置" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="头像/主题" android:textColor="#8E8E93" android:textSize="14sp"/></LinearLayout></com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp"
+            android:text="功能"
+            android:textColor="#111827"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardChooseAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp">
+                <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_profile" app:tint="#007AFF" /></FrameLayout>
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="自定义头像" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="选择" android:textColor="#8E8E93" android:textSize="14sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardParseHistory"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="12dp"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp"><FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_history" app:tint="#007AFF" /></FrameLayout><TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="解析历史" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" /><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8E8E93" android:textSize="14sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardSettings"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="12dp"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp"><FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_cyan_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_nav_settings" app:tint="#007AFF" /></FrameLayout><TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="设置" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" /><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="主题" android:textColor="#8E8E93" android:textSize="14sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </LinearLayout>

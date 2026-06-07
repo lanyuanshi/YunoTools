@@ -1,57 +1,32 @@
 package com.yuno.tools.ui.profile
-import android.net.Uri
 import android.os.Bundle
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import com.bumptech.glide.Glide
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.yuno.tools.R
 import com.yuno.tools.data.UserSettingsStore
 import com.yuno.tools.util.ThemeApplier
 
 class SettingsActivity : AppCompatActivity() {
-    private val pickAvatar = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri ?: return@registerForActivityResult
-        UserSettingsStore.persistUriPermission(this, uri)
-        UserSettingsStore.setAvatarUri(this, uri.toString())
-        loadAvatar()
-    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
         ThemeApplier.apply(this)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<MaterialButton>(R.id.btnChooseAvatar).setOnClickListener { pickAvatar.launch(arrayOf("image/*")) }
         bindTheme(R.id.themeDefault, UserSettingsStore.THEME_DEFAULT)
         bindTheme(R.id.themeBlack, UserSettingsStore.THEME_BLACK)
         bindTheme(R.id.themePink, UserSettingsStore.THEME_PINK)
         bindTheme(R.id.themeBlue, UserSettingsStore.THEME_BLUE)
         bindTheme(R.id.themeAmis, UserSettingsStore.THEME_AMIS)
-        loadAvatar(); refreshThemeState()
+        refreshThemeState()
     }
-    override fun onResume() { super.onResume(); ThemeApplier.apply(this); loadAvatar(); refreshThemeState() }
+    override fun onResume() { super.onResume(); ThemeApplier.apply(this); refreshThemeState() }
     private fun bindTheme(id: Int, theme: String) {
         findViewById<MaterialCardView>(id).setOnClickListener {
             UserSettingsStore.setTheme(this, theme)
             ThemeApplier.apply(this)
             refreshThemeState()
-        }
-    }
-    private fun loadAvatar() {
-        val iv = findViewById<ImageView>(R.id.ivAvatarPreview)
-        val uri = UserSettingsStore.getAvatarUri(this)
-        iv.imageTintList = null
-        iv.clearColorFilter()
-        iv.setPadding(0,0,0,0)
-        if (uri.isNotBlank()) {
-            Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).into(iv)
-        } else {
-            iv.setImageResource(R.drawable.ic_profile)
-            iv.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
         }
     }
     private fun refreshThemeState() {

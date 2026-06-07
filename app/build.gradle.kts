@@ -11,8 +11,8 @@ android {
         applicationId = "com.yuno.tools"
         minSdk = 24
         targetSdk = 34
-        versionCode = 37
-        versionName = "1.0.37"
+        versionCode = 38
+        versionName = "1.0.38"
     }
 
     buildFeatures {
@@ -54,4 +54,5 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.2.1")
     implementation("com.google.zxing:core:3.5.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("androidx.media3:media3-transformer:1.2.1")
 }

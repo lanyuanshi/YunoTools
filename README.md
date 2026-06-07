@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.0.37**
+**当前版本：v1.0.38**
 
-安装包下载：[`release/YunoTools-v1.0.37.apk`](release/YunoTools-v1.0.37.apk)
+安装包下载：[`release/YunoTools-v1.0.38.apk`](release/YunoTools-v1.0.38.apk)
 
-本版本重点修复视频剪切：改为单个 `MediaExtractor` 同时选择视频轨和音频轨，并按原始时间戳交错写入 `MediaMuxer`，用于修复部分视频剪切后无声音或收尾报错的问题。
+本版本紧急修复视频剪切：彻底放弃 `MediaExtractor` + `MediaMuxer` 剪切方案，改用 AndroidX Media3 Transformer 导出剪切视频，以绕过部分异常视频 seek 表导致无法生成或无声音的问题。
 
 一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。
 

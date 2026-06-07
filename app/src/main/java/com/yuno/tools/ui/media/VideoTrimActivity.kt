@@ -1,11 +1,7 @@
 package com.yuno.tools.ui.media
 
 import android.content.ContentValues
-import android.media.MediaCodec
-import android.media.MediaExtractor
-import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
-import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,15 +17,22 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.ExportException
+import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.Transformer
 import com.yuno.tools.databinding.ActivityVideoTrimBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.nio.ByteBuffer
+import java.io.FileOutputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class VideoTrimActivity : AppCompatActivity() {
     private lateinit var binding: ActivityVideoTrimBinding
@@ -211,203 +214,98 @@ class VideoTrimActivity : AppCompatActivity() {
     }
 
     private fun cutVideo(inputUri: Uri, outputName: String, startUs: Long, endUs: Long): String {
-        var muxer: MediaMuxer? = null
-        var muxerStarted = false
-        var muxerStopped = false
         var outUri: Uri? = null
         var outFile: File? = null
+        val tempOutput = File(cacheDir, "trim_transformer_${System.currentTimeMillis()}.mp4")
         try {
-            val extractor = MediaExtractor()
-            try {
-                contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
-                    extractor.setDataSource(pfd.fileDescriptor)
-                } ?: error("无法读取视频文件")
-
-                val output = createOutput("$outputName.mp4", "video/mp4", Environment.DIRECTORY_MOVIES, "YunoTools/Trim")
-                outUri = output.uri
-                outFile = output.file
-                val localMuxer = MediaMuxer(output.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-                muxer = localMuxer
-
-                val trackMap = linkedMapOf<Int, Pair<Int, String>>()
-                var hasVideoTrack = false
-                for (i in 0 until extractor.trackCount) {
-                    val format = extractor.getTrackFormat(i)
-                    val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
-                    if (mime.startsWith("video/")) hasVideoTrack = true
-                    if (mime.startsWith("video/") || mime.startsWith("audio/")) {
-                        trackMap[i] = localMuxer.addTrack(format) to mime
-                        extractor.selectTrack(i)
-                    }
-                }
-                if (!hasVideoTrack) error("没有可剪切的视频轨道")
-                if (trackMap.isEmpty()) error("没有可剪切的音视频轨道")
-
-                localMuxer.start()
-                muxerStarted = true
-
-                val wrote = writeInterleavedSamples(
-                    extractor = extractor,
-                    trackMap = trackMap,
-                    startUs = startUs,
-                    endUs = endUs,
-                    muxer = localMuxer,
-                    forceFromBeginning = false
+            val startMsLocal = (startUs / 1000L).coerceAtLeast(0L)
+            val endMsLocal = (endUs / 1000L).coerceAtLeast(startMsLocal + 1000L)
+            val mediaItem = MediaItem.Builder()
+                .setUri(inputUri)
+                .setClippingConfiguration(
+                    MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(startMsLocal)
+                        .setEndPositionMs(endMsLocal)
+                        .build()
                 )
-                var wroteVideoSample = wrote.first
-                var wroteAudioSample = wrote.second
+                .build()
 
-                // 有些视频 seek 表不标准，按开始点 seek 后直接落到结束点后。此时重新打开 extractor 从 0 扫描兜底。
-                if (!wroteVideoSample) {
-                    extractor.release()
-                    val fallbackExtractor = MediaExtractor()
-                    try {
-                        contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
-                            fallbackExtractor.setDataSource(pfd.fileDescriptor)
-                        } ?: error("无法读取视频文件")
-                        trackMap.keys.forEach { fallbackExtractor.selectTrack(it) }
-                        val fallbackWrote = writeInterleavedSamples(
-                            extractor = fallbackExtractor,
-                            trackMap = trackMap,
-                            startUs = startUs,
-                            endUs = endUs,
-                            muxer = localMuxer,
-                            forceFromBeginning = true
-                        )
-                        wroteVideoSample = fallbackWrote.first
-                        wroteAudioSample = wroteAudioSample || fallbackWrote.second
-                    } finally {
-                        fallbackExtractor.release()
+            val latch = CountDownLatch(1)
+            val errorRef = AtomicReference<Throwable?>(null)
+            val transformer = Transformer.Builder(this)
+                .addListener(object : Transformer.Listener {
+                    override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                        latch.countDown()
                     }
+
+                    override fun onError(
+                        composition: Composition,
+                        exportResult: ExportResult,
+                        exportException: ExportException
+                    ) {
+                        errorRef.set(exportException)
+                        latch.countDown()
+                    }
+                })
+                .build()
+
+            Handler(Looper.getMainLooper()).post {
+                runCatching { transformer.start(mediaItem, tempOutput.absolutePath) }
+                    .onFailure {
+                        errorRef.set(it)
+                        latch.countDown()
+                    }
+            }
+
+            if (!latch.await(20, TimeUnit.MINUTES)) {
+                transformer.cancel()
+                error("剪切超时，请换一个更短区间重试")
+            }
+            errorRef.get()?.let { throw it }
+            if (!tempOutput.exists() || tempOutput.length() <= 1024L) error("未生成有效视频文件")
+
+            val name = if (outputName.endsWith(".mp4", true)) outputName else "$outputName.mp4"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Video.Media.DISPLAY_NAME, name)
+                    put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/YunoTools")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
                 }
-
-                if (!wroteVideoSample) error("剪切区间内没有可写入的视频数据")
-
-                // 音频不是硬失败条件：如果源视频本身音频 sample 极少或该区间确实无音频，允许输出视频。
-                // 正常情况下交错写入会保留声音。
-                localMuxer.stop()
-                muxerStopped = true
-            } finally {
-                try { extractor.release() } catch (_: Exception) {}
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && outUri != null) {
-                contentResolver.update(outUri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-            }
-            return outUri?.toString() ?: outFile?.absolutePath ?: ""
-        } catch (e: Exception) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && outUri != null) {
-                contentResolver.delete(outUri, null, null)
+                outUri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: error("无法创建输出文件")
+                contentResolver.openOutputStream(outUri!!)?.use { output ->
+                    tempOutput.inputStream().use { input -> input.copyTo(output) }
+                } ?: error("无法写入输出文件")
+                values.clear()
+                values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                contentResolver.update(outUri!!, values, null, null)
+                return "Movies/YunoTools/$name"
             } else {
-                outFile?.delete()
+                val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "YunoTools").apply { mkdirs() }
+                outFile = File(dir, name)
+                tempOutput.inputStream().use { input -> FileOutputStream(outFile!!).use { output -> input.copyTo(output) } }
+                return outFile!!.absolutePath
             }
-            throw e
+        } catch (e: Throwable) {
+            outUri?.let { runCatching { contentResolver.delete(it, null, null) } }
+            outFile?.takeIf { it.exists() }?.delete()
+            throw IllegalStateException(e.message ?: "剪切失败", e)
         } finally {
-            if (muxerStarted && !muxerStopped) {
-                try {
-                    muxer?.stop()
-                } catch (_: Exception) {
-                }
-            }
-            try {
-                muxer?.release()
-            } catch (_: Exception) {
-            }
+            tempOutput.delete()
         }
     }
 
-    private fun writeInterleavedSamples(
-        extractor: MediaExtractor,
-        trackMap: Map<Int, Pair<Int, String>>,
-        startUs: Long,
-        endUs: Long,
-        muxer: MediaMuxer,
-        forceFromBeginning: Boolean
-    ): Pair<Boolean, Boolean> {
-        if (forceFromBeginning) {
-            extractor.seekTo(0L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-        } else {
-            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-        }
-
-        val buffer = ByteBuffer.allocate(4 * 1024 * 1024)
-        val info = MediaCodec.BufferInfo()
-        val firstPts = mutableMapOf<Int, Long>()
-        val lastPts = mutableMapOf<Int, Long>()
-        var wroteVideoSample = false
-        var wroteAudioSample = false
-
-        while (true) {
-            val srcTrack = extractor.sampleTrackIndex
-            if (srcTrack < 0) break
-            val sampleTime = extractor.sampleTime
-            if (sampleTime < 0 || sampleTime > endUs) break
-
-            val dst = trackMap[srcTrack]
-            if (dst == null) {
-                if (!extractor.advance()) break
-                continue
-            }
-            val (dstTrack, mime) = dst
-
-            // 音频不需要关键帧预卷，跳过开始点之前的音频，避免前置声音。
-            // 视频必须允许写入开始点之前的同步帧，否则长 GOP 视频无法解码。
-            if (mime.startsWith("audio/") && sampleTime < startUs) {
-                if (!extractor.advance()) break
-                continue
-            }
-
-            buffer.clear()
-            val size = extractor.readSampleData(buffer, 0)
-            if (size <= 0) {
-                if (!extractor.advance()) break
-                continue
-            }
-
-            val basePts = firstPts.getOrPut(srcTrack) { sampleTime }
-            var pts = (sampleTime - basePts).coerceAtLeast(0L)
-            val previousPts = lastPts[srcTrack]
-            if (previousPts != null && pts <= previousPts) pts = previousPts + 1L
-            lastPts[srcTrack] = pts
-
-            info.set(0, size, pts, extractor.sampleFlags)
-            muxer.writeSampleData(dstTrack, buffer, info)
-            if (mime.startsWith("video/")) wroteVideoSample = true
-            if (mime.startsWith("audio/")) wroteAudioSample = true
-
-            if (!extractor.advance()) break
-        }
-        return wroteVideoSample to wroteAudioSample
-    }
-
-    private data class OutputInfo(val path: String, val displayPath: String, val uri: Uri?, val file: File?)
-
-    private fun createOutput(fileName: String, mime: String, directory: String, subDir: String): OutputInfo {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, mime)
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "$directory/$subDir")
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-            val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: error("无法创建输出文件")
-            val pfd = contentResolver.openFileDescriptor(uri, "rw") ?: error("无法打开输出文件")
-            OutputInfo("/proc/self/fd/${pfd.detachFd()}", "$directory/$subDir/$fileName", uri, null)
-        } else {
-            val dir = File(Environment.getExternalStoragePublicDirectory(directory), subDir).apply { mkdirs() }
-            val file = uniqueFile(dir, fileName)
-            OutputInfo(file.absolutePath, file.absolutePath, null, file)
-        }
-    }
 
     private fun readDuration(uri: Uri): Long {
-        return runCatching {
-            val retriever = MediaMetadataRetriever()
-            contentResolver.openFileDescriptor(uri, "r")?.use { pfd -> retriever.setDataSource(pfd.fileDescriptor) }
-            val d = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            retriever.release()
-            d
-        }.getOrDefault(0L)
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(this, uri)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (_: Throwable) {
+            0L
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     private fun queryDisplayName(uri: Uri): String {

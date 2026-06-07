@@ -36,6 +36,7 @@ class AnimeSearchActivity : AppCompatActivity() {
             visibility = View.VISIBLE
             Glide.with(this@AnimeSearchActivity).load(uri).centerCrop().into(this)
         }
+        findViewById<ImageView>(R.id.ivAnimeMatchedClip).visibility = View.GONE
         findViewById<TextView>(R.id.tvAnimeStatus).text = "已选择图片，点击开始搜索"
         findViewById<TextView>(R.id.tvAnimeResult).text = ""
     }
@@ -57,9 +58,11 @@ class AnimeSearchActivity : AppCompatActivity() {
         val btn = findViewById<Button>(R.id.btnSearchAnime)
         val status = findViewById<TextView>(R.id.tvAnimeStatus)
         val result = findViewById<TextView>(R.id.tvAnimeResult)
+        val clip = findViewById<ImageView>(R.id.ivAnimeMatchedClip)
         btn.isEnabled = false
         status.text = "正在以图搜番，请稍候..."
         result.text = ""
+        clip.visibility = View.GONE
 
         Thread {
             try {
@@ -75,32 +78,49 @@ class AnimeSearchActivity : AppCompatActivity() {
                     .url("https://api.trace.moe/search?anilistInfo")
                     .post(body)
                     .build()
-
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) throw IOException("搜索失败：HTTP ${response.code}")
                     val json = JSONObject(response.body?.string().orEmpty())
                     val arr = json.optJSONArray("result")
                     if (arr == null || arr.length() == 0) throw IOException("没有找到匹配番剧，请换一张更清晰截图")
+
                     val top = arr.getJSONObject(0)
                     val anilist = top.optJSONObject("anilist")
                     val title = anilist?.optJSONObject("title")
                     val name = title?.optString("native").orEmpty().ifBlank { title?.optString("romaji").orEmpty() }
                     val episodeRaw = top.opt("episode")
                     val episode = if (episodeRaw == null || episodeRaw.toString() == "null") "未知" else episodeRaw.toString()
+                    val totalEpisodes = anilist?.optInt("episodes", 0)?.takeIf { it > 0 }?.toString() ?: "未知"
+                    val episodeInfo = when {
+                        episode != "未知" && totalEpisodes != "未知" -> "第 $episode 集 / 约共 $totalEpisodes 集"
+                        episode != "未知" -> "大概第 $episode 集"
+                        else -> "未知"
+                    }
                     val from = formatTime(top.optDouble("from", 0.0))
                     val to = formatTime(top.optDouble("to", 0.0))
                     val similarity = (top.optDouble("similarity", 0.0) * 100).roundToInt().coerceIn(0, 100)
                     val type = anilist?.optString("type", "").orEmpty().ifBlank { "未知" }
-                    val resultText = "番剧：${name.ifBlank { "未知番剧" }}\n类型：$type\n集数：$episode\n时间：$from - $to\n相似度：$similarity%"
+                    val imageUrl = top.optString("image", "").orEmpty()
+                    val videoUrl = top.optString("video", "").orEmpty()
+                    val resultText = "番剧：${name.ifBlank { "未知番剧" }}\n类型：$type\n大概集数：$episodeInfo\n片段时间：$from - $to\n相似度：$similarity%" +
+                        if (videoUrl.isNotBlank()) "\n预览片段：已获取" else ""
+
                     runOnUiThread {
                         status.text = "搜索完成"
                         result.text = resultText
+                        if (imageUrl.isNotBlank()) {
+                            clip.visibility = View.VISIBLE
+                            Glide.with(this@AnimeSearchActivity).load(imageUrl).centerCrop().into(clip)
+                        } else {
+                            clip.visibility = View.GONE
+                        }
                     }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     status.text = "搜索失败"
                     result.text = e.message ?: "请换一张更清晰的动漫截图重试"
+                    clip.visibility = View.GONE
                 }
             } finally {
                 runOnUiThread { btn.isEnabled = true }

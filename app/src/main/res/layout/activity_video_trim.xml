@@ -99,10 +99,12 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"
             android:layout_marginEnd="28dp"
-            android:layout_marginBottom="-32dp"
+            android:layout_marginBottom="12dp"
             android:elevation="18dp"
             android:translationZ="18dp"
-            android:contentDescription="剪切"
+            android:contentDescription="生成剪切视频"
+            android:clickable="true"
+            android:focusable="true"
             app:backgroundTint="#FF5252"
             app:fabSize="normal"
             app:srcCompat="@drawable/ic_video_watermark"
@@ -306,6 +308,32 @@
                     android:singleLine="true"
                     android:textSize="18sp" />
             </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGenerateTrim"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="22dp"
+                android:text="生成剪切视频"
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                app:backgroundTint="#FF5252"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_video_watermark"
+                app:iconGravity="textStart"
+                app:iconPadding="8dp"
+                app:iconTint="@android:color/white" />
+
+            <ProgressBar
+                android:id="@+id/progressTrim"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="14dp"
+                android:indeterminate="true"
+                android:indeterminateTint="#FF5252"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

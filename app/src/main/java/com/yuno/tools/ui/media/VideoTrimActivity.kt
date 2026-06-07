@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.view.View
+import android.view.animation.OvershootInterpolator
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -96,7 +97,8 @@ class VideoTrimActivity : AppCompatActivity() {
     private fun initControls() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnPickVideo.setOnClickListener { pickVideo.launch("video/*") }
-        binding.fabTrim.setOnClickListener { trimSelectedVideo() }
+        binding.fabTrim.setOnClickListener { onTrimGenerateClicked() }
+        binding.btnGenerateTrim.setOnClickListener { onTrimGenerateClicked() }
 
         binding.rangeSlider.addOnChangeListener { slider, _, _ ->
             if (isAdjustingSlider || slider.values.size < 2) return@addOnChangeListener
@@ -161,6 +163,36 @@ class VideoTrimActivity : AppCompatActivity() {
         binding.tvCurrentTime.text = shortTime(player?.currentPosition ?: startMs)
     }
 
+    private fun onTrimGenerateClicked() {
+        playTrimClickFeedback()
+        trimSelectedVideo()
+    }
+
+    private fun playTrimClickFeedback() {
+        binding.fabTrim.animate().cancel()
+        binding.fabTrim.scaleX = 0.86f
+        binding.fabTrim.scaleY = 0.86f
+        binding.fabTrim.animate()
+            .scaleX(1f)
+            .scaleY(1f)
+            .rotationBy(12f)
+            .setDuration(180L)
+            .setInterpolator(OvershootInterpolator())
+            .start()
+        binding.btnGenerateTrim.animate().cancel()
+        binding.btnGenerateTrim.alpha = 0.78f
+        binding.btnGenerateTrim.animate().alpha(1f).setDuration(160L).start()
+    }
+
+    private fun setTrimProcessing(processing: Boolean) {
+        binding.fabTrim.isEnabled = !processing
+        binding.btnGenerateTrim.isEnabled = !processing
+        binding.btnGenerateTrim.text = if (processing) "正在生成..." else "生成剪切视频"
+        binding.progressTrim.visibility = if (processing) View.VISIBLE else View.GONE
+        binding.fabTrim.alpha = if (processing) 0.55f else 1f
+        binding.btnGenerateTrim.alpha = if (processing) 0.75f else 1f
+    }
+
     private fun trimSelectedVideo() {
         val uri = selectedUri ?: run {
             Toast.makeText(this, "请先选择视频", Toast.LENGTH_SHORT).show()
@@ -171,12 +203,12 @@ class VideoTrimActivity : AppCompatActivity() {
             return
         }
         val outputName = sanitizeName(binding.etVideoName.text?.toString()).ifBlank { "Yuno_trim_${System.currentTimeMillis()}" }
-        binding.fabTrim.isEnabled = false
-        Toast.makeText(this, "正在剪切视频...", Toast.LENGTH_SHORT).show()
+        setTrimProcessing(true)
+        Toast.makeText(this, "正在生成剪切视频...", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { cutVideo(uri, outputName, startMs * 1000L, endMs * 1000L) } }
-            binding.fabTrim.isEnabled = true
+            setTrimProcessing(false)
             result.onSuccess {
                 Toast.makeText(this@VideoTrimActivity, "视频已保存：$it", Toast.LENGTH_LONG).show()
             }.onFailure {

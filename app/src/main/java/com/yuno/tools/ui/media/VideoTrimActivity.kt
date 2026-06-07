@@ -232,49 +232,57 @@ class VideoTrimActivity : AppCompatActivity() {
             outFile = output.file
             muxer = MediaMuxer(output.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 
-            val trackMap = mutableMapOf<Int, Int>()
+            val trackMap = linkedMapOf<Int, Int>()
+            var hasVideoTrack = false
+            var hasAudioTrack = false
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
                 if (mime.startsWith("video/") || mime.startsWith("audio/")) {
+                    if (mime.startsWith("video/")) hasVideoTrack = true
+                    if (mime.startsWith("audio/")) hasAudioTrack = true
                     trackMap[i] = muxer.addTrack(format)
                     extractor.selectTrack(i)
                 }
             }
             if (trackMap.isEmpty()) error("没有可剪切的音视频轨道")
+            if (!hasVideoTrack) error("没有可剪切的视频轨道")
             muxer.start()
 
+            // 必须按 MediaExtractor 输出顺序一次性写入所有已选轨道。
+            // 旧实现逐轨道分别 seek/read，部分机型会导致音频轨没有被正确写入或播放器识别不到声音。
+            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             val buffer = ByteBuffer.allocate(2 * 1024 * 1024)
             val info = MediaCodec.BufferInfo()
-            var wroteSample = false
+            var firstPts = -1L
+            var wroteVideoSample = false
+            var wroteAudioSample = false
 
-            for (srcTrack in trackMap.keys) {
-                extractor.unselectTrack(srcTrack)
-            }
-            for (srcTrack in trackMap.keys) {
-                extractor.selectTrack(srcTrack)
-                extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-                var firstPts = -1L
-                while (true) {
-                    val sampleTrack = extractor.sampleTrackIndex
-                    if (sampleTrack != srcTrack) break
-                    val sampleTime = extractor.sampleTime
-                    if (sampleTime < 0 || sampleTime > endUs) break
-                    buffer.clear()
-                    val size = extractor.readSampleData(buffer, 0)
-                    if (size < 0) break
-                    if (sampleTime >= startUs) {
-                        if (firstPts < 0) firstPts = sampleTime
-                        info.set(0, size, sampleTime - firstPts, extractor.sampleFlags)
-                        val dstTrack = trackMap[srcTrack] ?: break
-                        muxer.writeSampleData(dstTrack, buffer, info)
-                        wroteSample = true
-                    }
-                    extractor.advance()
+            while (true) {
+                val srcTrack = extractor.sampleTrackIndex
+                if (srcTrack < 0) break
+                val sampleTime = extractor.sampleTime
+                if (sampleTime < 0 || sampleTime > endUs) break
+
+                buffer.clear()
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) break
+
+                val dstTrack = trackMap[srcTrack]
+                if (dstTrack != null && sampleTime >= startUs) {
+                    if (firstPts < 0) firstPts = sampleTime
+                    val format = extractor.getTrackFormat(srcTrack)
+                    val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                    info.set(0, size, (sampleTime - firstPts).coerceAtLeast(0L), extractor.sampleFlags)
+                    muxer.writeSampleData(dstTrack, buffer, info)
+                    if (mime.startsWith("video/")) wroteVideoSample = true
+                    if (mime.startsWith("audio/")) wroteAudioSample = true
                 }
-                extractor.unselectTrack(srcTrack)
+                extractor.advance()
             }
-            if (!wroteSample) error("剪切区间内没有可写入的视频数据")
+
+            if (!wroteVideoSample) error("剪切区间内没有可写入的视频数据")
+            if (hasAudioTrack && !wroteAudioSample) error("剪切区间内没有可写入的音频数据，请稍微调整开始/结束时间后重试")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && outUri != null) {
                 contentResolver.update(outUri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
             }

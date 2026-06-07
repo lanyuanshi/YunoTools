@@ -574,8 +574,8 @@
             android:elevation="10dp"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp">
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp">
 
             <!-- 聊天：选中态 -->
             <LinearLayout
@@ -583,7 +583,7 @@
                 android:layout_width="0dp"
                 android:layout_height="54dp"
                 android:layout_weight="1"
-                android:layout_marginHorizontal="3dp"
+                android:layout_marginHorizontal="6dp"
                 android:background="@drawable/bg_bottom_nav_selected"
                 android:gravity="center"
                 android:orientation="vertical">
@@ -604,63 +604,13 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- 联系人 -->
-            <LinearLayout
-                android:id="@+id/navContacts"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_weight="1"
-                android:layout_marginHorizontal="3dp"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <ImageView
-                    android:layout_width="23dp"
-                    android:layout_height="23dp"
-                    android:src="@drawable/ic_nav_contacts"
-                    app:tint="#A0A7B3" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="联系人"
-                    android:textColor="#A0A7B3"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <!-- 设置 -->
-            <LinearLayout
-                android:id="@+id/navSettings"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_weight="1"
-                android:layout_marginHorizontal="3dp"
-                android:gravity="center"
-                android:orientation="vertical">
-
-                <ImageView
-                    android:layout_width="23dp"
-                    android:layout_height="23dp"
-                    android:src="@drawable/ic_nav_settings"
-                    app:tint="#A0A7B3" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="设置"
-                    android:textColor="#A0A7B3"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
             <!-- 个人资料 -->
             <LinearLayout
                 android:id="@+id/navProfile"
                 android:layout_width="0dp"
                 android:layout_height="54dp"
                 android:layout_weight="1"
-                android:layout_marginHorizontal="3dp"
+                android:layout_marginHorizontal="6dp"
                 android:gravity="center"
                 android:orientation="vertical">
 

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.card.MaterialCardView
+import android.widget.LinearLayout
 import com.yuno.tools.ui.video.VideoParseActivity
 import com.yuno.tools.ui.tools.RandomQuoteActivity
 import com.yuno.tools.ui.image.ImageWatermarkActivity
@@ -15,6 +16,7 @@ import com.yuno.tools.ui.media.VideoMD5Activity
 import com.yuno.tools.ui.tools.AnswerBookActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
+import com.yuno.tools.ui.profile.ProfileActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -64,6 +66,14 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<MaterialCardView>(R.id.cardAnswerBook).setOnClickListener {
             startActivity(Intent(this, AnswerBookActivity::class.java))
+        }
+
+        findViewById<LinearLayout>(R.id.navProfile).setOnClickListener {
+            startActivity(Intent(this, ProfileActivity::class.java))
+            overridePendingTransition(R.anim.profile_slide_up_in, R.anim.profile_stay)
+        }
+        findViewById<LinearLayout>(R.id.navChat).setOnClickListener {
+            // 当前页就是聊天/首页，保持轻微反馈，不做跳转
         }
     }
 }

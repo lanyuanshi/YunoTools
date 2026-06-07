@@ -45,6 +45,9 @@
             android:name=".ui.video.ImageSetResultActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.profile.ProfileActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.image.ImageWatermarkActivity"
             android:screenOrientation="portrait" />
         <activity

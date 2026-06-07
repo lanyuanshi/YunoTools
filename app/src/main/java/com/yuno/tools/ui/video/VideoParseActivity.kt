@@ -17,6 +17,7 @@ import android.widget.EditText
 import com.yuno.tools.R
 import com.yuno.tools.data.RetrofitClient
 import com.yuno.tools.data.VideoParseResult
+import com.yuno.tools.data.ParseHistoryStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -72,6 +73,7 @@ class VideoParseActivity : AppCompatActivity() {
                         val apiResp = response.body()!!
                         if (apiResp.code == 200 && apiResp.data != null) {
                             val result = convertToResult(apiResp.data)
+                            ParseHistoryStore.add(this@VideoParseActivity, result, url)
                             showResult(result)
                         } else {
                             Toast.makeText(this@VideoParseActivity,

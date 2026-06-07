@@ -36,7 +36,7 @@
             android:name=".ui.video.VideoParseActivity"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".ui.tools.RandomQuoteActivity"
+            android:name=".ui.tools.AIChatActivity"
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.video.ParseResultActivity"

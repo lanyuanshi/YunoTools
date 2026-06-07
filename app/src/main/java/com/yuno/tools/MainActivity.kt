@@ -6,7 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.card.MaterialCardView
 import android.widget.LinearLayout
 import com.yuno.tools.ui.video.VideoParseActivity
-import com.yuno.tools.ui.tools.RandomQuoteActivity
+import com.yuno.tools.ui.tools.AIChatActivity
 import com.yuno.tools.ui.image.ImageCompressActivity
 import com.yuno.tools.ui.image.QRCodeActivity
 import com.yuno.tools.ui.image.GridCropActivity
@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialCardView>(R.id.cardLiveParse).setOnClickListener {
-            startActivity(Intent(this, RandomQuoteActivity::class.java))
+            startActivity(Intent(this, AIChatActivity::class.java))
         }
 
         findViewById<MaterialCardView>(R.id.cardImageCompress).setOnClickListener {

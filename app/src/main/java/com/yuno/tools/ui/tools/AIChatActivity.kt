@@ -43,6 +43,13 @@ class AIChatActivity : AppCompatActivity() {
         "deepseek-chat",
         "gpt-4o-mini",
         "gpt-4o",
+        "gpt-4.1-mini",
+        "gpt-4.1",
+        "gpt-4-turbo",
+        "gpt-4",
+        "gpt-3.5-turbo",
+        "o4-mini",
+        "o3-mini",
         "claude-3-5-sonnet",
         "gemini-1.5-flash"
     )

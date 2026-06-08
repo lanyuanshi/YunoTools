@@ -12,6 +12,7 @@ object UserSettingsStore {
     const val THEME_BLUE = "blue"
     const val THEME_AMIS = "amis"
     const val THEME_YUNO = "yuno"
+    const val THEME_FEI_XUE_1 = "fei_xue_1"
 
     fun getAvatarUri(context: Context): String = context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_AVATAR, "") ?: ""
     fun setAvatarUri(context: Context, uri: String) { context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY_AVATAR, uri).apply() }

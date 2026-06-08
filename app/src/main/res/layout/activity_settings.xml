@@ -287,8 +287,39 @@
                     app:cardCornerRadius="20dp"
                     app:cardElevation="0dp">
                     <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/bg_theme_swatch_fei_xue_1" />
+                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/theme_fei_xue_1_bg" />
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="绯雪1" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/themeFeiXue2"
+                    android:layout_width="match_parent"
+                    android:layout_height="116dp"
+                    android:layout_columnSpan="2"
+                    android:layout_marginTop="12dp"
+                    android:foreground="?attr/selectableItemBackground"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
+                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/theme_fei_xue_2_bg" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="绯雪2" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/themeFeiXue3"
+                    android:layout_width="match_parent"
+                    android:layout_height="116dp"
+                    android:layout_columnSpan="2"
+                    android:layout_marginTop="12dp"
+                    android:foreground="?attr/selectableItemBackground"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
+                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/theme_fei_xue_3_bg" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="绯雪3" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
             </GridLayout>

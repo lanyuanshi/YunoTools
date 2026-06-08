@@ -36,6 +36,8 @@ class SettingsActivity : AppCompatActivity() {
         bindTheme(R.id.themeAmis, UserSettingsStore.THEME_AMIS)
         bindTheme(R.id.themeYuno, UserSettingsStore.THEME_YUNO)
         bindTheme(R.id.themeFeiXue1, UserSettingsStore.THEME_FEI_XUE_1)
+        bindTheme(R.id.themeFeiXue2, UserSettingsStore.THEME_FEI_XUE_2)
+        bindTheme(R.id.themeFeiXue3, UserSettingsStore.THEME_FEI_XUE_3)
         bindAiSettings()
         refreshThemeState()
     }
@@ -103,11 +105,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun refreshThemeState() {
         val current = UserSettingsStore.getTheme(this)
-        listOf(R.id.themeDefault to UserSettingsStore.THEME_DEFAULT, R.id.themeBlack to UserSettingsStore.THEME_BLACK, R.id.themePink to UserSettingsStore.THEME_PINK, R.id.themeBlue to UserSettingsStore.THEME_BLUE, R.id.themeAmis to UserSettingsStore.THEME_AMIS, R.id.themeYuno to UserSettingsStore.THEME_YUNO, R.id.themeFeiXue1 to UserSettingsStore.THEME_FEI_XUE_1).forEach { (id, key) ->
+        listOf(R.id.themeDefault to UserSettingsStore.THEME_DEFAULT, R.id.themeBlack to UserSettingsStore.THEME_BLACK, R.id.themePink to UserSettingsStore.THEME_PINK, R.id.themeBlue to UserSettingsStore.THEME_BLUE, R.id.themeAmis to UserSettingsStore.THEME_AMIS, R.id.themeYuno to UserSettingsStore.THEME_YUNO, R.id.themeFeiXue1 to UserSettingsStore.THEME_FEI_XUE_1, R.id.themeFeiXue2 to UserSettingsStore.THEME_FEI_XUE_2, R.id.themeFeiXue3 to UserSettingsStore.THEME_FEI_XUE_3).forEach { (id, key) ->
             val card = findViewById<MaterialCardView>(id)
             card.strokeWidth = if (key == current) (2 * resources.displayMetrics.density).toInt() else 0
             card.strokeColor = ThemeApplier.current(this).primary
         }
-        findViewById<TextView>(R.id.tvCurrentTheme).text = when(current){ UserSettingsStore.THEME_BLACK -> "当前：黑色主题"; UserSettingsStore.THEME_PINK -> "当前：粉色主题"; UserSettingsStore.THEME_BLUE -> "当前：蓝色主题"; UserSettingsStore.THEME_AMIS -> "当前：爱弥斯主题"; UserSettingsStore.THEME_YUNO -> "当前：尤诺主题"; UserSettingsStore.THEME_FEI_XUE_1 -> "当前：绯雪1主题"; else -> "当前：默认主题" }
+        findViewById<TextView>(R.id.tvCurrentTheme).text = when(current){ UserSettingsStore.THEME_BLACK -> "当前：黑色主题"; UserSettingsStore.THEME_PINK -> "当前：粉色主题"; UserSettingsStore.THEME_BLUE -> "当前：蓝色主题"; UserSettingsStore.THEME_AMIS -> "当前：爱弥斯主题"; UserSettingsStore.THEME_YUNO -> "当前：尤诺主题"; UserSettingsStore.THEME_FEI_XUE_1 -> "当前：绯雪1主题"; UserSettingsStore.THEME_FEI_XUE_2 -> "当前：绯雪2主题"; UserSettingsStore.THEME_FEI_XUE_3 -> "当前：绯雪3主题"; else -> "当前：默认主题" }
     }
 }

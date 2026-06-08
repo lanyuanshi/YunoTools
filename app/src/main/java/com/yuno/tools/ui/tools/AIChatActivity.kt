@@ -1,19 +1,30 @@
 package com.yuno.tools.ui.tools
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Base64
 import android.view.Gravity
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
@@ -21,6 +32,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.yuno.tools.R
@@ -34,6 +46,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 class AIChatActivity : AppCompatActivity() {
@@ -51,6 +66,9 @@ class AIChatActivity : AppCompatActivity() {
 
     private val mediaPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) result.data?.data?.let { handlePickedMedia(it) }
+    }
+    private val cameraCapture = registerForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        bitmap?.let { handleCapturedPhoto(it) }
     }
 
     private val modelOptions = listOf(
@@ -89,14 +107,26 @@ class AIChatActivity : AppCompatActivity() {
             addMessage("assistant", "你好，我是 Yuno AI。API 已移动到设置页，可使用默认配置或自定义配置；这里直接选择模型并发送问题即可。")
         }
         btnAttach.setOnClickListener { pickMedia() }
-        tvAttachmentHint.setOnClickListener { pendingAttachment = null; refreshAttachmentHint() }
-        btnSend.setOnClickListener { sendCurrentMessage() }
+        tvAttachmentHint.setOnClickListener { pendingAttachment = null; refreshAttachmentHint(); refreshActionButton() }
+        etInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { refreshActionButton() }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        etInput.setOnEditorActionListener { _, _, _ ->
+            if (etInput.text.toString().trim().isNotEmpty() || pendingAttachment != null) { sendCurrentMessage(); true } else false
+        }
+        btnSend.setOnClickListener {
+            if (etInput.text.toString().trim().isEmpty() && pendingAttachment == null) openCamera() else sendCurrentMessage()
+        }
+        refreshActionButton()
         btnClear.setOnClickListener {
             messages.clear()
             saveHistory()
             renderAll()
             pendingAttachment = null
             refreshAttachmentHint()
+            refreshActionButton()
             addMessage("assistant", "已清空历史，重新开始聊天。")
         }
     }
@@ -139,6 +169,24 @@ class AIChatActivity : AppCompatActivity() {
         }
         mediaPicker.launch(intent)
     }
+    private fun openCamera() {
+        runCatching { cameraCapture.launch(null) }
+            .onFailure { Toast.makeText(this, "无法打开相机：${it.message}", Toast.LENGTH_SHORT).show() }
+    }
+    private fun handleCapturedPhoto(bitmap: Bitmap) {
+        lifecycleScope.launch(Dispatchers.Default) {
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            val bytes = out.toByteArray()
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            withContext(Dispatchers.Main) {
+                pendingAttachment = PendingAttachment("camera_${System.currentTimeMillis()}.jpg", "image/jpeg", bytes.size, b64)
+                refreshAttachmentHint()
+                refreshActionButton()
+                Toast.makeText(this@AIChatActivity, "已添加拍照图片", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     private fun handlePickedMedia(uri: Uri) {
         lifecycleScope.launch(Dispatchers.IO) {
@@ -159,6 +207,7 @@ class AIChatActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     pendingAttachment = PendingAttachment(name, mime, bytes.size, b64)
                     refreshAttachmentHint()
+                    refreshActionButton()
                     Toast.makeText(this@AIChatActivity, "已添加：$name", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
@@ -186,6 +235,11 @@ class AIChatActivity : AppCompatActivity() {
             tvAttachmentHint.text = "已附加：${att.name} · ${formatSize(att.size)}（点击移除）"
         }
     }
+    private fun refreshActionButton() {
+        val hasContent = etInput.text.toString().trim().isNotEmpty() || pendingAttachment != null
+        btnSend.icon = getDrawable(if (hasContent) R.drawable.ic_send else R.drawable.ic_camera)
+        btnSend.contentDescription = if (hasContent) "发送" else "拍照"
+    }
 
     private fun sendCurrentMessage() {
         val text = etInput.text.toString().trim()
@@ -197,8 +251,8 @@ class AIChatActivity : AppCompatActivity() {
         etInput.setText("")
         pendingAttachment = null
         refreshAttachmentHint()
-        val displayText = buildDisplayText(text, attachment)
-        addMessage("user", displayText)
+        refreshActionButton()
+        addMessage("user", text, attachment = attachment)
         val aiView = addMessage("assistant", "正在思考…", persist = false)
         setSending(true)
         lifecycleScope.launch(Dispatchers.IO) {
@@ -221,7 +275,8 @@ class AIChatActivity : AppCompatActivity() {
 
     private fun setSending(sending: Boolean) {
         btnSend.isEnabled = !sending
-        btnSend.text = if (sending) "…" else "发送"
+        btnSend.text = ""
+        btnSend.icon = getDrawable(if (sending) R.drawable.ic_send else if (etInput.text.toString().trim().isNotEmpty() || pendingAttachment != null) R.drawable.ic_send else R.drawable.ic_camera)
         btnAttach.isEnabled = !sending
         etInput.isEnabled = !sending
     }
@@ -275,34 +330,166 @@ class AIChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun addMessage(role: String, content: String, persist: Boolean = true): TextView {
-        if (persist) { messages.add(ChatMessage(role, content)); trimHistory(); saveHistory() }
+    private fun addMessage(role: String, content: String, persist: Boolean = true, attachment: PendingAttachment? = null): TextView {
+        if (persist) {
+            messages.add(ChatMessage(role, content, attachment?.name, attachment?.mime, attachment?.size ?: 0, attachment?.base64))
+            trimHistory()
+            saveHistory()
+        }
+        val actionText = buildDisplayText(content, attachment)
         val tv = TextView(this).apply {
             text = content
             textSize = 15f
             setTextColor(if (role == "user") 0xFFFFFFFF.toInt() else 0xFF1C1C1E.toInt())
-            setBackgroundResource(if (role == "user") R.drawable.bg_chat_user else R.drawable.bg_chat_ai)
             setPadding(dp(14), dp(10), dp(14), dp(10))
             setLineSpacing(dp(2).toFloat(), 1.0f)
+            visibility = if (content.isBlank() && attachment != null) View.GONE else View.VISIBLE
+            setOnLongClickListener { showMessageActions(actionText); true }
         }
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(if (role == "user") R.drawable.bg_chat_user else R.drawable.bg_chat_ai)
+            setOnLongClickListener { showMessageActions(actionText); true }
+        }
+        attachment?.let { bubble.addView(createAttachmentView(it, role)) }
+        bubble.addView(tv)
         val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             gravity = if (role == "user") Gravity.END else Gravity.START
             setMargins(dp(16), dp(6), dp(16), dp(6))
             width = (resources.displayMetrics.widthPixels * 0.78f).toInt()
         }
-        messageContainer.addView(tv, lp)
+        messageContainer.addView(bubble, lp)
         scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
         return tv
     }
 
-    private fun renderAll() { messageContainer.removeAllViews(); messages.forEach { addMessage(it.role, it.content, persist = false) } }
-    private fun loadHistory() { runCatching { val arr = JSONArray(getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_HISTORY, "[]") ?: "[]"); for (i in 0 until arr.length()) { val obj = arr.getJSONObject(i); messages.add(ChatMessage(obj.getString("role"), obj.getString("content"))) } } }
-    private fun saveHistory() { val arr = JSONArray(); messages.forEach { arr.put(JSONObject().put("role", it.role).put("content", it.content)) }; getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY_HISTORY, arr.toString()).apply() }
+    private fun createAttachmentView(attachment: PendingAttachment, role: String): View {
+        val isImage = attachment.mime.startsWith("image/")
+        val box = FrameLayout(this).apply {
+            setPadding(dp(8), dp(8), dp(8), dp(4))
+            setOnClickListener { openAttachment(attachment) }
+        }
+        if (isImage) {
+            val image = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(0x22000000)
+                runCatching { BitmapFactory.decodeByteArray(Base64.decode(attachment.base64, Base64.NO_WRAP), 0, Base64.decode(attachment.base64, Base64.NO_WRAP).size) }
+                    .getOrNull()?.let { setImageBitmap(it) }
+            }
+            box.addView(image, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(190)))
+        } else {
+            val preview = FrameLayout(this).apply { setBackgroundColor(0xFF2B2B2F.toInt()) }
+            val thumb = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                runCatching { createVideoThumbnail(attachment) }.getOrNull()?.let { setImageBitmap(it) }
+            }
+            val play = TextView(this).apply {
+                text = "▶"
+                gravity = Gravity.CENTER
+                textSize = 42f
+                setTextColor(Color.WHITE)
+                setBackgroundColor(0x33000000)
+            }
+            preview.addView(thumb, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            preview.addView(play, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            box.addView(preview, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(190)))
+        }
+        val label = TextView(this).apply {
+            text = "${attachment.name} · ${formatSize(attachment.size)}  点击查看"
+            textSize = 12f
+            setTextColor(if (role == "user") 0xEEFFFFFF.toInt() else 0xFF6B7280.toInt())
+            setPadding(dp(10), dp(6), dp(10), dp(8))
+            setBackgroundColor(if (role == "user") 0x22000000 else 0x11000000)
+        }
+        val labelLp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)
+        box.addView(label, labelLp)
+        return box
+    }
+
+    private fun createVideoThumbnail(attachment: PendingAttachment): Bitmap? {
+        val bytes = Base64.decode(attachment.base64, Base64.NO_WRAP)
+        val dir = File(cacheDir, "chat_media_thumb").apply { mkdirs() }
+        val file = File(dir, "thumb_${attachment.name.hashCode()}_${attachment.size}.mp4")
+        if (!file.exists() || file.length() != bytes.size.toLong()) FileOutputStream(file).use { it.write(bytes) }
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun openAttachment(attachment: PendingAttachment) {
+        try {
+            val bytes = Base64.decode(attachment.base64, Base64.NO_WRAP)
+            val dir = File(cacheDir, "chat_media").apply { mkdirs() }
+            val ext = when {
+                attachment.mime.startsWith("image/png") -> ".png"
+                attachment.mime.startsWith("image/") -> ".jpg"
+                attachment.mime.startsWith("video/mp4") -> ".mp4"
+                else -> if (attachment.mime.startsWith("video/")) ".mp4" else ".bin"
+            }
+            val file = File(dir, "media_${System.currentTimeMillis()}$ext")
+            FileOutputStream(file).use { it.write(bytes) }
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, attachment.mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "查看附件"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法打开附件：${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showMessageActions(content: String) {
+        AlertDialog.Builder(this)
+            .setItems(arrayOf("复制", "转发")) { _, which ->
+                if (which == 0) copyMessage(content) else forwardMessage(content)
+            }
+            .show()
+    }
+    private fun copyMessage(content: String) {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("Yuno AI消息", content))
+        Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+    }
+    private fun forwardMessage(content: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, content)
+        }
+        startActivity(Intent.createChooser(intent, "转发消息"))
+    }
+    private fun renderAll() {
+        messageContainer.removeAllViews()
+        messages.forEach { msg ->
+            val att = if (!msg.attachmentMime.isNullOrBlank() && !msg.attachmentBase64.isNullOrBlank()) PendingAttachment(msg.attachmentName.orEmpty(), msg.attachmentMime, msg.attachmentSize, msg.attachmentBase64) else null
+            addMessage(msg.role, msg.content, persist = false, attachment = att)
+        }
+    }
+    private fun loadHistory() {
+        runCatching {
+            val arr = JSONArray(getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_HISTORY, "[]") ?: "[]")
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                messages.add(ChatMessage(obj.getString("role"), obj.getString("content"), obj.optString("attachmentName").ifBlank { null }, obj.optString("attachmentMime").ifBlank { null }, obj.optInt("attachmentSize", 0), obj.optString("attachmentBase64").ifBlank { null }))
+            }
+        }
+    }
+    private fun saveHistory() {
+        val arr = JSONArray()
+        messages.forEach {
+            arr.put(JSONObject().put("role", it.role).put("content", it.content).put("attachmentName", it.attachmentName).put("attachmentMime", it.attachmentMime).put("attachmentSize", it.attachmentSize).put("attachmentBase64", it.attachmentBase64))
+        }
+        getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY_HISTORY, arr.toString()).apply()
+    }
     private fun trimHistory() { while (messages.size > 40) messages.removeAt(0) }
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
     private fun formatSize(size: Int): String = if (size >= 1024 * 1024) String.format("%.1fMB", size / 1024f / 1024f) else String.format("%.0fKB", size / 1024f)
 
-    data class ChatMessage(val role: String, val content: String)
+    data class ChatMessage(val role: String, val content: String, val attachmentName: String? = null, val attachmentMime: String? = null, val attachmentSize: Int = 0, val attachmentBase64: String? = null)
     data class AiConfig(val useDefault: Boolean, val endpointBase: String, val apiKey: String)
     data class PendingAttachment(val name: String, val mime: String, val size: Int, val base64: String)
 

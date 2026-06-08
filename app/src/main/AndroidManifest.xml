@@ -81,5 +81,14 @@
             android:name=".ui.video.PlayerActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize"
             android:screenOrientation="unspecified" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

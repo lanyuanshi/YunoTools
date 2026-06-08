@@ -81,6 +81,8 @@ class ThemeActivity : AppCompatActivity() {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 setBackgroundColor(Color.parseColor("#F4F5F7"))
                 setImageResource(option.previewRes)
+                tag = ThemeApplier.THEME_PREVIEW_IMAGE_TAG
+                clearColorFilter()
                 contentDescription = "${option.title}原图比例预览"
             }
             box.addView(image)

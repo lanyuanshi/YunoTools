@@ -28,6 +28,7 @@ object ThemeApplier {
     private const val FEI_XUE_1_BG_TAG = "fei_xue_1_theme_background"
     private const val FEI_XUE_2_BG_TAG = "fei_xue_2_theme_background"
     private const val FEI_XUE_3_BG_TAG = "fei_xue_3_theme_background"
+    const val THEME_PREVIEW_IMAGE_TAG = "theme_preview_image"
     private val skipTintIds = setOf("ivAvatar", "ivAvatarPreview", "ivCover", "ivPreview", "ivCompressed", "ivQRCode", "ivGridItem")
 
     fun current(activity: Activity): YunoTheme = when (UserSettingsStore.getTheme(activity)) {
@@ -69,6 +70,8 @@ object ThemeApplier {
     }
 
     private fun isThemeBgTag(tag: Any?): Boolean = tag == AMIS_BG_TAG || tag == YUNO_BG_TAG || tag == FEI_XUE_1_BG_TAG || tag == FEI_XUE_2_BG_TAG || tag == FEI_XUE_3_BG_TAG
+
+    private fun shouldKeepOriginalImage(tag: Any?): Boolean = isThemeBgTag(tag) || tag == THEME_PREVIEW_IMAGE_TAG
 
     private fun applyImageBackground(root: ViewGroup, resId: Int, tagValue: String) {
         val frame = root as? FrameLayout ?: return
@@ -131,7 +134,7 @@ object ThemeApplier {
                 }
             }
             is ImageView -> {
-                if (idName in skipTintIds || isThemeBgTag(v.tag)) v.clearColorFilter() else runCatching { v.setColorFilter(t.primary) }
+                if (idName in skipTintIds || shouldKeepOriginalImage(v.tag)) v.clearColorFilter() else runCatching { v.setColorFilter(t.primary) }
             }
         }
         if (v is ViewGroup) for (i in 0 until v.childCount) applyView(v.getChildAt(i), t)

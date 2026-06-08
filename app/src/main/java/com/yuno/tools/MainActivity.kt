@@ -15,6 +15,7 @@ import com.yuno.tools.ui.media.VideoTrimActivity
 import com.yuno.tools.ui.tools.AnimeSearchActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
+import com.yuno.tools.ui.tools.SubscriptionActivity
 import com.yuno.tools.ui.profile.ProfileActivity
 import com.yuno.tools.util.ThemeApplier
 
@@ -63,6 +64,10 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<MaterialCardView>(R.id.cardAnimeSearch).setOnClickListener {
             startActivity(Intent(this, AnimeSearchActivity::class.java))
+        }
+
+        findViewById<MaterialCardView>(R.id.cardSubscription).setOnClickListener {
+            startActivity(Intent(this, SubscriptionActivity::class.java))
         }
 
         findViewById<LinearLayout>(R.id.navProfile).setOnClickListener {

@@ -166,163 +166,55 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/tvCurrentTheme"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="当前：默认主题"
-                android:textColor="#8E8E93"
-                android:textSize="14sp" />
-
-            <GridLayout
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardThemeSettings"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="76dp"
                 android:layout_marginTop="12dp"
-                android:columnCount="2">
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#FFFFFF"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp">
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeDefault"
-                    android:layout_width="0dp"
-                    android:layout_height="108dp"
-                    android:layout_columnWeight="1"
-                    android:layout_marginEnd="6dp"
-                    android:layout_marginBottom="12dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="38dp" android:background="@drawable/bg_theme_swatch_default" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="默认" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp">
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeBlack"
-                    android:layout_width="0dp"
-                    android:layout_height="108dp"
-                    android:layout_columnWeight="1"
-                    android:layout_marginStart="6dp"
-                    android:layout_marginBottom="12dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="38dp" android:background="@drawable/bg_theme_swatch_black" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="黑色" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themePink"
-                    android:layout_width="0dp"
-                    android:layout_height="108dp"
-                    android:layout_columnWeight="1"
-                    android:layout_marginEnd="6dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="38dp" android:background="@drawable/bg_theme_swatch_pink" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="粉色" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="主题功能页"
+                            android:textColor="#111827"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeBlue"
-                    android:layout_width="0dp"
-                    android:layout_height="108dp"
-                    android:layout_columnWeight="1"
-                    android:layout_marginStart="6dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="38dp" android:background="@drawable/bg_theme_swatch_blue" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="蓝色" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
+                        <TextView
+                            android:id="@+id/tvCurrentTheme"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:text="当前：默认主题"
+                            android:textColor="#8E8E93"
+                            android:textSize="13sp" />
                     </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeAmis"
-                    android:layout_width="match_parent"
-                    android:layout_height="116dp"
-                    android:layout_columnSpan="2"
-                    android:layout_marginTop="12dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/bg_theme_swatch_amis" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="爱弥斯" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeYuno"
-                    android:layout_width="match_parent"
-                    android:layout_height="116dp"
-                    android:layout_columnSpan="2"
-                    android:layout_marginTop="12dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/bg_theme_swatch_yuno" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="尤诺" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeFeiXue1"
-                    android:layout_width="match_parent"
-                    android:layout_height="116dp"
-                    android:layout_columnSpan="2"
-                    android:layout_marginTop="12dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/theme_fei_xue_1_bg" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="绯雪1" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeFeiXue2"
-                    android:layout_width="match_parent"
-                    android:layout_height="116dp"
-                    android:layout_columnSpan="2"
-                    android:layout_marginTop="12dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/theme_fei_xue_2_bg" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="绯雪2" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/themeFeiXue3"
-                    android:layout_width="match_parent"
-                    android:layout_height="116dp"
-                    android:layout_columnSpan="2"
-                    android:layout_marginTop="12dp"
-                    android:foreground="?attr/selectableItemBackground"
-                    app:cardBackgroundColor="#FFFFFF"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp">
-                    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp">
-                        <View android:layout_width="match_parent" android:layout_height="46dp" android:background="@drawable/theme_fei_xue_3_bg" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="绯雪3" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-            </GridLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="进入"
+                        android:textColor="#8E8E93"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

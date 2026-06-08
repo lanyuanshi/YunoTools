@@ -63,7 +63,8 @@
                     android:layout_height="92dp"
                     android:background="@drawable/bg_circle_blue"
                     android:clipChildren="true"
-                    android:clipToPadding="true">
+                    android:clipToPadding="true"
+                    android:clipToOutline="true">
 
                     <ImageView
                         android:id="@+id/ivAvatar"
@@ -73,6 +74,16 @@
                         android:scaleType="centerCrop"
                         android:src="@drawable/ic_profile"
                         app:tint="#FFFFFF" />
+
+                    <androidx.media3.ui.PlayerView
+                        android:id="@+id/pvAvatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="center"
+                        android:visibility="gone"
+                        app:resize_mode="zoom"
+                        app:surface_type="texture_view"
+                        app:use_controller="false" />
                 </FrameLayout>
 
                 <LinearLayout
@@ -95,7 +106,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="点击选择头像，支持 GIF / WebP 动态头像"
+                        android:text="点击选择头像，支持 GIF / WebP / 视频动态头像"
                         android:textColor="#8E8E93"
                         android:textSize="14sp" />
                 </LinearLayout>

@@ -116,8 +116,8 @@
                                 android:layout_width="28dp"
                                 android:layout_height="28dp"
                                 android:layout_gravity="center"
-                                android:src="@drawable/ic_quote"
-                                app:tint="#007AFF" />
+                                android:src="@drawable/ic_ai_chat_yuno"
+                                app:tint="#AF52DE" />
                         </FrameLayout>
 
                         <TextView
@@ -498,8 +498,8 @@
                                 android:layout_width="24dp"
                                 android:layout_height="24dp"
                                 android:layout_gravity="center"
-                                android:src="@drawable/ic_answer"
-                                app:tint="#32ADE6" />
+                                android:src="@drawable/ic_anime_search_yuno"
+                                app:tint="#FF9500" />
                         </FrameLayout>
 
                         <TextView

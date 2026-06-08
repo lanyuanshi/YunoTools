@@ -3,6 +3,7 @@ package com.yuno.tools.ui.tools
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -14,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.card.MaterialCardView
 import com.yuno.tools.R
@@ -38,6 +40,8 @@ class TinyReaderActivity : AppCompatActivity() {
     private lateinit var navBrowse: LinearLayout
     private lateinit var navMore: LinearLayout
     private var selectedTab = TAB_LIBRARY
+    private var screenMode = TAB_LIBRARY
+    private var previousScreen = TAB_LIBRARY
     private var currentEntry: Entry? = null
     private var readerScroll: ScrollView? = null
 
@@ -64,6 +68,9 @@ class TinyReaderActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         ensureDefaultSources()
         buildShell()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() { handleBack() }
+        })
         showLibrary()
         ThemeApplier.apply(this)
     }
@@ -73,10 +80,10 @@ class TinyReaderActivity : AppCompatActivity() {
     override fun finish() { saveProgress(); super.finish(); overridePendingTransition(R.anim.profile_stay, R.anim.profile_slide_down_out) }
 
     private fun buildShell() {
+        window.statusBarColor = bar(); window.navigationBarColor = bar()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg()); layoutParams = LinearLayout.LayoutParams(-1, -1) }
-        root.addView(View(this).apply { setBackgroundColor(accent()); layoutParams = LinearLayout.LayoutParams(-1, dp(24)) })
-        val appBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(8)); setBackgroundColor(bar()) }
-        appBar.addView(ImageButton(this).apply { setImageResource(android.R.drawable.ic_menu_revert); setBackgroundColor(Color.TRANSPARENT); setColorFilter(text()); setOnClickListener { onBackPressedDispatcher.onBackPressed() } }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val appBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(6), dp(10), dp(6)); setBackgroundColor(bar()) }
+        appBar.addView(ImageButton(this).apply { setImageResource(android.R.drawable.ic_menu_revert); background = rounded(Color.TRANSPARENT, dp(21)); setColorFilter(text()); setOnClickListener { handleBack() } }, LinearLayout.LayoutParams(dp(44), dp(44)))
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
         appBarTitle = TextView(this).apply { textSize = 20f; setTypeface(typeface, Typeface.BOLD); setTextColor(text()); maxLines = 1 }
         appBarSub = TextView(this).apply { textSize = 12f; setTextColor(subText()); maxLines = 1 }
@@ -84,42 +91,56 @@ class TinyReaderActivity : AppCompatActivity() {
         appBar.addView(titleBox, LinearLayout.LayoutParams(0, -1, 1f))
         actionHost = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         appBar.addView(actionHost, LinearLayout.LayoutParams(-2, -1))
-        root.addView(appBar, LinearLayout.LayoutParams(-1, dp(64)))
+        root.addView(appBar, LinearLayout.LayoutParams(-1, dp(56)))
         contentHost = FrameLayout(this).apply { setBackgroundColor(bg()) }
         root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
-        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(2), dp(4), dp(2), dp(4)); setBackgroundColor(bar()) }
+        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(6), dp(4), dp(6), dp(4)); setBackgroundColor(bar()) }
         navLibrary = navItem("书架", "▦") { showLibrary() }
         navUpdates = navItem("更新", "↻") { showUpdates() }
         navHistory = navItem("历史", "◴") { showHistory() }
         navBrowse = navItem("浏览", "⌕") { showBrowse() }
         navMore = navItem("更多", "☰") { showMore() }
-        listOf(navLibrary, navUpdates, navHistory, navBrowse, navMore).forEach { bottom.addView(it, LinearLayout.LayoutParams(0, dp(58), 1f)) }
+        listOf(navLibrary, navUpdates, navHistory, navBrowse, navMore).forEach { bottom.addView(it, LinearLayout.LayoutParams(0, dp(56), 1f)) }
         root.addView(bottom)
         setContentView(root)
     }
 
     private fun navItem(label: String, icon: String, click: () -> Unit) = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, dp(2), 0, dp(2))
+        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, dp(2), 0, dp(2)); background = rounded(Color.TRANSPARENT, dp(18))
         addView(TextView(context).apply { text = icon; textSize = 18f; gravity = Gravity.CENTER; setTextColor(subText()) })
         addView(TextView(context).apply { text = label; textSize = 11f; gravity = Gravity.CENTER; setTextColor(subText()) })
         setOnClickListener { saveProgress(); click() }
     }
 
     private fun setHeader(title: String, sub: String = "", tab: String? = null) {
-        appBarTitle.text = title; appBarSub.text = sub; actionHost.removeAllViews(); tab?.let { selectedTab = it; updateNav() }
+        appBarTitle.text = title; appBarSub.text = sub; actionHost.removeAllViews(); tab?.let { selectedTab = it; screenMode = it; updateNav() }
     }
 
     private fun updateNav() {
-        fun paint(item: LinearLayout, active: Boolean) { for (i in 0 until item.childCount) (item.getChildAt(i) as? TextView)?.setTextColor(if (active) accent() else subText()) }
+        fun paint(item: LinearLayout, active: Boolean) {
+            item.background = rounded(if (active) activeNav() else Color.TRANSPARENT, dp(18))
+            for (i in 0 until item.childCount) (item.getChildAt(i) as? TextView)?.setTextColor(if (active) accent() else subText())
+        }
         paint(navLibrary, selectedTab == TAB_LIBRARY); paint(navUpdates, selectedTab == TAB_UPDATES); paint(navHistory, selectedTab == TAB_HISTORY); paint(navBrowse, selectedTab == TAB_BROWSE); paint(navMore, selectedTab == TAB_MORE)
     }
 
+    private fun handleBack() {
+        when (screenMode) {
+            SCREEN_READER -> currentEntry?.let { showDetail(it) } ?: showLibrary()
+            SCREEN_DETAIL -> when (previousScreen) {
+                TAB_UPDATES -> showUpdates(); TAB_HISTORY -> showHistory(); TAB_BROWSE -> showBrowse(); TAB_MORE -> showMore(); else -> showLibrary()
+            }
+            else -> finish()
+        }
+    }
+
     private fun scroll(): LinearLayout {
-        contentHost.removeAllViews(); val sv = ScrollView(this).apply { setBackgroundColor(bg()) }; val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(14), dp(14), dp(22)) }
+        contentHost.removeAllViews(); val sv = ScrollView(this).apply { setBackgroundColor(bg()) }; val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(14), dp(16), dp(22)) }
         sv.addView(box); contentHost.addView(sv); return box
     }
 
     private fun showLibrary() {
+        currentEntry = null; readerScroll = null
         setHeader("书架", "分类 / 继续阅读 / 章节进度", TAB_LIBRARY); actionButton("＋") { showAddDialog() }; actionButton("⌕") { showBrowse() }
         val box = scroll(); val all = loadEntries().filter { it.favorite }.sortedWith(compareByDescending<Entry> { it.lastReadAt }.thenBy { it.title })
         if (all.isEmpty()) { emptyCard(box, "书架为空", "去“浏览”添加一个网页/小说/漫画源。像 Mihon 一样先添加到书架再阅读。") ; quickBrowseCard(box); return }
@@ -128,6 +149,7 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun showUpdates() {
+        currentEntry = null; readerScroll = null
         setHeader("更新", "章节更新流", TAB_UPDATES); actionButton("↻") { refreshLibrary() }
         val box = scroll(); val all = loadEntries().filter { it.favorite }.sortedByDescending { it.updatedAt }
         if (all.isEmpty()) { emptyCard(box, "暂无更新", "添加作品后这里会显示章节更新。") ; return }
@@ -135,15 +157,17 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun showHistory() {
+        currentEntry = null; readerScroll = null
         setHeader("历史", "阅读记录与续读入口", TAB_HISTORY); val box = scroll(); val history = loadEntries().filter { it.lastReadAt > 0 }.sortedByDescending { it.lastReadAt }
         if (history.isEmpty()) { emptyCard(box, "暂无阅读历史", "打开任意章节后会自动保存历史。") ; return }
         history.forEach { historyCard(box, it) }
     }
 
     private fun showBrowse() {
+        currentEntry = null; readerScroll = null
         setHeader("浏览", "源列表 / 链接导入 / 搜索", TAB_BROWSE); actionButton("＋") { showSourceDialog() }
         val box = scroll(); section(box, "快速导入")
-        val input = EditText(this).apply { hint = "粘贴小说/漫画网页链接，或输入关键词"; setSingleLine(true); textSize = 14f; setTextColor(text()); setHintTextColor(subText()); setPadding(dp(12), 0, dp(12), 0); setBackgroundColor(card()) }
+        val input = EditText(this).apply { hint = "粘贴小说/漫画网页链接，或输入关键词"; setSingleLine(true); textSize = 14f; setTextColor(text()); setHintTextColor(subText()); setPadding(dp(12), 0, dp(12), 0); background = rounded(card(), dp(14), divider()) }
         box.addView(input, LinearLayout.LayoutParams(-1, dp(48)))
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, dp(6)) }
         row.addView(pill("作为链接打开") { val q = input.text.toString().trim(); if (q.startsWith("http")) loadFromUrl(q, guessTitle(q), "手动导入") else toast("请粘贴 http 链接") }, LinearLayout.LayoutParams(0, dp(42), 1f)); row.addView(space(dp(8), 1))
@@ -152,14 +176,15 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun showMore() {
+        currentEntry = null; readerScroll = null
         setHeader("更多", "设置 / 数据 / 关于", TAB_MORE); val box = scroll(); section(box, "阅读设置"); settingCard(box); section(box, "数据")
         box.addView(menuCard("备份书架", "当前数据保存在本机 SharedPreferences，文件导出后续接入。") { toast("后续接入文件备份") })
         box.addView(menuCard("清空阅读数据", "删除书架、历史、源设置") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小读书的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_ENTRIES).remove(KEY_SOURCES).apply(); ensureDefaultSources(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小读书 v1.0.57", "重构为接近 Mihon 的五栏结构：书架、更新、历史、浏览、更多。") {})
+        section(box, "关于"); box.addView(menuCard("小小读书 v1.0.58", "修复返回栈并继续贴近 Mihon 的 Material 界面。") {})
     }
 
     private fun showDetail(entry: Entry) {
-        saveProgress(); currentEntry = entry; setHeader(entry.title, entry.sourceName); actionButton(if (entry.favorite) "★" else "☆") { toggleFavorite(entry) }
+        saveProgress(); previousScreen = if (screenMode == SCREEN_READER || screenMode == SCREEN_DETAIL) previousScreen else selectedTab; screenMode = SCREEN_DETAIL; currentEntry = entry; setHeader(entry.title, entry.sourceName); actionButton(if (entry.favorite) "★" else "☆") { toggleFavorite(entry) }
         val box = scroll(); val top = baseCard(); val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(14), dp(14), dp(14)) }
         row.addView(cover(entry.title), LinearLayout.LayoutParams(dp(86), dp(122)))
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, 0, 0) }
@@ -174,7 +199,7 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun openReader(entry: Entry, chapter: Int, y: Int = 0) {
-        saveProgress(); val safeIndex = chapter.coerceIn(0, max(0, entry.chapters.size - 1)); val fixed = entry.copy(chapterIndex = safeIndex, progressY = y, lastReadAt = System.currentTimeMillis()); currentEntry = fixed; upsertEntry(fixed)
+        saveProgress(); screenMode = SCREEN_READER; val safeIndex = chapter.coerceIn(0, max(0, entry.chapters.size - 1)); val fixed = entry.copy(chapterIndex = safeIndex, progressY = y, lastReadAt = System.currentTimeMillis()); currentEntry = fixed; upsertEntry(fixed)
         val setting = loadSetting(); val ch = fixed.chapters.getOrNull(safeIndex) ?: Chapter("正文", fixed.content, 0)
         setHeader(fixed.title, "${safeIndex + 1}/${max(1, fixed.chapters.size)} · ${ch.title}"); actionButton("☰") { showChapterSheet(fixed) }; actionButton("Aa") { showReaderSettingDialog { openReader(currentEntry ?: fixed, safeIndex, readerScroll?.scrollY ?: 0) } }
         contentHost.removeAllViews(); val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(readerBg()) }
@@ -214,12 +239,12 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun chapterCard(box: LinearLayout, e: Entry, ch: Chapter, i: Int) { val title = if (i == e.chapterIndex && e.lastReadAt > 0) "▶ ${ch.title}" else ch.title; box.addView(menuCard(title, "${ch.content.length} 字") { openReader(e, i, if (i == e.chapterIndex) e.progressY else 0) }) }
     private fun emptyCard(box: LinearLayout, title: String, sub: String) { box.addView(menuCard(title, sub) {}) }
     private fun menuCard(title: String, sub: String, click: () -> Unit): MaterialCardView { val card = baseCard(); card.setOnClickListener { click() }; val lay = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(13), dp(14), dp(13)) }; lay.addView(TextView(this).apply { text = title; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(text()) }); lay.addView(TextView(this).apply { text = sub; textSize = 12f; setTextColor(subText()); setPadding(0, dp(4), 0, 0) }); card.addView(lay); return card }
-    private fun baseCard() = MaterialCardView(this).apply { radius = dp(16).toFloat(); cardElevation = dp(1).toFloat(); setCardBackgroundColor(card()) }
+    private fun baseCard() = MaterialCardView(this).apply { radius = dp(20).toFloat(); cardElevation = 0f; strokeWidth = dp(1); strokeColor = divider(); setCardBackgroundColor(card()) }
     private fun cardLp() = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }
-    private fun cover(title: String) = TextView(this).apply { text = title.take(2).ifBlank { "书" }; textSize = 22f; setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER; setTextColor(Color.WHITE); setBackgroundColor(colorFrom(title)) }
+    private fun cover(title: String) = TextView(this).apply { text = title.take(2).ifBlank { "书" }; textSize = 22f; setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = rounded(colorFrom(title), dp(14)) }
     private fun section(box: LinearLayout, title: String) { box.addView(TextView(this).apply { text = title; textSize = 14f; setTypeface(typeface, Typeface.BOLD); setTextColor(subText()); setPadding(dp(2), dp(8), 0, dp(8)) }) }
     private fun actionButton(label: String, click: () -> Unit) { actionHost.addView(TextView(this).apply { text = label; textSize = 20f; gravity = Gravity.CENTER; setTextColor(text()); setOnClickListener { click() } }, LinearLayout.LayoutParams(dp(42), dp(42))) }
-    private fun pill(label: String, click: () -> Unit) = TextView(this).apply { text = label; textSize = 13f; gravity = Gravity.CENTER; setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE); setBackgroundColor(accent()); setOnClickListener { click() } }
+    private fun pill(label: String, click: () -> Unit) = TextView(this).apply { text = label; textSize = 13f; gravity = Gravity.CENTER; setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE); background = rounded(accent(), dp(20)); setOnClickListener { click() } }
     private fun space(w: Int, h: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(w, h) }
 
     private fun splitChapters(text: String): List<Chapter> { val clean = text.replace("\r", "").lines().map { it.trim() }.filter { it.isNotBlank() }; val re = Regex("^(第[0-9零一二三四五六七八九十百千万]+[章节回卷集].{0,42}|Chapter\\s*\\d+.{0,42}|CHAPTER\\s*\\d+.{0,42})$"); val result = mutableListOf<Chapter>(); var title = "开始"; val buf = StringBuilder(); fun flush() { if (buf.isNotBlank()) { result.add(Chapter(title, buf.toString().trim(), result.size)); buf.clear() } }; clean.forEach { line -> if (re.matches(line) && buf.length > 500) { flush(); title = line } else buf.append(line).append("\n\n") }; flush(); return if (result.size >= 2) result.take(MAX_CHAPTERS) else paginate(text) }
@@ -246,9 +271,12 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun card() = if (dark()) Color.rgb(30, 30, 34) else Color.WHITE
     private fun text() = if (dark()) Color.rgb(245, 245, 247) else Color.rgb(32, 32, 36)
     private fun subText() = if (dark()) Color.rgb(166, 166, 172) else Color.rgb(112, 112, 122)
-    private fun accent() = Color.rgb(101, 86, 255)
+    private fun accent() = Color.rgb(103, 80, 164)
+    private fun divider() = if (dark()) Color.rgb(54, 54, 60) else Color.rgb(226, 226, 232)
+    private fun activeNav() = if (dark()) Color.rgb(48, 40, 62) else Color.rgb(234, 221, 255)
     private fun readerBg() = if (dark()) Color.rgb(17, 17, 17) else Color.rgb(247, 243, 232)
     private fun readerText() = if (dark()) Color.rgb(235, 235, 235) else Color.rgb(43, 33, 24)
+    private fun rounded(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); stroke?.let { setStroke(dp(1), it) } }
 
-    companion object { private const val TAB_LIBRARY = "library"; private const val TAB_UPDATES = "updates"; private const val TAB_HISTORY = "history"; private const val TAB_BROWSE = "browse"; private const val TAB_MORE = "more"; private const val KEY_ENTRIES = "entries"; private const val KEY_SOURCES = "sources"; private const val KEY_FONT = "font"; private const val KEY_LINE = "line"; private const val KEY_DARK = "dark"; private const val MAX_SAVE_CONTENT = 180000; private const val MAX_CHAPTERS = 180; private const val PAGE_SIZE = 6500 }
+    companion object { private const val TAB_LIBRARY = "library"; private const val TAB_UPDATES = "updates"; private const val TAB_HISTORY = "history"; private const val TAB_BROWSE = "browse"; private const val TAB_MORE = "more"; private const val SCREEN_DETAIL = "detail"; private const val SCREEN_READER = "reader"; private const val KEY_ENTRIES = "entries"; private const val KEY_SOURCES = "sources"; private const val KEY_FONT = "font"; private const val KEY_LINE = "line"; private const val KEY_DARK = "dark"; private const val MAX_SAVE_CONTENT = 180000; private const val MAX_CHAPTERS = 180; private const val PAGE_SIZE = 6500 }
 }

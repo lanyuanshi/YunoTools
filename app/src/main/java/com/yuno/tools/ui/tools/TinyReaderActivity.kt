@@ -1,6 +1,9 @@
 package com.yuno.tools.ui.tools
 
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -62,6 +65,7 @@ class TinyReaderActivity : AppCompatActivity() {
 
     private data class Chapter(val title: String, val content: String, val index: Int)
     private data class Source(val name: String, val baseUrl: String, val lang: String = "ZH")
+    private data class SearchResult(val title: String, val url: String, val sourceName: String, val snippet: String = "")
     private data class ReaderSetting(val fontSize: Float, val lineDp: Int, val darkMode: Boolean)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,6 +131,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun handleBack() {
         when (screenMode) {
             SCREEN_READER -> currentEntry?.let { showDetail(it) } ?: showLibrary()
+            SCREEN_SEARCH -> showBrowse()
             SCREEN_DETAIL -> when (previousScreen) {
                 TAB_UPDATES -> showUpdates(); TAB_HISTORY -> showHistory(); TAB_BROWSE -> showBrowse(); TAB_MORE -> showMore(); else -> showLibrary()
             }
@@ -141,8 +146,8 @@ class TinyReaderActivity : AppCompatActivity() {
 
     private fun showLibrary() {
         currentEntry = null; readerScroll = null
-        setHeader("书架", "分类 / 继续阅读 / 章节进度", TAB_LIBRARY); actionButton("＋") { showAddDialog() }; actionButton("⌕") { showBrowse() }
-        val box = scroll(); val all = loadEntries().filter { it.favorite }.sortedWith(compareByDescending<Entry> { it.lastReadAt }.thenBy { it.title })
+        setHeader("书架", "分类 / 排序 / 继续阅读", TAB_LIBRARY); actionButton("⇅") { showSortDialog() }; actionButton("＋") { showAddDialog() }; actionButton("⌕") { showBrowse() }
+        val box = scroll(); val all = sortedLibraryEntries()
         if (all.isEmpty()) { emptyCard(box, "书架为空", "去“浏览”添加一个网页/小说/漫画源。像 Mihon 一样先添加到书架再阅读。") ; quickBrowseCard(box); return }
         all.firstOrNull { it.lastReadAt > 0 }?.let { section(box, "继续阅读"); continueCard(box, it) }
         section(box, "全部收藏 · ${all.size}"); all.forEach { libraryCard(box, it) }
@@ -178,13 +183,14 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun showMore() {
         currentEntry = null; readerScroll = null
         setHeader("更多", "设置 / 数据 / 关于", TAB_MORE); val box = scroll(); section(box, "阅读设置"); settingCard(box); section(box, "数据")
-        box.addView(menuCard("备份书架", "当前数据保存在本机 SharedPreferences，文件导出后续接入。") { toast("后续接入文件备份") })
+        box.addView(menuCard("备份书架", "复制完整书架、历史、源、阅读设置 JSON。") { backupData() })
+        box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空阅读数据", "删除书架、历史、源设置") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小读书的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_ENTRIES).remove(KEY_SOURCES).apply(); ensureDefaultSources(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小读书 v1.0.58", "修复返回栈并继续贴近 Mihon 的 Material 界面。") {})
+        section(box, "关于"); box.addView(menuCard("小小读书 v1.0.59", "补全搜索结果、刷新、分享、删除、排序、备份恢复等可用功能。") {})
     }
 
     private fun showDetail(entry: Entry) {
-        saveProgress(); previousScreen = if (screenMode == SCREEN_READER || screenMode == SCREEN_DETAIL) previousScreen else selectedTab; screenMode = SCREEN_DETAIL; currentEntry = entry; setHeader(entry.title, entry.sourceName); actionButton(if (entry.favorite) "★" else "☆") { toggleFavorite(entry) }
+        saveProgress(); previousScreen = if (screenMode == SCREEN_READER || screenMode == SCREEN_DETAIL) previousScreen else selectedTab; screenMode = SCREEN_DETAIL; currentEntry = entry; setHeader(entry.title, entry.sourceName); actionButton("↻") { refreshEntry(entry) }; actionButton(if (entry.favorite) "★" else "☆") { toggleFavorite(entry) }; actionButton("⋮") { showEntryMenu(entry) }
         val box = scroll(); val top = baseCard(); val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(14), dp(14), dp(14)) }
         row.addView(cover(entry.title), LinearLayout.LayoutParams(dp(86), dp(122)))
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, 0, 0) }
@@ -192,7 +198,7 @@ class TinyReaderActivity : AppCompatActivity() {
         info.addView(TextView(this).apply { text = entry.sourceName; textSize = 13f; setTextColor(subText()); setPadding(0, dp(4), 0, dp(4)) })
         info.addView(TextView(this).apply { text = "${entry.chapters.size} 章 · ${if (entry.favorite) "已收藏" else "未收藏"}"; textSize = 13f; setTextColor(subText()) })
         val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(12), 0, 0) }
-        btnRow.addView(pill(if (entry.lastReadAt > 0) "继续阅读" else "开始阅读") { openReader(entry, entry.chapterIndex, entry.progressY) }, LinearLayout.LayoutParams(0, dp(40), 1f)); btnRow.addView(space(dp(8), 1)); btnRow.addView(pill("收藏") { toggleFavorite(entry) }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        btnRow.addView(pill(if (entry.lastReadAt > 0) "继续阅读" else "开始阅读") { openReader(entry, entry.chapterIndex, entry.progressY) }, LinearLayout.LayoutParams(0, dp(40), 1f)); btnRow.addView(space(dp(8), 1)); btnRow.addView(pill(if (entry.favorite) "取消收藏" else "加入书架") { toggleFavorite(entry) }, LinearLayout.LayoutParams(0, dp(40), 1f))
         info.addView(btnRow); row.addView(info, LinearLayout.LayoutParams(0, -2, 1f)); top.addView(row); box.addView(top, cardLp())
         if (entry.description.isNotBlank()) box.addView(TextView(this).apply { text = entry.description; textSize = 14f; setTextColor(subText()); setLineSpacing(dp(3).toFloat(), 1f); setPadding(dp(4), dp(4), dp(4), dp(12)) })
         section(box, "章节"); if (entry.chapters.isEmpty()) emptyCard(box, "章节未解析", "可以重新打开链接刷新内容。") else entry.chapters.forEachIndexed { i, ch -> chapterCard(box, entry, ch, i) }
@@ -214,27 +220,70 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun saveProgress() { val e = currentEntry ?: return; val y = readerScroll?.scrollY ?: e.progressY; upsertEntry(e.copy(progressY = y, lastReadAt = if (y > 0 || e.lastReadAt > 0) System.currentTimeMillis() else e.lastReadAt)) }
 
     private fun loadFromUrl(url: String, titleHint: String, source: String) {
-        setHeader("加载中", titleHint); contentHost.removeAllViews(); contentHost.addView(TextView(this).apply { text = "正在解析页面…"; gravity = Gravity.CENTER; textSize = 16f; setTextColor(subText()) })
+        setHeader("加载中", titleHint); contentHost.removeAllViews(); contentHost.addView(TextView(this).apply { text = "正在解析详情与章节…"; gravity = Gravity.CENTER; textSize = 16f; setTextColor(subText()) })
         Thread {
-            try { val body = client.newCall(Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 YunoTools Reader").build()).execute().body?.string().orEmpty(); val clean = htmlToText(body); val title = extractTitle(body).ifBlank { titleHint }; val chapters = splitChapters(clean); val entry = Entry(title = title, url = url, sourceName = source, description = clean.take(180), content = clean.take(MAX_SAVE_CONTENT), chapters = chapters, unread = chapters.size, updatedAt = System.currentTimeMillis()); upsertEntry(entry); runOnUiThread { showDetail(entry); toast("已加入书架") } }
+            try { val entry = fetchEntry(url, titleHint, source, loadEntries().firstOrNull { it.url == url }); runOnUiThread { showDetail(entry); toast("已加入书架") } }
             catch (e: Exception) { runOnUiThread { toast("加载失败：${e.message}"); showBrowse() } }
         }.start()
     }
 
-    private fun searchDefault(keyword: String) { val src = loadSources().firstOrNull() ?: Source("必应搜索", "https://www.bing.com/search?q=%s"); val url = if (src.baseUrl.contains("%s")) src.baseUrl.replace("%s", URLEncoder.encode(keyword, "UTF-8")) else src.baseUrl + URLEncoder.encode(keyword, "UTF-8"); loadFromUrl(url, keyword, src.name) }
-    private fun refreshLibrary() { saveEntries(loadEntries().map { it.copy(updatedAt = System.currentTimeMillis()) }); toast("已刷新更新列表"); showUpdates() }
+    private fun fetchEntry(url: String, titleHint: String, source: String, old: Entry? = null): Entry {
+        val body = client.newCall(Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 YunoTools Reader").build()).execute().body?.string().orEmpty()
+        val clean = htmlToText(body); val title = extractTitle(body).ifBlank { titleHint }; val chapters = splitChapters(clean)
+        val entry = Entry(title = title, url = url, sourceName = source, description = clean.take(220), content = clean.take(MAX_SAVE_CONTENT), chapters = chapters, chapterIndex = old?.chapterIndex ?: 0, progressY = old?.progressY ?: 0, favorite = old?.favorite ?: true, unread = max(0, chapters.size - (old?.chapters?.size ?: 0)), lastReadAt = old?.lastReadAt ?: 0L, updatedAt = System.currentTimeMillis())
+        upsertEntry(entry); return entry
+    }
+
+    private fun searchDefault(keyword: String) { val src = loadSources().firstOrNull() ?: Source("必应搜索", "https://www.bing.com/search?q=%s"); searchSource(src, keyword) }
+    private fun searchSource(src: Source, keyword: String) { val url = if (src.baseUrl.contains("%s")) src.baseUrl.replace("%s", URLEncoder.encode(keyword, "UTF-8")) else src.baseUrl + URLEncoder.encode(keyword, "UTF-8"); showSearchLoading(src, keyword, url) }
+    private fun showSearchLoading(src: Source, keyword: String, url: String) {
+        setHeader("搜索", "${src.name} · $keyword"); screenMode = SCREEN_SEARCH; contentHost.removeAllViews(); contentHost.addView(TextView(this).apply { text = "正在搜索…"; gravity = Gravity.CENTER; textSize = 16f; setTextColor(subText()) })
+        Thread {
+            try { val body = client.newCall(Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 YunoTools Reader").build()).execute().body?.string().orEmpty(); val results = parseSearchResults(body, src.name); runOnUiThread { showSearchResults(src, keyword, results) } }
+            catch (e: Exception) { runOnUiThread { toast("搜索失败：${e.message}"); showBrowse() } }
+        }.start()
+    }
+    private fun showSearchResults(src: Source, keyword: String, results: List<SearchResult>) {
+        screenMode = SCREEN_SEARCH; setHeader("搜索结果", "${src.name} · $keyword"); actionButton("↻") { searchSource(src, keyword) }
+        val box = scroll(); if (results.isEmpty()) { emptyCard(box, "没有结果", "可以换关键词或直接粘贴详情页链接。") ; return }
+        section(box, "找到 ${results.size} 条"); results.forEach { r -> box.addView(menuCard(r.title, "${r.sourceName} · ${r.snippet.ifBlank { r.url }}") { loadFromUrl(r.url, r.title, r.sourceName) }) }
+    }
+    private fun parseSearchResults(html: String, source: String): List<SearchResult> {
+        val re = Regex("""<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE); val out = mutableListOf<SearchResult>()
+        re.findAll(html).forEach { m -> var u = m.groupValues[1].trim(); val title = htmlToText(m.groupValues[2]).replace(Regex("""\s+"""), " ").trim().take(80); if (title.length >= 2 && (u.startsWith("http://") || u.startsWith("https://")) && !u.contains("javascript") && out.none { it.url == u }) out.add(SearchResult(title, u, source, u.take(120))) }
+        return out.take(30)
+    }
+    private fun refreshLibrary() { val all = loadEntries().filter { it.favorite }; if (all.isEmpty()) { toast("书架为空"); return }; toast("开始刷新 ${all.size} 个条目"); Thread { var ok = 0; all.forEach { runCatching { fetchEntry(it.url, it.title, it.sourceName, it); ok++ } }; runOnUiThread { toast("刷新完成：$ok/${all.size}"); showUpdates() } }.start() }
+    private fun refreshEntry(e: Entry) { toast("正在刷新"); Thread { try { val n = fetchEntry(e.url, e.title, e.sourceName, e); runOnUiThread { showDetail(n); toast("已刷新") } } catch (ex: Exception) { runOnUiThread { toast("刷新失败：${ex.message}") } } }.start() }
     private fun showAddDialog() { val input = EditText(this).apply { hint = "输入网页链接"; setSingleLine(true) }; AlertDialog.Builder(this).setTitle("添加到书架").setView(input).setNegativeButton("取消", null).setPositiveButton("打开") { _, _ -> val url = input.text.toString().trim(); if (url.startsWith("http")) loadFromUrl(url, guessTitle(url), "手动导入") else toast("请输入 http 链接") }.show() }
     private fun showSourceDialog() { val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), 0, dp(18), 0) }; val name = EditText(this).apply { hint = "源名称" }; val url = EditText(this).apply { hint = "搜索地址，关键词用 %s" }; box.addView(name); box.addView(url); AlertDialog.Builder(this).setTitle("添加源").setView(box).setNegativeButton("取消", null).setPositiveButton("保存") { _, _ -> val n = name.text.toString().ifBlank { "自定义源" }; val u = url.text.toString().trim(); if (u.startsWith("http")) { saveSources(loadSources() + Source(n, u)); showBrowse() } else toast("地址无效") }.show() }
     private fun showChapterSheet(entry: Entry) { val titles = entry.chapters.mapIndexed { i, c -> (if (i == entry.chapterIndex) "▶ " else "") + c.title }.toTypedArray(); AlertDialog.Builder(this).setTitle("章节列表").setItems(titles) { _, which -> openReader(entry, which, 0) }.show() }
     private fun showReaderSettingDialog(after: () -> Unit) { val s = loadSetting(); val items = arrayOf("字体减小", "字体增大", "行距减小", "行距增大", if (s.darkMode) "关闭夜间模式" else "开启夜间模式"); AlertDialog.Builder(this).setTitle("阅读设置").setItems(items) { _, which -> val now = loadSetting(); val next = when (which) { 0 -> now.copy(fontSize = max(14f, now.fontSize - 1f)); 1 -> now.copy(fontSize = min(28f, now.fontSize + 1f)); 2 -> now.copy(lineDp = max(2, now.lineDp - 1)); 3 -> now.copy(lineDp = min(14, now.lineDp + 1)); else -> now.copy(darkMode = !now.darkMode) }; saveSetting(next); buildShell(); after() }.show() }
     private fun toggleFavorite(e: Entry) { val next = e.copy(favorite = !e.favorite); upsertEntry(next); currentEntry = next; showDetail(next) }
 
+
+    private fun showEntryMenu(e: Entry) {
+        val items = arrayOf(if (e.favorite) "取消收藏" else "加入书架", "复制链接", "分享", "删除条目")
+        AlertDialog.Builder(this).setTitle(e.title).setItems(items) { _, which -> when (which) {
+            0 -> toggleFavorite(e); 1 -> copyText(e.url); 2 -> shareText("${e.title}\n${e.url}"); 3 -> confirmDelete(e)
+        } }.show()
+    }
+    private fun confirmDelete(e: Entry) { AlertDialog.Builder(this).setTitle("删除条目？").setMessage(e.title).setNegativeButton("取消", null).setPositiveButton("删除") { _, _ -> deleteEntry(e); showLibrary() }.show() }
+    private fun deleteEntry(e: Entry) { saveEntries(loadEntries().filterNot { it.url == e.url }); toast("已删除") }
+    private fun copyText(v: String) { (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("YunoTools", v)); toast("已复制") }
+    private fun shareText(v: String) { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, v), "分享")) }
+    private fun showSortDialog() { val items = arrayOf("最近阅读", "标题", "最近更新", "章节数"); AlertDialog.Builder(this).setTitle("书架排序").setItems(items) { _, which -> prefs().edit().putInt(KEY_SORT, which).apply(); showLibrary() }.show() }
+    private fun sortedLibraryEntries(): List<Entry> { val fav = loadEntries().filter { it.favorite }; return when (prefs().getInt(KEY_SORT, 0)) { 1 -> fav.sortedBy { it.title }; 2 -> fav.sortedByDescending { it.updatedAt }; 3 -> fav.sortedByDescending { it.chapters.size }; else -> fav.sortedWith(compareByDescending<Entry> { it.lastReadAt }.thenBy { it.title }) } }
+    private fun backupData() { val o = JSONObject(); o.put("entries", JSONArray(prefs().getString(KEY_ENTRIES, "[]"))); o.put("sources", JSONArray(prefs().getString(KEY_SOURCES, "[]"))); o.put("font", prefs().getFloat(KEY_FONT, 18f).toDouble()); o.put("line", prefs().getInt(KEY_LINE, 7)); o.put("dark", prefs().getBoolean(KEY_DARK, false)); copyText(o.toString()); shareText(o.toString()) }
+    private fun showRestoreDialog() { val input = EditText(this).apply { hint = "粘贴备份 JSON"; minLines = 4; setTextColor(text()); setHintTextColor(subText()) }; AlertDialog.Builder(this).setTitle("恢复备份").setView(input).setNegativeButton("取消", null).setPositiveButton("恢复") { _, _ -> restoreData(input.text.toString()) }.show() }
+    private fun restoreData(raw: String) { try { val o = JSONObject(raw); prefs().edit().putString(KEY_ENTRIES, o.optJSONArray("entries")?.toString() ?: "[]").putString(KEY_SOURCES, o.optJSONArray("sources")?.toString() ?: "[]").putFloat(KEY_FONT, o.optDouble("font", 18.0).toFloat()).putInt(KEY_LINE, o.optInt("line", 7)).putBoolean(KEY_DARK, o.optBoolean("dark", false)).apply(); ensureDefaultSources(); buildShell(); showLibrary(); toast("恢复完成") } catch (e: Exception) { toast("备份格式错误") } }
+
     private fun quickBrowseCard(box: LinearLayout) { box.addView(menuCard("打开浏览", "像 Mihon 一样先从“浏览”进入源，再添加到书架。") { showBrowse() }) }
     private fun continueCard(box: LinearLayout, e: Entry) { val card = baseCard(); val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), dp(12), dp(12), dp(12)) }; row.addView(cover(e.title), LinearLayout.LayoutParams(dp(62), dp(86))); val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }; info.addView(TextView(this).apply { text = e.title; textSize = 17f; setTypeface(typeface, Typeface.BOLD); setTextColor(text()) }); info.addView(TextView(this).apply { text = "第 ${e.chapterIndex + 1}/${max(1, e.chapters.size)} 章 · 已保存进度"; textSize = 13f; setTextColor(subText()); setPadding(0, dp(4), 0, dp(8)) }); info.addView(pill("继续阅读") { openReader(e, e.chapterIndex, e.progressY) }, LinearLayout.LayoutParams(dp(118), dp(38))); row.addView(info, LinearLayout.LayoutParams(0, -2, 1f)); card.addView(row); box.addView(card, cardLp()) }
     private fun libraryCard(box: LinearLayout, e: Entry) { val card = baseCard(); card.setOnClickListener { showDetail(e) }; val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), dp(12), dp(12), dp(12)); gravity = Gravity.CENTER_VERTICAL }; row.addView(cover(e.title), LinearLayout.LayoutParams(dp(58), dp(80))); val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }; info.addView(TextView(this).apply { text = e.title; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(text()); maxLines = 1 }); info.addView(TextView(this).apply { text = e.sourceName; textSize = 12f; setTextColor(subText()); setPadding(0, dp(3), 0, dp(3)) }); info.addView(TextView(this).apply { text = "${e.chapters.size} 章 · ${if (e.lastReadAt > 0) "读到第 ${e.chapterIndex + 1} 章" else "未读"}"; textSize = 12f; setTextColor(subText()) }); row.addView(info, LinearLayout.LayoutParams(0, -2, 1f)); row.addView(TextView(this).apply { text = "›"; textSize = 28f; setTextColor(subText()); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(24), -1)); card.addView(row); box.addView(card, cardLp()) }
     private fun updateCard(box: LinearLayout, e: Entry, chapter: String) { box.addView(menuCard(e.title, "最新：$chapter · ${e.sourceName}") { showDetail(e) }) }
     private fun historyCard(box: LinearLayout, e: Entry) { box.addView(menuCard(e.title, "读到第 ${e.chapterIndex + 1}/${max(1, e.chapters.size)} 章 · 点击继续") { openReader(e, e.chapterIndex, e.progressY) }) }
-    private fun sourceCard(box: LinearLayout, s: Source) { val card = baseCard(); val lay = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)) }; lay.addView(TextView(this).apply { text = s.name; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(text()) }); lay.addView(TextView(this).apply { text = "${s.lang} · ${s.baseUrl}"; textSize = 12f; setTextColor(subText()); maxLines = 2; setPadding(0, dp(4), 0, dp(10)) }); lay.addView(pill("在此源中搜索") { val input = EditText(this).apply { hint = "关键词"; setSingleLine(true) }; AlertDialog.Builder(this).setTitle(s.name).setView(input).setNegativeButton("取消", null).setPositiveButton("搜索") { _, _ -> val q = input.text.toString().trim(); if (q.isNotEmpty()) { val url = if (s.baseUrl.contains("%s")) s.baseUrl.replace("%s", URLEncoder.encode(q, "UTF-8")) else s.baseUrl + URLEncoder.encode(q, "UTF-8"); loadFromUrl(url, q, s.name) } }.show() }, LinearLayout.LayoutParams(-1, dp(38))); card.addView(lay); box.addView(card, cardLp()) }
+    private fun sourceCard(box: LinearLayout, s: Source) { val card = baseCard(); val lay = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)) }; lay.addView(TextView(this).apply { text = s.name; textSize = 16f; setTypeface(typeface, Typeface.BOLD); setTextColor(text()) }); lay.addView(TextView(this).apply { text = "${s.lang} · ${s.baseUrl}"; textSize = 12f; setTextColor(subText()); maxLines = 2; setPadding(0, dp(4), 0, dp(10)) }); lay.addView(pill("在此源中搜索") { val input = EditText(this).apply { hint = "关键词"; setSingleLine(true) }; AlertDialog.Builder(this).setTitle(s.name).setView(input).setNegativeButton("取消", null).setPositiveButton("搜索") { _, _ -> val q = input.text.toString().trim(); if (q.isNotEmpty()) { val url = if (s.baseUrl.contains("%s")) s.baseUrl.replace("%s", URLEncoder.encode(q, "UTF-8")) else s.baseUrl + URLEncoder.encode(q, "UTF-8"); searchSource(s, q) } }.show() }, LinearLayout.LayoutParams(-1, dp(38))); card.addView(lay); box.addView(card, cardLp()) }
     private fun settingCard(box: LinearLayout) { val s = loadSetting(); box.addView(menuCard("阅读器", "字体 ${s.fontSize.toInt()}sp · 行距 ${s.lineDp}dp · ${if (s.darkMode) "夜间" else "日间"}") { showReaderSettingDialog { showMore() } }) }
     private fun chapterCard(box: LinearLayout, e: Entry, ch: Chapter, i: Int) { val title = if (i == e.chapterIndex && e.lastReadAt > 0) "▶ ${ch.title}" else ch.title; box.addView(menuCard(title, "${ch.content.length} 字") { openReader(e, i, if (i == e.chapterIndex) e.progressY else 0) }) }
     private fun emptyCard(box: LinearLayout, title: String, sub: String) { box.addView(menuCard(title, sub) {}) }
@@ -247,7 +296,20 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun pill(label: String, click: () -> Unit) = TextView(this).apply { text = label; textSize = 13f; gravity = Gravity.CENTER; setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE); background = rounded(accent(), dp(20)); setOnClickListener { click() } }
     private fun space(w: Int, h: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(w, h) }
 
-    private fun splitChapters(text: String): List<Chapter> { val clean = text.replace("\r", "").lines().map { it.trim() }.filter { it.isNotBlank() }; val re = Regex("^(第[0-9零一二三四五六七八九十百千万]+[章节回卷集].{0,42}|Chapter\\s*\\d+.{0,42}|CHAPTER\\s*\\d+.{0,42})$"); val result = mutableListOf<Chapter>(); var title = "开始"; val buf = StringBuilder(); fun flush() { if (buf.isNotBlank()) { result.add(Chapter(title, buf.toString().trim(), result.size)); buf.clear() } }; clean.forEach { line -> if (re.matches(line) && buf.length > 500) { flush(); title = line } else buf.append(line).append("\n\n") }; flush(); return if (result.size >= 2) result.take(MAX_CHAPTERS) else paginate(text) }
+
+    private fun splitChapters(text: String): List<Chapter> {
+        val markers = Regex("""(?m)^(第[一二三四五六七八九十百千万0-9]+[章节回].{0,40})$""").findAll(text).toList()
+        if (markers.size < 2) return paginate(text)
+        val list = mutableListOf<Chapter>()
+        markers.forEachIndexed { idx, m ->
+            if (list.size >= MAX_CHAPTERS) return@forEachIndexed
+            val start = m.range.first
+            val end = markers.getOrNull(idx + 1)?.range?.first ?: text.length
+            val chunk = text.substring(start, end).trim()
+            if (chunk.length > 80) list.add(Chapter(m.groupValues[1].trim().take(60), chunk.take(PAGE_SIZE + 1000), list.size))
+        }
+        return if (list.isEmpty()) paginate(text) else list
+    }
     private fun paginate(text: String): List<Chapter> { val t = text.ifBlank { "当前页面没有提取到足够正文。可以尝试换一个正文页链接。" }; val list = mutableListOf<Chapter>(); var start = 0; while (start < t.length && list.size < MAX_CHAPTERS) { val end = min(t.length, start + PAGE_SIZE); list.add(Chapter("第 ${list.size + 1} 页", t.substring(start, end), list.size)); start = end }; return list }
     private fun htmlToText(html: String) = html.replace(Regex("<script[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), " ").replace(Regex("<style[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), " ").replace(Regex("</(p|div|br|h[1-6]|li|tr)>", RegexOption.IGNORE_CASE), "\n").replace(Regex("<[^>]+>"), " ").replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace(Regex("[ \\t]+"), " ").replace(Regex("\\n{3,}"), "\n\n").trim().take(MAX_SAVE_CONTENT)
     private fun extractTitle(html: String) = Regex("<title[^>]*>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1)?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
@@ -278,5 +340,5 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun readerText() = if (dark()) Color.rgb(235, 235, 235) else Color.rgb(43, 33, 24)
     private fun rounded(color: Int, radius: Int, stroke: Int? = null) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); stroke?.let { setStroke(dp(1), it) } }
 
-    companion object { private const val TAB_LIBRARY = "library"; private const val TAB_UPDATES = "updates"; private const val TAB_HISTORY = "history"; private const val TAB_BROWSE = "browse"; private const val TAB_MORE = "more"; private const val SCREEN_DETAIL = "detail"; private const val SCREEN_READER = "reader"; private const val KEY_ENTRIES = "entries"; private const val KEY_SOURCES = "sources"; private const val KEY_FONT = "font"; private const val KEY_LINE = "line"; private const val KEY_DARK = "dark"; private const val MAX_SAVE_CONTENT = 180000; private const val MAX_CHAPTERS = 180; private const val PAGE_SIZE = 6500 }
+    companion object { private const val TAB_LIBRARY = "library"; private const val TAB_UPDATES = "updates"; private const val TAB_HISTORY = "history"; private const val TAB_BROWSE = "browse"; private const val TAB_MORE = "more"; private const val SCREEN_DETAIL = "detail"; private const val SCREEN_READER = "reader"; private const val SCREEN_SEARCH = "search"; private const val KEY_ENTRIES = "entries"; private const val KEY_SOURCES = "sources"; private const val KEY_FONT = "font"; private const val KEY_LINE = "line"; private const val KEY_DARK = "dark"; private const val KEY_SORT = "sort"; private const val MAX_SAVE_CONTENT = 180000; private const val MAX_CHAPTERS = 180; private const val PAGE_SIZE = 6500 }
 }

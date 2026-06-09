@@ -4,6 +4,10 @@ import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.Manifest
 import android.app.Dialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -33,6 +37,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import com.bumptech.glide.Glide
@@ -59,8 +64,12 @@ import com.yuno.tools.ui.profile.SettingsActivity
 import com.yuno.tools.util.ThemeApplier
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        private const val MUSIC_NOTIFICATION_CHANNEL_ID = "yuno_music_playback"
+        private const val MUSIC_NOTIFICATION_ID = 71072
+    }
     private enum class MainTab { HOME, PROFILE }
-    private enum class MusicPanelTab { LOCAL, FAVORITE, MIGU }
+    private enum class MusicPanelTab { LOCAL, FAVORITE, ONLINE }
     private data class LocalSong(val title: String, val artist: String, val uri: Uri, val durationMs: Long)
 
     private var currentTab = MainTab.HOME
@@ -73,8 +82,8 @@ class MainActivity : AppCompatActivity() {
     private var currentMusicTitle = "本地音乐 · 用户歌曲"
     private var currentMusicUri: Uri? = null
     private var musicPanelLastTab = MusicPanelTab.LOCAL
-    private var miguLastKeyword = ""
-    private var miguCachedSongs: List<com.yuno.tools.util.MusicSearchHelper.MiguSong> = emptyList()
+    private var onlineLastKeyword = ""
+    private var onlineCachedSongs: List<com.yuno.tools.util.MusicSearchHelper.OnlineSong> = emptyList()
 
     private val requestAudioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showMusicPanel()
@@ -264,6 +273,7 @@ class MainActivity : AppCompatActivity() {
             player.play()
         }
         updateMusicNavState(player.isPlaying)
+        updateMusicNotification(player.isPlaying)
     }
 
     private fun ensureMusicPlayer(): ExoPlayer {
@@ -295,6 +305,7 @@ class MainActivity : AppCompatActivity() {
         player.playWhenReady = true
         player.play()
         updateMusicNavState(true)
+        updateMusicNotification(true)
     }
 
     private fun playLocalMusicFromPanel() {
@@ -481,8 +492,8 @@ class MainActivity : AppCompatActivity() {
             content.addView(ScrollView(this).apply { addView(list) })
         }
 
-        fun showMiguTab() {
-            musicPanelLastTab = MusicPanelTab.MIGU
+        fun showOnlineMusicTab() {
+            musicPanelLastTab = MusicPanelTab.ONLINE
             content.removeAllViews()
 
             val page = LinearLayout(this).apply {
@@ -491,7 +502,7 @@ class MainActivity : AppCompatActivity() {
             }
             val listContainer = FrameLayout(this)
 
-            fun replaceMiguList(view: View) {
+            fun replaceOnlineList(view: View) {
                 listContainer.removeAllViews()
                 listContainer.addView(view, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -499,7 +510,7 @@ class MainActivity : AppCompatActivity() {
                 ))
             }
 
-            fun showMiguHint(message: String) {
+            fun showOnlineHint(message: String) {
                 val placeholder = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
@@ -511,7 +522,7 @@ class MainActivity : AppCompatActivity() {
                     setTextColor(Color.parseColor("#7B8494"))
                     gravity = Gravity.CENTER
                 })
-                replaceMiguList(placeholder)
+                replaceOnlineList(placeholder)
             }
 
             val searchRow = LinearLayout(this).apply {
@@ -520,8 +531,8 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, 0, 0, (8 * density).toInt())
             }
             val input = android.widget.EditText(this).apply {
-                hint = "搜索咪咕歌曲..."
-                setText(miguLastKeyword)
+                hint = "搜索歌曲宝 / 听蛙音乐..."
+                setText(onlineLastKeyword)
                 textSize = 14f
                 isSingleLine = true
                 setTextColor(Color.parseColor("#182033"))
@@ -537,38 +548,38 @@ class MainActivity : AppCompatActivity() {
                 marginEnd = (8 * density).toInt()
             })
 
-            fun renderMiguSongs(songs: List<com.yuno.tools.util.MusicSearchHelper.MiguSong>) {
+            fun renderOnlineSongs(songs: List<com.yuno.tools.util.MusicSearchHelper.OnlineSong>) {
                 val listArea = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                 }
                 if (songs.isEmpty()) {
-                    listArea.addView(makeMusicRow("未搜索到结果", "尝试其他关键词", "", {}))
+                    listArea.addView(makeMusicRow("未搜索到结果", "歌曲宝可能受安全验证影响；可尝试听蛙关键词", "", {}))
                 } else {
                     for (s in songs) {
                         val canPlay = !s.playUrl.isNullOrBlank()
-                        val desc = if (canPlay) s.artist else s.artist + " · 暂无公开播放源"
+                        val desc = s.source.label + " · " + if (canPlay) s.artist else s.artist + " · 暂无公开播放源"
                         listArea.addView(makeMusicRow(s.title, desc, if (canPlay) "播放" else "不可播") {
                             val playUrl = s.playUrl
                             if (playUrl.isNullOrBlank()) {
-                                Toast.makeText(this, "该歌曲暂未返回公开播放源", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, "该歌曲暂未返回公开播放源；歌曲宝受站点安全验证影响可能不可用", Toast.LENGTH_SHORT).show()
                             } else {
                                 val uri = com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(playUrl)
-                                playSelectedMusic("咪咕 · " + s.title, uri)
+                                playSelectedMusic(s.source.label + " · " + s.title, uri)
                                 subTitle.text = currentMusicTitle
                             }
                         })
                     }
                 }
-                replaceMiguList(ScrollView(this).apply { addView(listArea) })
+                replaceOnlineList(ScrollView(this).apply { addView(listArea) })
             }
 
             val searchButton = makeControlButton("搜索") { _ ->
                 val keyword = input.text.toString().trim()
-                miguLastKeyword = keyword
+                onlineLastKeyword = keyword
                 if (keyword.isBlank()) {
-                    miguCachedSongs = emptyList()
-                    showMiguHint("输入关键词搜索咪咕音乐库")
+                    onlineCachedSongs = emptyList()
+                    showOnlineHint("输入关键词搜索歌曲宝 / 听蛙音乐")
                     return@makeControlButton
                 }
 
@@ -577,12 +588,12 @@ class MainActivity : AppCompatActivity() {
                     setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                 }
                 loadingArea.addView(makeHintText("正在搜索：$keyword"))
-                replaceMiguList(ScrollView(this).apply { addView(loadingArea) })
+                replaceOnlineList(ScrollView(this).apply { addView(loadingArea) })
 
-                com.yuno.tools.util.MusicSearchHelper.searchMigu(keyword) { songs ->
+                com.yuno.tools.util.MusicSearchHelper.searchOnline(keyword) { songs ->
                     runOnUiThread {
-                        miguCachedSongs = songs
-                        renderMiguSongs(songs)
+                        onlineCachedSongs = songs
+                        renderOnlineSongs(songs)
                     }
                 }
             }
@@ -601,22 +612,22 @@ class MainActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
-            if (miguCachedSongs.isNotEmpty()) {
-                renderMiguSongs(miguCachedSongs)
-            } else if (miguLastKeyword.isNotBlank()) {
-                showMiguHint("上次搜索：$miguLastKeyword，点击搜索恢复结果")
+            if (onlineCachedSongs.isNotEmpty()) {
+                renderOnlineSongs(onlineCachedSongs)
+            } else if (onlineLastKeyword.isNotBlank()) {
+                showOnlineHint("上次搜索：$onlineLastKeyword，点击搜索恢复结果")
             } else {
-                showMiguHint("输入关键词搜索咪咕音乐库")
+                showOnlineHint("输入关键词搜索歌曲宝 / 听蛙音乐")
             }
         }
 
         tabRow.addView(makeMusicChip("本地音乐") { showLocalTab() })
         tabRow.addView(makeMusicChip("收藏") { showFavoriteTab() })
-        tabRow.addView(makeMusicChip("咪咕曲库") { showMiguTab() })
+        tabRow.addView(makeMusicChip("在线音乐") { showOnlineMusicTab() })
         when (musicPanelLastTab) {
             MusicPanelTab.LOCAL -> showLocalTab()
             MusicPanelTab.FAVORITE -> showFavoriteTab()
-            MusicPanelTab.MIGU -> showMiguTab()
+            MusicPanelTab.ONLINE -> showOnlineMusicTab()
         }
 
         val controlRow = LinearLayout(this).apply {
@@ -784,7 +795,60 @@ class MainActivity : AppCompatActivity() {
             val icon = findViewById<ImageView>(R.id.ivNavMusicDisc)
             icon.rotation = 0f
             updateMusicNavState(isPlaying = false)
+            updateMusicNotification(false)
         }
+    }
+
+
+
+    private fun ensureMusicNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                MUSIC_NOTIFICATION_CHANNEL_ID,
+                "音乐播放",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "YunoTools 当前播放音乐"
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun updateMusicNotification(isPlaying: Boolean) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!isPlaying) {
+            manager.cancel(MUSIC_NOTIFICATION_ID)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ensureMusicNotificationChannel()
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val title = currentMusicTitle.substringBefore(" · ", currentMusicTitle)
+        val text = currentMusicTitle.substringAfter(" · ", "正在播放")
+        val notification = NotificationCompat.Builder(this, MUSIC_NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_nav_music_disc)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setShowWhen(false)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        manager.notify(MUSIC_NOTIFICATION_ID, notification)
     }
 
     private fun chooseAvatar() {

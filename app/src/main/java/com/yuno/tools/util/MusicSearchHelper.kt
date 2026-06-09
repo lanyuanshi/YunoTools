@@ -1,85 +1,92 @@
 package com.yuno.tools.util
 
 import android.net.Uri
-import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
 object MusicSearchHelper {
-    data class MiguSong(
+    enum class OnlineSource(val label: String) {
+        GEQUBAO("歌曲宝"),
+        ITINGWA("听蛙")
+    }
+
+    data class OnlineSong(
         val title: String,
         val artist: String,
-        val contentId: String,
-        val copyrightId: String,
+        val source: OnlineSource,
+        val pageUrl: String,
         val playUrl: String?
     )
 
-    fun searchMigu(keyword: String, callback: (List<MiguSong>) -> Unit) {
+    fun searchOnline(keyword: String, callback: (List<OnlineSong>) -> Unit) {
         Thread {
-            val songs = searchMiguWeb(keyword).ifEmpty { searchMiguMeta(keyword) }
+            val songs = (searchGequbao(keyword) + searchITingwa(keyword))
+                .distinctBy { it.source.name + "|" + it.pageUrl + "|" + it.title }
             callback(songs)
         }.start()
     }
 
-    private fun searchMiguWeb(keyword: String): List<MiguSong> {
+    private fun searchGequbao(keyword: String): List<OnlineSong> {
         return try {
-            val urlStr = "https://m.music.migu.cn/migu/remoting/scr_search_tag?keyword=" +
-                    URLEncoder.encode(keyword, "UTF-8") +
-                    "&pgc=1&rows=20&type=2"
-            val raw = requestText(urlStr, "https://m.music.migu.cn/v4/search")
-            if (!raw.trimStart().startsWith("{")) return emptyList()
-            val jsonObj = JSONObject(raw)
-            val results = jsonObj.optJSONArray("musics") ?: return emptyList()
-            val songs = mutableListOf<MiguSong>()
-            for (i in 0 until results.length()) {
-                val item = results.optJSONObject(i) ?: continue
-                val name = item.optString("songName", "未知歌曲")
-                val artist = item.optString("singerName", "未知")
-                val contentId = item.optString("id", "")
-                val copyrightId = item.optString("copyrightId", "")
-                val mp3 = item.optString("mp3", "").trim()
-                songs.add(MiguSong(name, artist, contentId, copyrightId, mp3.takeIf { it.startsWith("http") }))
+            val urlStr = "https://www.gequbao.com/s/" + URLEncoder.encode(keyword, "UTF-8")
+            val raw = requestText(urlStr, "https://www.gequbao.com/", "text/html,application/xhtml+xml,*/*")
+            if (raw.contains("Just a moment", ignoreCase = true) || raw.contains("Cloudflare", ignoreCase = true)) {
+                return emptyList()
             }
-            songs
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun searchMiguMeta(keyword: String): List<MiguSong> {
-        return try {
-            val urlStr = "https://app.c.nf.migu.cn/MIGUM3.0/v1.0/content/search_all.do?text=" +
-                    URLEncoder.encode(keyword, "UTF-8") +
-                    "&pageNo=1&pageSize=20&searchSwitch=" + "%7B%22song%22%3A1%7D"
-            val raw = requestText(urlStr, "https://music.migu.cn/")
-            val jsonObj = JSONObject(raw)
-            val results = jsonObj.getJSONObject("songResultData").getJSONArray("result")
-            val songs = mutableListOf<MiguSong>()
-            for (i in 0 until results.length()) {
-                val item = results.getJSONObject(i)
-                val name = item.optString("name", "未知歌曲")
-                val artist = try {
-                    item.getJSONArray("singers").getJSONObject(0).optString("name", "未知")
-                } catch (e: Exception) {
-                    "未知"
+            Regex("href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .findAll(raw)
+                .mapNotNull { match ->
+                    val href = normalizeUrl(match.groupValues[1], "https://www.gequbao.com")
+                    val title = cleanHtml(match.groupValues[2])
+                    if (href.contains("gequbao.com") && title.isNotBlank() && title.length <= 80) {
+                        OnlineSong(title, "歌曲宝", OnlineSource.GEQUBAO, href, findAudioUrl(raw))
+                    } else null
                 }
-                val contentId = item.optString("contentId", "")
-                val copyrightId = item.optString("copyrightId", "")
-                songs.add(MiguSong(name, artist, contentId, copyrightId, null))
-            }
-            songs
-        } catch (e: Exception) {
+                .take(20)
+                .toList()
+        } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun requestText(urlStr: String, referer: String): String {
+    private fun searchITingwa(keyword: String): List<OnlineSong> {
+        return try {
+            val urlStr = "https://so.itingwa.com/?c=index&t=1&k=" + URLEncoder.encode(keyword, "UTF-8")
+            val raw = requestText(urlStr, "https://www.itingwa.com/", "text/html,application/xhtml+xml,*/*")
+            val ids = Regex("(?:https?://www\\.itingwa\\.com)?/listen/(\\d+)")
+                .findAll(raw)
+                .map { it.groupValues[1] }
+                .distinct()
+                .take(20)
+                .toList()
+            ids.mapNotNull { parseITingwaDetail(it) }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun parseITingwaDetail(id: String): OnlineSong? {
+        return try {
+            val pageUrl = "https://www.itingwa.com/listen/$id"
+            val raw = requestText(pageUrl, "https://www.itingwa.com/", "text/html,application/xhtml+xml,*/*")
+            val title = Regex("<h1[^>]*>(.*?)</h1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty().ifBlank { "听蛙音乐" }
+            val artist = Regex("id=[\"']music_singer[\"'][^>]*>.*?<a[^>]*>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty().ifBlank { "未知艺人" }
+            val playUrl = Regex("""init-data=["']([^"']+\.(?:mp3|m4a|aac|wav)(?:\?[^"']*)?)["']""", RegexOption.IGNORE_CASE)
+                .find(raw)?.groupValues?.get(1) ?: findAudioUrl(raw)
+            OnlineSong(title, artist, OnlineSource.ITINGWA, pageUrl, playUrl)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun requestText(urlStr: String, referer: String, accept: String): String {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
         conn.setRequestProperty("Referer", referer)
-        conn.setRequestProperty("Accept", "application/json,text/plain,*/*")
-        conn.setRequestProperty("X-Requested-With", "XMLHttpRequest")
+        conn.setRequestProperty("Accept", accept)
         conn.connectTimeout = 10000
         conn.readTimeout = 10000
         return try {
@@ -87,6 +94,32 @@ object MusicSearchHelper {
         } finally {
             conn.disconnect()
         }
+    }
+
+    private fun findAudioUrl(raw: String): String? {
+        return Regex("https?://[^\\s\"'<>]+\\.(?:mp3|m4a|aac|wav)(?:\\?[^\\s\"'<>]*)?", RegexOption.IGNORE_CASE)
+            .find(raw)
+            ?.value
+    }
+
+    private fun normalizeUrl(href: String, base: String): String {
+        return when {
+            href.startsWith("http://") || href.startsWith("https://") -> href
+            href.startsWith("//") -> "https:$href"
+            href.startsWith("/") -> base + href
+            else -> "$base/$href"
+        }
+    }
+
+    private fun cleanHtml(html: String): String {
+        return html
+            .replace(Regex("<[^>]+>"), "")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     fun uriFromPublicUrl(url: String): Uri = Uri.parse(url)

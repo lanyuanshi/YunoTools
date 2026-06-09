@@ -654,7 +654,6 @@
                     android:clipChildren="false"
                     android:focusable="true"
                     android:background="@android:color/transparent"
-                    android:foreground="?attr/selectableItemBackgroundBorderless"
                     android:gravity="center"
                     android:orientation="vertical">
 
@@ -686,7 +685,6 @@
                     android:clipChildren="false"
                     android:focusable="true"
                     android:background="@android:color/transparent"
-                    android:foreground="?attr/selectableItemBackgroundBorderless"
                     android:gravity="center"
                     android:orientation="vertical">
 

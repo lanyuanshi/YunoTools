@@ -26,12 +26,17 @@
         android:textSize="18sp"
         android:textStyle="bold" />
 
-    <!-- 内容区域 -->
+    <!-- 内容区域：首页与个人资料作为同级页面承载，个人资料不再单独跳 Activity -->
+    <FrameLayout
+        android:id="@+id/mainPageHost"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
     <androidx.core.widget.NestedScrollView
         android:id="@+id/scrollView"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="match_parent"
         android:fillViewport="true"
         android:overScrollMode="never">
 
@@ -599,6 +604,13 @@
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
+
+        <include
+            android:id="@+id/profilePage"
+            layout="@layout/activity_profile"
+            android:visibility="gone" />
+    </FrameLayout>
+
     <!-- 底部导航：截图同款白色大圆角胶囊 -->
     <FrameLayout
         android:id="@+id/bottomNavContainer"
@@ -626,6 +638,9 @@
             <!-- 首页：选中态 -->
             <LinearLayout
                 android:id="@+id/navChat"
+                android:foreground="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
                 android:layout_width="0dp"
                 android:layout_height="54dp"
                 android:layout_weight="1"
@@ -634,12 +649,14 @@
                 android:gravity="center"
                 android:orientation="vertical">
                 <ImageView
+                    android:id="@+id/icNavHome"
                     android:layout_width="23dp"
                     android:layout_height="23dp"
                     android:src="@drawable/ic_home"
                     app:tint="#1E88E5" />
 
                 <TextView
+                    android:id="@+id/tvNavHome"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="3dp"
@@ -652,6 +669,9 @@
             <!-- 个人资料 -->
             <LinearLayout
                 android:id="@+id/navProfile"
+                android:foreground="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
                 android:layout_width="0dp"
                 android:layout_height="54dp"
                 android:layout_weight="1"
@@ -660,12 +680,14 @@
                 android:orientation="vertical">
 
                 <ImageView
+                    android:id="@+id/icNavProfile"
                     android:layout_width="23dp"
                     android:layout_height="23dp"
                     android:src="@drawable/ic_profile"
                     app:tint="#A0A7B3" />
 
                 <TextView
+                    android:id="@+id/tvNavProfile"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="3dp"

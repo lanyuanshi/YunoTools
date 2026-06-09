@@ -35,6 +35,15 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
@@ -67,10 +76,22 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val MUSIC_NOTIFICATION_CHANNEL_ID = "yuno_music_playback"
         private const val MUSIC_NOTIFICATION_ID = 71072
+        private const val MUSIC_PREFS = "yuno_music_records"
+        private const val MUSIC_FAVORITES_KEY = "online_favorites"
+        private const val MUSIC_DOWNLOADS_KEY = "online_downloads"
     }
     private enum class MainTab { HOME, PROFILE }
     private enum class MusicPanelTab { LOCAL, FAVORITE, ONLINE }
     private data class LocalSong(val title: String, val artist: String, val uri: Uri, val durationMs: Long)
+    private data class OnlineMusicRecord(
+        val title: String,
+        val artist: String,
+        val sourceLabel: String,
+        val pageUrl: String,
+        val playUrl: String,
+        val localPath: String = "",
+        val savedAt: Long = System.currentTimeMillis()
+    )
 
     private var currentTab = MainTab.HOME
     private var avatarPlayer: ExoPlayer? = null
@@ -151,6 +172,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardChooseAvatar).setOnClickListener { chooseAvatar() }
         findViewById<MaterialCardView>(R.id.cardParseHistory).setOnClickListener {
             startActivity(Intent(this, ParseHistoryActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardMusicDownloads).setOnClickListener {
+            showMusicDownloadsDialog()
         }
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -441,7 +465,8 @@ class MainActivity : AppCompatActivity() {
         panel.addView(tabScroll)
 
         val content = FrameLayout(this)
-        panel.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (360 * density).toInt()).apply {
+        val contentHeight = (resources.displayMetrics.heightPixels * 0.52f).toInt().coerceAtLeast((420 * density).toInt())
+        panel.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, contentHeight).apply {
             topMargin = (12 * density).toInt()
         })
 
@@ -483,13 +508,30 @@ class MainActivity : AppCompatActivity() {
         fun showFavoriteTab() {
             musicPanelLastTab = MusicPanelTab.FAVORITE
             content.removeAllViews()
-            val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            list.addView(makeMusicRow("收藏", "当前先预留收藏分类，后续可把选中的本地歌曲加入这里", "播放当前") {
-                playLocalMusicFromPanel()
-                subTitle.text = currentMusicTitle
-            })
-            list.addView(makeHintText("收藏分类已接入面板结构；当前会播放你已选择的本地歌曲。"))
-            content.addView(ScrollView(this).apply { addView(list) })
+            val list = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+            }
+            val favorites = loadMusicRecords(MUSIC_FAVORITES_KEY)
+            if (favorites.isEmpty()) {
+                list.addView(makeHintText("暂无在线歌曲收藏。搜索歌曲狗 / 歌曲海后，点击“收藏”即可保存到这里。"))
+            } else {
+                favorites.forEach { record ->
+                    list.addView(makeOnlineRecordRow(
+                        record,
+                        showDownload = true,
+                        onChanged = { showFavoriteTab() },
+                        playAction = {
+                            playOnlineRecord(record)
+                            subTitle.text = currentMusicTitle
+                        }
+                    ))
+                }
+            }
+            content.addView(ScrollView(this).apply {
+                isFillViewport = true
+                addView(list)
+            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
 
         fun showOnlineMusicTab() {
@@ -531,7 +573,7 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, 0, 0, (8 * density).toInt())
             }
             val input = android.widget.EditText(this).apply {
-                hint = "搜索歌曲宝 / 听蛙音乐..."
+                hint = "搜索歌曲狗 / 歌曲海音乐..."
                 setText(onlineLastKeyword)
                 textSize = 14f
                 isSingleLine = true
@@ -554,24 +596,25 @@ class MainActivity : AppCompatActivity() {
                     setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                 }
                 if (songs.isEmpty()) {
-                    listArea.addView(makeMusicRow("未搜索到结果", "歌曲宝可能受安全验证影响；可尝试听蛙关键词", "", {}))
+                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试更换关键词；歌曲海部分结果可能暂无公开播放源", "", {}))
                 } else {
                     for (s in songs) {
-                        val canPlay = !s.playUrl.isNullOrBlank()
-                        val desc = s.source.label + " · " + if (canPlay) s.artist else s.artist + " · 暂无公开播放源"
-                        listArea.addView(makeMusicRow(s.title, desc, if (canPlay) "播放" else "不可播") {
+                        listArea.addView(makeOnlineSongRow(s, {
                             val playUrl = s.playUrl
                             if (playUrl.isNullOrBlank()) {
-                                Toast.makeText(this, "该歌曲暂未返回公开播放源；歌曲宝受站点安全验证影响可能不可用", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, "该歌曲暂无公开播放源，不能播放或下载", Toast.LENGTH_SHORT).show()
                             } else {
                                 val uri = com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(playUrl)
                                 playSelectedMusic(s.source.label + " · " + s.title, uri)
                                 subTitle.text = currentMusicTitle
                             }
-                        })
+                        }, onChanged = { renderOnlineSongs(songs) }))
                     }
                 }
-                replaceOnlineList(ScrollView(this).apply { addView(listArea) })
+                replaceOnlineList(ScrollView(this).apply {
+                    isFillViewport = true
+                    addView(listArea)
+                })
             }
 
             val searchButton = makeControlButton("搜索") { _ ->
@@ -579,7 +622,7 @@ class MainActivity : AppCompatActivity() {
                 onlineLastKeyword = keyword
                 if (keyword.isBlank()) {
                     onlineCachedSongs = emptyList()
-                    showOnlineHint("输入关键词搜索歌曲宝 / 听蛙音乐")
+                    showOnlineHint("输入关键词搜索歌曲狗 / 歌曲海音乐")
                     return@makeControlButton
                 }
 
@@ -617,7 +660,7 @@ class MainActivity : AppCompatActivity() {
             } else if (onlineLastKeyword.isNotBlank()) {
                 showOnlineHint("上次搜索：$onlineLastKeyword，点击搜索恢复结果")
             } else {
-                showOnlineHint("输入关键词搜索歌曲宝 / 听蛙音乐")
+                showOnlineHint("输入关键词搜索歌曲狗 / 歌曲海音乐")
             }
         }
 
@@ -714,6 +757,78 @@ class MainActivity : AppCompatActivity() {
         return row
     }
 
+    private fun makeOnlineSongRow(song: com.yuno.tools.util.MusicSearchHelper.OnlineSong, playAction: () -> Unit, onChanged: (() -> Unit)? = null): View {
+        val record = OnlineMusicRecord(
+            title = song.title,
+            artist = song.artist,
+            sourceLabel = song.source.label,
+            pageUrl = song.pageUrl,
+            playUrl = song.playUrl.orEmpty()
+        )
+        val canPlay = record.playUrl.isNotBlank()
+        val desc = record.sourceLabel + " · " + record.artist + if (canPlay) "" else " · 暂无公开播放源"
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += (if (canPlay) "播放" else "不可播") to playAction
+        actions += (if (isMusicFavorite(record)) "已收藏" else "收藏") to {
+            toggleMusicFavorite(record)
+            Toast.makeText(this, if (isMusicFavorite(record)) "已收藏：${record.title}" else "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
+            onChanged?.invoke()
+        }
+        actions += "下载" to { downloadOnlineSong(record) }
+        return makeMusicActionRow(record.title, desc, actions)
+    }
+
+    private fun makeOnlineRecordRow(record: OnlineMusicRecord, showDownload: Boolean, onChanged: () -> Unit, playAction: () -> Unit): View {
+        val pathText = if (record.localPath.isNotBlank()) " · ${record.localPath}" else ""
+        val desc = record.sourceLabel + " · " + record.artist + pathText
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += "播放" to playAction
+        actions += "取消" to {
+            removeMusicRecord(MUSIC_FAVORITES_KEY, record)
+            Toast.makeText(this, "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
+            onChanged()
+        }
+        if (showDownload) actions += "下载" to { downloadOnlineSong(record) }
+        return makeMusicActionRow(record.title, desc, actions)
+    }
+
+    private fun makeMusicActionRow(title: String, desc: String, actions: List<Pair<String, () -> Unit>>): View {
+        val density = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((14 * density).toInt(), (12 * density).toInt(), (12 * density).toInt(), (12 * density).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20f * density
+                setColor(Color.argb(180, 255, 255, 255))
+            }
+        }
+        val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(TextView(this).apply {
+            text = title
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#182033"))
+        })
+        texts.addView(TextView(this).apply {
+            text = desc
+            textSize = 12f
+            setTextColor(Color.parseColor("#7B8494"))
+        })
+        row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        actions.forEach { (label, action) -> buttons.addView(makeControlButton(label) { action() }) }
+        row.addView(buttons)
+        row.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = (10 * density).toInt()
+        }
+        return row
+    }
+
     private fun makeHintText(text: String): TextView {
         val density = resources.displayMetrics.density
         return TextView(this).apply {
@@ -744,6 +859,130 @@ class MainActivity : AppCompatActivity() {
             }
             setOnClickListener { action(it) }
         }
+    }
+
+    private fun musicPrefs() = getSharedPreferences(MUSIC_PREFS, Context.MODE_PRIVATE)
+
+    private fun loadMusicRecords(key: String): MutableList<OnlineMusicRecord> {
+        val raw = musicPrefs().getString(key, "[]") ?: "[]"
+        return runCatching {
+            val arr = JSONArray(raw)
+            MutableList(arr.length()) { i ->
+                val obj = arr.getJSONObject(i)
+                OnlineMusicRecord(
+                    title = obj.optString("title"),
+                    artist = obj.optString("artist"),
+                    sourceLabel = obj.optString("sourceLabel"),
+                    pageUrl = obj.optString("pageUrl"),
+                    playUrl = obj.optString("playUrl"),
+                    localPath = obj.optString("localPath"),
+                    savedAt = obj.optLong("savedAt", System.currentTimeMillis())
+                )
+            }.filter { it.title.isNotBlank() }.toMutableList()
+        }.getOrElse { mutableListOf() }
+    }
+
+    private fun saveMusicRecords(key: String, records: List<OnlineMusicRecord>) {
+        val arr = JSONArray()
+        records.forEach { r ->
+            arr.put(JSONObject().apply {
+                put("title", r.title)
+                put("artist", r.artist)
+                put("sourceLabel", r.sourceLabel)
+                put("pageUrl", r.pageUrl)
+                put("playUrl", r.playUrl)
+                put("localPath", r.localPath)
+                put("savedAt", r.savedAt)
+            })
+        }
+        musicPrefs().edit().putString(key, arr.toString()).apply()
+    }
+
+    private fun sameMusicRecord(a: OnlineMusicRecord, b: OnlineMusicRecord): Boolean {
+        return a.pageUrl == b.pageUrl || (a.title == b.title && a.artist == b.artist && a.sourceLabel == b.sourceLabel)
+    }
+
+    private fun isMusicFavorite(record: OnlineMusicRecord): Boolean = loadMusicRecords(MUSIC_FAVORITES_KEY).any { sameMusicRecord(it, record) }
+
+    private fun toggleMusicFavorite(record: OnlineMusicRecord) {
+        val records = loadMusicRecords(MUSIC_FAVORITES_KEY)
+        val existed = records.any { sameMusicRecord(it, record) }
+        val updated = if (existed) records.filterNot { sameMusicRecord(it, record) } else listOf(record.copy(savedAt = System.currentTimeMillis())) + records
+        saveMusicRecords(MUSIC_FAVORITES_KEY, updated)
+    }
+
+    private fun removeMusicRecord(key: String, record: OnlineMusicRecord) {
+        saveMusicRecords(key, loadMusicRecords(key).filterNot { sameMusicRecord(it, record) })
+    }
+
+    private fun playOnlineRecord(record: OnlineMusicRecord) {
+        val target = if (record.localPath.isNotBlank()) Uri.fromFile(File(record.localPath)) else com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(record.playUrl)
+        playSelectedMusic(record.sourceLabel + " · " + record.title, target)
+    }
+
+    private fun downloadOnlineSong(record: OnlineMusicRecord) {
+        if (record.playUrl.isBlank()) {
+            Toast.makeText(this, "该歌曲暂无公开播放源，不能下载", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(this, "开始下载：${record.title}", Toast.LENGTH_SHORT).show()
+        Thread {
+            val result = runCatching {
+                val dir = File(getExternalFilesDir(null), "Music").apply { mkdirs() }
+                val base = safeFileName(record.title.ifBlank { "online_music" })
+                val ext = record.playUrl.substringBefore('?').substringAfterLast('.', "mp3").lowercase().takeIf { it.length in 2..5 } ?: "mp3"
+                var out = File(dir, "$base.$ext")
+                var index = 1
+                while (out.exists()) {
+                    out = File(dir, "$base-$index.$ext")
+                    index++
+                }
+                val conn = (URL(record.playUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15000
+                    readTimeout = 30000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Mozilla/5.0")
+                }
+                try {
+                    val code = conn.responseCode
+                    if (code !in 200..299) error("HTTP $code")
+                    conn.inputStream.use { input -> FileOutputStream(out).use { output -> input.copyTo(output) } }
+                } finally {
+                    conn.disconnect()
+                }
+                if (!out.exists() || out.length() <= 0L) error("文件为空")
+                val saved = record.copy(localPath = out.absolutePath, savedAt = System.currentTimeMillis())
+                val downloads = loadMusicRecords(MUSIC_DOWNLOADS_KEY).filterNot { sameMusicRecord(it, saved) }.toMutableList()
+                downloads.add(0, saved)
+                saveMusicRecords(MUSIC_DOWNLOADS_KEY, downloads)
+                out.absolutePath
+            }
+            runOnUiThread {
+                result.onSuccess { Toast.makeText(this, "下载完成：$it", Toast.LENGTH_LONG).show() }
+                    .onFailure { Toast.makeText(this, "下载失败：${it.message ?: "网络或文件异常"}", Toast.LENGTH_LONG).show() }
+            }
+        }.start()
+    }
+
+    private fun safeFileName(name: String): String {
+        return name.replace(Regex("[\\\\/:*?\"<>|\\r\\n]+"), "_").trim().take(60).ifBlank { "online_music" }
+    }
+
+    private fun showMusicDownloadsDialog() {
+        val downloads = loadMusicRecords(MUSIC_DOWNLOADS_KEY)
+        val message = if (downloads.isEmpty()) {
+            "暂无下载歌曲。请在音乐面板的在线音乐结果中点击“下载”。\n\n保存目录：${File(getExternalFilesDir(null), "Music").absolutePath}"
+        } else {
+            downloads.joinToString("\n\n") { r ->
+                val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(r.savedAt))
+                "${r.title}\n${r.sourceLabel} · ${r.artist}\n$time\n${r.localPath}"
+            }
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("下载内容")
+            .setMessage(message)
+            .setPositiveButton("知道了", null)
+            .show()
     }
 
     private fun updateMusicNavState(isPlaying: Boolean) {

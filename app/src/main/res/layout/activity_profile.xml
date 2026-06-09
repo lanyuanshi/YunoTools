@@ -122,6 +122,17 @@
             app:cardCornerRadius="18dp"
             app:cardElevation="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp"><FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_history" app:tint="#007AFF" /></FrameLayout><TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="解析历史" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" /><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8E8E93" android:textSize="14sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
 
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardMusicDownloads"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_marginTop="12dp"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp"><FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_download" app:tint="#007AFF" /></FrameLayout><TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="下载内容" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" /><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8E8E93" android:textSize="14sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardSettings"
             android:layout_width="match_parent"

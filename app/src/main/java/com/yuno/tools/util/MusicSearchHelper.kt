@@ -7,8 +7,8 @@ import java.net.URLEncoder
 
 object MusicSearchHelper {
     enum class OnlineSource(val label: String) {
-        GEQUBAO("歌曲宝"),
-        ITINGWA("听蛙")
+        GEQUGOU("歌曲狗"),
+        GEQUHAI("歌曲海")
     }
 
     data class OnlineSong(
@@ -21,62 +21,74 @@ object MusicSearchHelper {
 
     fun searchOnline(keyword: String, callback: (List<OnlineSong>) -> Unit) {
         Thread {
-            val songs = (searchGequbao(keyword) + searchITingwa(keyword))
+            val songs = (searchGequgou(keyword) + searchGequhai(keyword))
                 .distinctBy { it.source.name + "|" + it.pageUrl + "|" + it.title }
             callback(songs)
         }.start()
     }
 
-    private fun searchGequbao(keyword: String): List<OnlineSong> {
+    private fun searchGequgou(keyword: String): List<OnlineSong> {
         return try {
-            val urlStr = "https://www.gequbao.com/s/" + URLEncoder.encode(keyword, "UTF-8")
-            val raw = requestText(urlStr, "https://www.gequbao.com/", "text/html,application/xhtml+xml,*/*")
-            if (raw.contains("Just a moment", ignoreCase = true) || raw.contains("Cloudflare", ignoreCase = true)) {
-                return emptyList()
-            }
-            Regex("href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            val encoded = URLEncoder.encode(keyword.trim(), "UTF-8")
+            val raw = requestText("https://www.gequgou.com/search?ac=$encoded", "https://www.gequgou.com/", "text/html,application/xhtml+xml,*/*")
+            Regex("""href=["'](/music/[^"']+?\.html)["'][^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .findAll(raw)
                 .mapNotNull { match ->
-                    val href = normalizeUrl(match.groupValues[1], "https://www.gequbao.com")
-                    val title = cleanHtml(match.groupValues[2])
-                    if (href.contains("gequbao.com") && title.isNotBlank() && title.length <= 80) {
-                        OnlineSong(title, "歌曲宝", OnlineSource.GEQUBAO, href, findAudioUrl(raw))
-                    } else null
+                    val pageUrl = normalizeUrl(match.groupValues[1], "https://www.gequgou.com")
+                    val fallbackTitle = cleanTitle(cleanHtml(match.groupValues[2]))
+                    parseGequgouDetail(pageUrl, fallbackTitle)
                 }
-                .take(20)
+                .take(24)
                 .toList()
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun searchITingwa(keyword: String): List<OnlineSong> {
+    private fun parseGequgouDetail(pageUrl: String, fallbackTitle: String): OnlineSong? {
         return try {
-            val urlStr = "https://so.itingwa.com/?c=index&t=1&k=" + URLEncoder.encode(keyword, "UTF-8")
-            val raw = requestText(urlStr, "https://www.itingwa.com/", "text/html,application/xhtml+xml,*/*")
-            val ids = Regex("(?:https?://www\\.itingwa\\.com)?/listen/(\\d+)")
+            val raw = requestText(pageUrl, "https://www.gequgou.com/", "text/html,application/xhtml+xml,*/*")
+            val h1 = Regex("""<h1[^>]*>(.*?)</h1>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty()
+            val htmlTitle = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty()
+            val fullTitle = cleanTitle(h1.ifBlank { fallbackTitle }.ifBlank { htmlTitle }.ifBlank { "歌曲狗音乐" })
+            val (title, artist) = splitTitleArtist(fullTitle)
+            OnlineSong(title, artist, OnlineSource.GEQUGOU, pageUrl, findAudioUrl(raw))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun searchGequhai(keyword: String): List<OnlineSong> {
+        return try {
+            val encoded = URLEncoder.encode(keyword.trim(), "UTF-8")
+            val raw = requestText("https://www.gequhai.com/s/$encoded", "https://www.gequhai.com/", "text/html,application/xhtml+xml,*/*")
+            Regex("""href=["'](/play/\d+)["'][^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .findAll(raw)
-                .map { it.groupValues[1] }
-                .distinct()
-                .take(20)
+                .mapNotNull { match ->
+                    val pageUrl = normalizeUrl(match.groupValues[1], "https://www.gequhai.com")
+                    val fallbackTitle = cleanTitle(cleanHtml(match.groupValues[2]))
+                    parseGequhaiDetail(pageUrl, fallbackTitle)
+                }
+                .take(24)
                 .toList()
-            ids.mapNotNull { parseITingwaDetail(it) }
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun parseITingwaDetail(id: String): OnlineSong? {
+    private fun parseGequhaiDetail(pageUrl: String, fallbackTitle: String): OnlineSong? {
         return try {
-            val pageUrl = "https://www.itingwa.com/listen/$id"
-            val raw = requestText(pageUrl, "https://www.itingwa.com/", "text/html,application/xhtml+xml,*/*")
-            val title = Regex("<h1[^>]*>(.*?)</h1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty().ifBlank { "听蛙音乐" }
-            val artist = Regex("id=[\"']music_singer[\"'][^>]*>.*?<a[^>]*>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty().ifBlank { "未知艺人" }
-            val playUrl = Regex("""init-data=["']([^"']+\.(?:mp3|m4a|aac|wav)(?:\?[^"']*)?)["']""", RegexOption.IGNORE_CASE)
-                .find(raw)?.groupValues?.get(1) ?: findAudioUrl(raw)
-            OnlineSong(title, artist, OnlineSource.ITINGWA, pageUrl, playUrl)
+            val raw = requestText(pageUrl, "https://www.gequhai.com/", "text/html,application/xhtml+xml,*/*")
+            val title = extractJsString(raw, "mp3_title").ifBlank {
+                Regex("""<h1[^>]*>(.*?)</h1>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                    .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty()
+            }.ifBlank { fallbackTitle }.ifBlank { "歌曲海音乐" }
+            val artist = extractJsString(raw, "mp3_author").ifBlank { "未知艺人" }
+            val jsUrl = extractJsString(raw, "mp3_url").ifBlank { extractJsString(raw, "mp3_url_a") }
+            val playUrl = jsUrl.takeIf { isPublicAudioUrl(it) } ?: findAudioUrl(raw)
+            OnlineSong(cleanTitle(title), cleanTitle(artist), OnlineSource.GEQUHAI, pageUrl, playUrl)
         } catch (_: Exception) {
             null
         }
@@ -97,9 +109,21 @@ object MusicSearchHelper {
     }
 
     private fun findAudioUrl(raw: String): String? {
-        return Regex("https?://[^\\s\"'<>]+\\.(?:mp3|m4a|aac|wav)(?:\\?[^\\s\"'<>]*)?", RegexOption.IGNORE_CASE)
-            .find(raw)
-            ?.value
+        return Regex("""https?://[^\s"'<>]+\.(?:mp3|m4a|aac|wav)(?:\?[^\s"'<>]*)?""", RegexOption.IGNORE_CASE)
+            .findAll(raw)
+            .map { decodeHtmlEntities(it.value) }
+            .firstOrNull { isPublicAudioUrl(it) }
+    }
+
+    private fun isPublicAudioUrl(url: String): Boolean {
+        val cleaned = decodeHtmlEntities(url)
+        return cleaned.startsWith("http", ignoreCase = true) &&
+            Regex("""\.(mp3|m4a|aac|wav)(\?|$)""", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
+    }
+
+    private fun extractJsString(raw: String, key: String): String {
+        val pattern = Regex("""(?:window\.)?$key\s*=\s*['"]([^'"]*)['"]""", RegexOption.IGNORE_CASE)
+        return pattern.find(raw)?.groupValues?.get(1)?.let(::decodeHtmlEntities).orEmpty().trim()
     }
 
     private fun normalizeUrl(href: String, base: String): String {
@@ -111,16 +135,50 @@ object MusicSearchHelper {
         }
     }
 
+    private fun splitTitleArtist(text: String): Pair<String, String> {
+        val normalized = cleanTitle(text)
+        val seps = listOf(" - ", " — ", " – ", "_", "--")
+        for (sep in seps) {
+            val idx = normalized.indexOf(sep)
+            if (idx > 0 && idx < normalized.length - sep.length) {
+                val left = normalized.substring(0, idx).trim()
+                val right = normalized.substring(idx + sep.length).trim()
+                if (left.isNotBlank() && right.isNotBlank()) return left to right
+            }
+        }
+        return normalized to "未知艺人"
+    }
+
+    private fun cleanTitle(text: String): String {
+        return decodeHtmlEntities(text)
+            .replace("歌曲狗", "")
+            .replace("歌曲海", "")
+            .replace("在线试听", "")
+            .replace("免费下载", "")
+            .replace("MP3", "", ignoreCase = true)
+            .replace(Regex("\\s+"), " ")
+            .trim(' ', '-', '_', '|', '·')
+            .ifBlank { "未知歌曲" }
+    }
+
     private fun cleanHtml(html: String): String {
-        return html
-            .replace(Regex("<[^>]+>"), "")
+        return decodeHtmlEntities(
+            html.replace(Regex("<[^>]+>"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        )
+    }
+
+    private fun decodeHtmlEntities(text: String): String {
+        return text
             .replace("&nbsp;", " ")
             .replace("&amp;", "&")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
-            .replace(Regex("\\s+"), " ")
+            .replace("&#34;", "\"")
+            .replace("&#39;", "'")
             .trim()
     }
 
-    fun uriFromPublicUrl(url: String): Uri = Uri.parse(url)
+    fun uriFromPublicUrl(url: String): Uri = Uri.parse(decodeHtmlEntities(url))
 }

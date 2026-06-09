@@ -2,19 +2,29 @@ package com.yuno.tools
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.app.Dialog
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.OvershootInterpolator
 import android.view.animation.LinearInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -49,6 +59,10 @@ class MainActivity : AppCompatActivity() {
     private var avatarPlayer: ExoPlayer? = null
     private var musicPlayer: ExoPlayer? = null
     private var musicSpinAnimator: ObjectAnimator? = null
+    private var musicDialog: Dialog? = null
+    private var musicShuffleEnabled = false
+    private var musicRepeatMode = Player.REPEAT_MODE_ONE
+    private var currentMusicTitle = "本地音乐 · 用户歌曲"
 
     private val pickAvatar = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@registerForActivityResult
@@ -127,6 +141,10 @@ class MainActivity : AppCompatActivity() {
         installPressScale(navProfile)
         navHome.setOnClickListener { showHome(animate = true) }
         navMusic.setOnClickListener { toggleNavMusic() }
+        navMusic.setOnLongClickListener {
+            showMusicPanel()
+            true
+        }
         navProfile.setOnClickListener { showProfile() }
         updateMusicNavState(isPlaying = false)
     }
@@ -222,9 +240,21 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun toggleNavMusic() {
-        val player = musicPlayer ?: ExoPlayer.Builder(this).build().also { created ->
+        val player = ensureMusicPlayer()
+        if (player.isPlaying) {
+            player.pause()
+        } else {
+            player.playWhenReady = true
+            player.play()
+        }
+        updateMusicNavState(player.isPlaying)
+    }
+
+    private fun ensureMusicPlayer(): ExoPlayer {
+        return musicPlayer ?: ExoPlayer.Builder(this).build().also { created ->
             musicPlayer = created
-            created.repeatMode = Player.REPEAT_MODE_ONE
+            created.repeatMode = musicRepeatMode
+            created.shuffleModeEnabled = musicShuffleEnabled
             val songUri = Uri.parse("android.resource://$packageName/${R.raw.nav_song}")
             created.setMediaItem(MediaItem.fromUri(songUri))
             created.addListener(object : Player.Listener {
@@ -234,13 +264,224 @@ class MainActivity : AppCompatActivity() {
             })
             created.prepare()
         }
-        if (player.isPlaying) {
-            player.pause()
-        } else {
-            player.playWhenReady = true
-            player.play()
+    }
+
+    private fun playLocalMusicFromPanel() {
+        val player = ensureMusicPlayer()
+        currentMusicTitle = "本地音乐 · 用户歌曲"
+        player.repeatMode = musicRepeatMode
+        player.shuffleModeEnabled = musicShuffleEnabled
+        player.playWhenReady = true
+        player.play()
+        updateMusicNavState(true)
+    }
+
+    private fun showMusicPanel() {
+        musicDialog?.dismiss()
+        val dialog = Dialog(this)
+        musicDialog = dialog
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val density = resources.displayMetrics.density
+        val root = FrameLayout(this).apply {
+            setPadding((18 * density).toInt(), (28 * density).toInt(), (18 * density).toInt(), (28 * density).toInt())
+            setBackgroundColor(Color.argb(88, 12, 18, 28))
         }
-        updateMusicNavState(player.isPlaying)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((18 * density).toInt(), (16 * density).toInt(), (18 * density).toInt(), (16 * density).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 28f * density
+                setColor(Color.argb(224, 246, 250, 255))
+                setStroke((1.2f * density).toInt(), Color.argb(140, 255, 255, 255))
+            }
+        }
+        root.addView(panel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+
+        val title = TextView(this).apply {
+            text = "音乐播放器"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#182033"))
+        }
+        val subTitle = TextView(this).apply {
+            text = currentMusicTitle
+            textSize = 12f
+            setTextColor(Color.parseColor("#6F7A8C"))
+            setPadding(0, (2 * density).toInt(), 0, (10 * density).toInt())
+        }
+        panel.addView(title)
+        panel.addView(subTitle)
+
+        val tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val tabScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tabRow)
+        }
+        panel.addView(tabScroll)
+
+        val content = FrameLayout(this)
+        panel.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (360 * density).toInt()).apply {
+            topMargin = (12 * density).toInt()
+        })
+
+        fun showLocalTab() {
+            content.removeAllViews()
+            val list = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+            }
+            list.addView(makeMusicRow("本地音乐", "用户发送的歌曲 · 已内置到 APP", "播放") {
+                playLocalMusicFromPanel()
+                subTitle.text = currentMusicTitle
+            })
+            list.addView(makeHintText("这首歌来自你上次发来的 MP3，安装后不需要外部文件也能播放。"))
+            content.addView(ScrollView(this).apply { addView(list) })
+        }
+
+        fun showFavoriteTab() {
+            content.removeAllViews()
+            val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            list.addView(makeMusicRow("收藏", "当前先预留收藏分类，后续可把咪咕/本地歌曲加入这里", "播放本地") {
+                playLocalMusicFromPanel()
+                subTitle.text = currentMusicTitle
+            })
+            list.addView(makeHintText("收藏分类已接入面板结构；当前可先播放本地歌曲。"))
+            content.addView(ScrollView(this).apply { addView(list) })
+        }
+
+        fun showMiguTab() {
+            content.removeAllViews()
+            val webView = WebView(this).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.cacheMode = WebSettings.LOAD_DEFAULT
+                webViewClient = WebViewClient()
+                loadUrl("https://music.migu.cn/v5/#/musicLibrary")
+            }
+            content.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        }
+
+        tabRow.addView(makeMusicChip("本地音乐") { showLocalTab() })
+        tabRow.addView(makeMusicChip("收藏") { showFavoriteTab() })
+        tabRow.addView(makeMusicChip("咪咕曲库") { showMiguTab() })
+        showLocalTab()
+
+        val controlRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, (12 * density).toInt(), 0, 0)
+        }
+        panel.addView(controlRow)
+        val randomBtn = makeControlButton(if (musicShuffleEnabled) "随机：开" else "随机：关") {
+            musicShuffleEnabled = !musicShuffleEnabled
+            musicPlayer?.shuffleModeEnabled = musicShuffleEnabled
+            (it as Button).text = if (musicShuffleEnabled) "随机：开" else "随机：关"
+        }
+        val loopBtn = makeControlButton(if (musicRepeatMode == Player.REPEAT_MODE_ONE) "循环：开" else "循环：关") {
+            musicRepeatMode = if (musicRepeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
+            musicPlayer?.repeatMode = musicRepeatMode
+            (it as Button).text = if (musicRepeatMode == Player.REPEAT_MODE_ONE) "循环：开" else "循环：关"
+        }
+        val playBtn = makeControlButton(if (musicPlayer?.isPlaying == true) "暂停" else "播放") {
+            toggleNavMusic()
+            (it as Button).text = if (musicPlayer?.isPlaying == true) "暂停" else "播放"
+            subTitle.text = currentMusicTitle
+        }
+        controlRow.addView(randomBtn)
+        controlRow.addView(loopBtn)
+        controlRow.addView(playBtn)
+
+        dialog.setContentView(root)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.show()
+        dialog.window?.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
+    }
+
+    private fun makeMusicChip(text: String, action: () -> Unit): TextView {
+        val density = resources.displayMetrics.density
+        return TextView(this).apply {
+            this.text = text
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#1E88E5"))
+            gravity = Gravity.CENTER
+            setPadding((14 * density).toInt(), (8 * density).toInt(), (14 * density).toInt(), (8 * density).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 18f * density
+                setColor(Color.argb(42, 30, 136, 229))
+            }
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp.marginEnd = (8 * density).toInt()
+            layoutParams = lp
+            setOnClickListener { action() }
+        }
+    }
+
+    private fun makeMusicRow(title: String, desc: String, buttonText: String, action: () -> Unit): View {
+        val density = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((14 * density).toInt(), (12 * density).toInt(), (12 * density).toInt(), (12 * density).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20f * density
+                setColor(Color.argb(180, 255, 255, 255))
+            }
+        }
+        val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(TextView(this).apply {
+            text = title
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#182033"))
+        })
+        texts.addView(TextView(this).apply {
+            text = desc
+            textSize = 12f
+            setTextColor(Color.parseColor("#7B8494"))
+        })
+        row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(makeControlButton(buttonText) { action() })
+        row.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = (10 * density).toInt()
+        }
+        return row
+    }
+
+    private fun makeHintText(text: String): TextView {
+        val density = resources.displayMetrics.density
+        return TextView(this).apply {
+            this.text = text
+            textSize = 12f
+            setTextColor(Color.parseColor("#7B8494"))
+            setPadding((4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt(), 0)
+        }
+    }
+
+    private fun makeControlButton(text: String, action: (View) -> Unit): Button {
+        val density = resources.displayMetrics.density
+        return Button(this).apply {
+            this.text = text
+            textSize = 12f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 18f * density
+                setColor(Color.parseColor("#1E88E5"))
+            }
+            minHeight = 0
+            minimumHeight = 0
+            setPadding((12 * density).toInt(), (7 * density).toInt(), (12 * density).toInt(), (7 * density).toInt())
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = (8 * density).toInt()
+            }
+            setOnClickListener { action(it) }
+        }
     }
 
     private fun updateMusicNavState(isPlaying: Boolean) {
@@ -282,6 +523,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun releaseMusicPlayer() {
+        musicDialog?.dismiss()
+        musicDialog = null
         musicSpinAnimator?.cancel()
         musicSpinAnimator = null
         musicPlayer?.release()

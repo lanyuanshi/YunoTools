@@ -113,9 +113,6 @@ object ThemeApplier {
             }
             "bottomNavContainer" -> v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
             "bottomNavInner" -> applyBottomNav(v, t)
-            "navFloatingIndicator" -> {
-                v.background = roundRect(blend(t.primary, t.card, if (t.imageBg) 0.22f else 0.16f), 22f * v.resources.displayMetrics.density)
-            }
         }
 
         when (v) {
@@ -156,24 +153,8 @@ object ThemeApplier {
 
     private fun applyBottomNav(v: View, t: YunoTheme) {
         val density = v.resources.displayMetrics.density
-        val isDefault = !t.imageBg && t.bg == Color.parseColor("#F2F2F7")
         val capsuleColor = if (t.imageBg) Color.argb(226, 255, 255, 255) else t.card
-        val indicatorColor = if (isDefault) Color.parseColor("#E8F3FF") else blend(t.primary, t.card, if (t.imageBg) 0.22f else 0.16f)
         v.background = roundRect(capsuleColor, 28f * density)
-        val group = v as? ViewGroup ?: return
-        for (i in 0 until group.childCount) {
-            val child = group.getChildAt(i)
-            val childId = runCatching { child.resources.getResourceEntryName(child.id) }.getOrNull().orEmpty()
-            if (childId == "navFloatingIndicator") {
-                child.background = roundRect(indicatorColor, 22f * density)
-                child.elevation = 0f
-                child.translationZ = 0f
-            } else if (childId == "navItemsRow") {
-                child.elevation = 4f * density
-                child.translationZ = 4f * density
-                child.bringToFront()
-            }
-        }
     }
 
     private fun roundRect(color: Int, radiusPx: Float): GradientDrawable = GradientDrawable().apply {

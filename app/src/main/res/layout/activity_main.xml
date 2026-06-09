@@ -632,18 +632,8 @@
             android:background="@drawable/bg_bottom_nav_capsule"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:elevation="10dp"
             android:paddingStart="12dp"
             android:paddingEnd="12dp">
-
-            <View
-                android:id="@+id/navFloatingIndicator"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_gravity="center_vertical|start"
-                android:background="@drawable/bg_nav_floating_indicator"
-                android:elevation="0dp"
-                android:translationZ="0dp" />
 
             <LinearLayout
                 android:id="@+id/navItemsRow"
@@ -651,8 +641,6 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:elevation="2dp"
-                android:translationZ="2dp"
                 android:gravity="center"
                 android:orientation="horizontal">
 

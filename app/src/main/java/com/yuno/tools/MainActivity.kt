@@ -1,5 +1,7 @@
 package com.yuno.tools
 
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -9,6 +11,7 @@ import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.OvershootInterpolator
+import android.view.animation.LinearInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -44,6 +47,8 @@ class MainActivity : AppCompatActivity() {
 
     private var currentTab = MainTab.HOME
     private var avatarPlayer: ExoPlayer? = null
+    private var musicPlayer: ExoPlayer? = null
+    private var musicSpinAnimator: ObjectAnimator? = null
 
     private val pickAvatar = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@registerForActivityResult
@@ -115,11 +120,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindBottomNav() {
         val navHome = findViewById<LinearLayout>(R.id.navChat)
+        val navMusic = findViewById<LinearLayout>(R.id.navMusic)
         val navProfile = findViewById<LinearLayout>(R.id.navProfile)
         installPressScale(navHome)
+        installPressScale(navMusic)
         installPressScale(navProfile)
         navHome.setOnClickListener { showHome(animate = true) }
+        navMusic.setOnClickListener { toggleNavMusic() }
         navProfile.setOnClickListener { showProfile() }
+        updateMusicNavState(isPlaying = false)
     }
 
     private fun showHome(animate: Boolean) {
@@ -161,12 +170,15 @@ class MainActivity : AppCompatActivity() {
         val selectedColor = Color.parseColor("#1E88E5")
         val normalColor = Color.parseColor("#A0A7B3")
         val navHome = findViewById<LinearLayout>(R.id.navChat)
+        val navMusic = findViewById<LinearLayout>(R.id.navMusic)
         val navProfile = findViewById<LinearLayout>(R.id.navProfile)
         val homeSelected = tab == MainTab.HOME
         tintNav(R.id.icNavHome, R.id.tvNavHome, if (homeSelected) selectedColor else normalColor, homeSelected)
         tintNav(R.id.icNavProfile, R.id.tvNavProfile, if (homeSelected) normalColor else selectedColor, !homeSelected)
+        updateMusicNavState(isPlaying = musicPlayer?.isPlaying == true)
 
         animateNavItem(navHome, homeSelected)
+        animateNavItem(navMusic, musicPlayer?.isPlaying == true)
         animateNavItem(navProfile, !homeSelected)
     }
 
@@ -205,6 +217,79 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f).setDuration(120L).start()
             }
             false
+        }
+    }
+
+
+    private fun toggleNavMusic() {
+        val player = musicPlayer ?: ExoPlayer.Builder(this).build().also { created ->
+            musicPlayer = created
+            created.repeatMode = Player.REPEAT_MODE_ONE
+            val songUri = Uri.parse("android.resource://$packageName/${R.raw.nav_song}")
+            created.setMediaItem(MediaItem.fromUri(songUri))
+            created.addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    updateMusicNavState(isPlaying)
+                }
+            })
+            created.prepare()
+        }
+        if (player.isPlaying) {
+            player.pause()
+        } else {
+            player.playWhenReady = true
+            player.play()
+        }
+        updateMusicNavState(player.isPlaying)
+    }
+
+    private fun updateMusicNavState(isPlaying: Boolean) {
+        val selectedColor = Color.parseColor("#1E88E5")
+        val normalColor = Color.parseColor("#A0A7B3")
+        val icon = runCatching { findViewById<ImageView>(R.id.ivNavMusicDisc) }.getOrNull() ?: return
+        val text = runCatching { findViewById<TextView>(R.id.tvNavMusic) }.getOrNull()
+        val color = if (isPlaying) selectedColor else normalColor
+        icon.imageTintList = ColorStateList.valueOf(color)
+        text?.apply {
+            setTextColor(color)
+            this.text = if (isPlaying) "播放中" else "播放"
+            setTypeface(null, if (isPlaying) Typeface.BOLD else Typeface.NORMAL)
+            animate().alpha(if (isPlaying) 1f else 0.72f).setDuration(160L).start()
+        }
+        if (isPlaying) {
+            startMusicSpin(icon)
+        } else {
+            stopMusicSpin(icon)
+        }
+    }
+
+    private fun startMusicSpin(icon: ImageView) {
+        if (musicSpinAnimator?.isStarted == true) return
+        musicSpinAnimator?.cancel()
+        musicSpinAnimator = ObjectAnimator.ofFloat(icon, View.ROTATION, icon.rotation, icon.rotation + 360f).apply {
+            duration = 1400L
+            interpolator = LinearInterpolator()
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            start()
+        }
+    }
+
+    private fun stopMusicSpin(icon: ImageView) {
+        musicSpinAnimator?.cancel()
+        musicSpinAnimator = null
+        icon.animate().rotation(0f).setDuration(180L).start()
+    }
+
+    private fun releaseMusicPlayer() {
+        musicSpinAnimator?.cancel()
+        musicSpinAnimator = null
+        musicPlayer?.release()
+        musicPlayer = null
+        runCatching {
+            val icon = findViewById<ImageView>(R.id.ivNavMusicDisc)
+            icon.rotation = 0f
+            updateMusicNavState(isPlaying = false)
         }
     }
 
@@ -299,6 +384,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         releaseAvatarPlayer()
+        releaseMusicPlayer()
         super.onDestroy()
     }
 }

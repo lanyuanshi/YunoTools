@@ -589,7 +589,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="小小读书"
+                            android:text="小小漫画"
                             android:textColor="#1C1C1E"
                             android:textSize="13sp" />
                     </LinearLayout>

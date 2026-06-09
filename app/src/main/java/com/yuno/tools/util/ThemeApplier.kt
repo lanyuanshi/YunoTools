@@ -103,7 +103,7 @@ object ThemeApplier {
     private fun applyView(v: View, t: YunoTheme) {
         if (isThemeBgTag(v.tag)) return
         val idName = runCatching { v.resources.getResourceEntryName(v.id) }.getOrNull().orEmpty()
-        if (idName.endsWith("Root") || idName == "mainRoot") v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
+        if (idName.endsWith("Root") || idName == "mainRoot" || idName == "profilePage" || idName == "mainPageHost") v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
 
         when (idName) {
             "statusBarPlaceholder" -> v.setBackgroundColor(if (t.imageBg) Color.argb(88, 255, 255, 255) else t.bg)
@@ -112,9 +112,9 @@ object ThemeApplier {
                 (v as? TextView)?.setTextColor(t.text)
             }
             "bottomNavContainer" -> v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
-            "bottomNavInner" -> {
-                applyBottomNav(v, t)
-                return
+            "bottomNavInner" -> applyBottomNav(v, t)
+            "navFloatingIndicator" -> {
+                v.background = roundRect(blend(t.primary, t.card, if (t.imageBg) 0.22f else 0.16f), 22f * v.resources.displayMetrics.density)
             }
         }
 
@@ -143,24 +143,15 @@ object ThemeApplier {
     private fun applyBottomNav(v: View, t: YunoTheme) {
         val density = v.resources.displayMetrics.density
         val isDefault = !t.imageBg && t.bg == Color.parseColor("#F2F2F7")
-        val capsuleColor = t.card
-        val selectedBg = if (isDefault) Color.parseColor("#E8F3FF") else blend(t.primary, t.card, 0.18f)
-        val selectedColor = if (isDefault) Color.parseColor("#1E88E5") else t.primary
-        val unselectedColor = if (isDefault) Color.parseColor("#A0A7B3") else t.sub
+        val capsuleColor = if (t.imageBg) Color.argb(226, 255, 255, 255) else t.card
+        val indicatorColor = if (isDefault) Color.parseColor("#E8F3FF") else blend(t.primary, t.card, if (t.imageBg) 0.22f else 0.16f)
         v.background = roundRect(capsuleColor, 28f * density)
         val group = v as? ViewGroup ?: return
         for (i in 0 until group.childCount) {
-            val item = group.getChildAt(i)
-            val itemId = runCatching { item.resources.getResourceEntryName(item.id) }.getOrNull().orEmpty()
-            val selected = itemId == "navChat"
-            item.background = if (selected) roundRect(selectedBg, 18f * density) else null
-            if (item is ViewGroup) {
-                for (j in 0 until item.childCount) {
-                    when (val child = item.getChildAt(j)) {
-                        is ImageView -> child.setColorFilter(if (selected) selectedColor else unselectedColor)
-                        is TextView -> child.setTextColor(if (selected) selectedColor else unselectedColor)
-                    }
-                }
+            val child = group.getChildAt(i)
+            val childId = runCatching { child.resources.getResourceEntryName(child.id) }.getOrNull().orEmpty()
+            if (childId == "navFloatingIndicator") {
+                child.background = roundRect(indicatorColor, 22f * density)
             }
         }
     }

@@ -9,7 +9,7 @@ import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.OvershootInterpolator
-import android.widget.ImageButton
+import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -103,7 +103,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindProfilePage() {
-        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { showHome(animate = true) }
         findViewById<MaterialCardView>(R.id.cardAvatarHeader).setOnClickListener { chooseAvatar() }
         findViewById<MaterialCardView>(R.id.cardChooseAvatar).setOnClickListener { chooseAvatar() }
         findViewById<MaterialCardView>(R.id.cardParseHistory).setOnClickListener {
@@ -141,7 +140,7 @@ class MainActivity : AppCompatActivity() {
             home.alpha = 1f
             home.translationY = 0f
         }
-        updateNavSelection(MainTab.HOME)
+        updateNavSelection(MainTab.HOME, animate)
     }
 
     private fun showProfile() {
@@ -155,26 +154,72 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvMainTitle).text = "个人资料"
         loadAvatar()
         playProfileEntranceBounce()
-        updateNavSelection(MainTab.PROFILE)
+        updateNavSelection(MainTab.PROFILE, true)
     }
 
-    private fun updateNavSelection(tab: MainTab) {
+    private fun updateNavSelection(tab: MainTab, animate: Boolean = true) {
         val selectedColor = Color.parseColor("#1E88E5")
         val normalColor = Color.parseColor("#A0A7B3")
         val navHome = findViewById<LinearLayout>(R.id.navChat)
         val navProfile = findViewById<LinearLayout>(R.id.navProfile)
         val homeSelected = tab == MainTab.HOME
-        navHome.setBackgroundResource(if (homeSelected) R.drawable.bg_bottom_nav_selected else 0)
-        navProfile.setBackgroundResource(if (homeSelected) 0 else R.drawable.bg_bottom_nav_selected)
+
         tintNav(R.id.icNavHome, R.id.tvNavHome, if (homeSelected) selectedColor else normalColor, homeSelected)
         tintNav(R.id.icNavProfile, R.id.tvNavProfile, if (homeSelected) normalColor else selectedColor, !homeSelected)
+
+        animateNavItem(navHome, homeSelected)
+        animateNavItem(navProfile, !homeSelected)
+        moveFloatingIndicator(if (homeSelected) navHome else navProfile, animate)
     }
 
     private fun tintNav(iconId: Int, textId: Int, color: Int, selected: Boolean) {
-        findViewById<ImageView>(iconId).imageTintList = ColorStateList.valueOf(color)
+        findViewById<ImageView>(iconId).apply {
+            imageTintList = ColorStateList.valueOf(color)
+            animate().translationY(if (selected) -5f * resources.displayMetrics.density else 0f)
+                .scaleX(if (selected) 1.12f else 1f)
+                .scaleY(if (selected) 1.12f else 1f)
+                .setDuration(220L)
+                .setInterpolator(OvershootInterpolator(0.9f))
+                .start()
+        }
         findViewById<TextView>(textId).apply {
             setTextColor(color)
             setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
+            animate().alpha(if (selected) 1f else 0.72f).setDuration(160L).start()
+        }
+    }
+
+    private fun animateNavItem(view: View, selected: Boolean) {
+        view.animate()
+            .translationY(if (selected) -2f * resources.displayMetrics.density else 0f)
+            .setDuration(220L)
+            .setInterpolator(OvershootInterpolator(0.75f))
+            .start()
+    }
+
+    private fun moveFloatingIndicator(target: View, animate: Boolean) {
+        val indicator = findViewById<View>(R.id.navFloatingIndicator)
+        val inner = findViewById<View>(R.id.bottomNavInner)
+        inner.post {
+            val lp = indicator.layoutParams
+            if (lp.width != target.width) {
+                lp.width = target.width
+                indicator.layoutParams = lp
+            }
+            val targetX = target.left.toFloat()
+            indicator.animate().cancel()
+            if (animate) {
+                indicator.animate()
+                    .x(targetX)
+                    .scaleX(1.02f)
+                    .setDuration(260L)
+                    .setInterpolator(DecelerateInterpolator())
+                    .withEndAction { indicator.animate().scaleX(1f).setDuration(90L).start() }
+                    .start()
+            } else {
+                indicator.x = targetX
+                indicator.scaleX = 1f
+            }
         }
     }
 
@@ -260,6 +305,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ThemeApplier.apply(this)
+        updateNavSelection(currentTab, animate = false)
         if (currentTab == MainTab.PROFILE) loadAvatar()
     }
 

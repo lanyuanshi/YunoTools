@@ -611,91 +611,110 @@
             android:visibility="gone" />
     </FrameLayout>
 
-    <!-- 底部导航：截图同款白色大圆角胶囊 -->
+    <!-- 底部导航：v1.0.62 浮动滑块 + 自绘漫画风图标 -->
     <FrameLayout
         android:id="@+id/bottomNavContainer"
         android:layout_width="match_parent"
         android:layout_height="92dp"
         android:background="#F2F2F7"
+        android:clipChildren="false"
         android:clipToPadding="false"
         android:paddingStart="18dp"
         android:paddingEnd="18dp"
         android:paddingTop="8dp"
         android:paddingBottom="14dp">
 
-        <LinearLayout
+        <FrameLayout
+            android:id="@+id/bottomNavInner"
             android:layout_width="match_parent"
             android:layout_height="70dp"
             android:layout_gravity="center"
-            android:id="@+id/bottomNavInner"
             android:background="@drawable/bg_bottom_nav_capsule"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:elevation="10dp"
-            android:gravity="center"
-            android:orientation="horizontal"
             android:paddingStart="12dp"
             android:paddingEnd="12dp">
 
-            <!-- 首页：选中态 -->
-            <LinearLayout
-                android:id="@+id/navChat"
-                android:foreground="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true"
+            <View
+                android:id="@+id/navFloatingIndicator"
                 android:layout_width="0dp"
                 android:layout_height="54dp"
-                android:layout_weight="1"
-                android:layout_marginHorizontal="6dp"
-                android:background="@drawable/bg_bottom_nav_selected"
-                android:gravity="center"
-                android:orientation="vertical">
-                <ImageView
-                    android:id="@+id/icNavHome"
-                    android:layout_width="23dp"
-                    android:layout_height="23dp"
-                    android:src="@drawable/ic_home"
-                    app:tint="#1E88E5" />
+                android:layout_gravity="center_vertical|start"
+                android:background="@drawable/bg_nav_floating_indicator"
+                android:elevation="1dp" />
 
-                <TextView
-                    android:id="@+id/tvNavHome"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="首页"
-                    android:textColor="#1E88E5"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <!-- 个人资料 -->
             <LinearLayout
-                android:id="@+id/navProfile"
-                android:foreground="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true"
-                android:layout_width="0dp"
-                android:layout_height="54dp"
-                android:layout_weight="1"
-                android:layout_marginHorizontal="6dp"
+                android:id="@+id/navItemsRow"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:gravity="center"
-                android:orientation="vertical">
+                android:orientation="horizontal">
 
-                <ImageView
-                    android:id="@+id/icNavProfile"
-                    android:layout_width="23dp"
-                    android:layout_height="23dp"
-                    android:src="@drawable/ic_profile"
-                    app:tint="#A0A7B3" />
+                <LinearLayout
+                    android:id="@+id/navChat"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_marginHorizontal="6dp"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:clipChildren="false"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/tvNavProfile"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="个人资料"
-                    android:textColor="#A0A7B3"
-                    android:textSize="12sp" />
+                    <ImageView
+                        android:id="@+id/icNavHome"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_nav_manga_home"
+                        app:tint="#1E88E5" />
+
+                    <TextView
+                        android:id="@+id/tvNavHome"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="首页"
+                        android:textColor="#1E88E5"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/navProfile"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_marginHorizontal="6dp"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:clipChildren="false"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/icNavProfile"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_nav_manga_profile"
+                        app:tint="#A0A7B3" />
+
+                    <TextView
+                        android:id="@+id/tvNavProfile"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="个人资料"
+                        android:textColor="#A0A7B3"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
+        </FrameLayout>
     </FrameLayout>
 
 </LinearLayout>

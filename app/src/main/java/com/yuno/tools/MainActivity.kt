@@ -30,6 +30,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -59,6 +60,7 @@ import com.yuno.tools.util.ThemeApplier
 
 class MainActivity : AppCompatActivity() {
     private enum class MainTab { HOME, PROFILE }
+    private enum class MusicPanelTab { LOCAL, FAVORITE, MIGU }
     private data class LocalSong(val title: String, val artist: String, val uri: Uri, val durationMs: Long)
 
     private var currentTab = MainTab.HOME
@@ -70,6 +72,9 @@ class MainActivity : AppCompatActivity() {
     private var musicRepeatMode = Player.REPEAT_MODE_ONE
     private var currentMusicTitle = "本地音乐 · 用户歌曲"
     private var currentMusicUri: Uri? = null
+    private var musicPanelLastTab = MusicPanelTab.LOCAL
+    private var miguLastKeyword = ""
+    private var miguCachedSongs: List<com.yuno.tools.util.MusicSearchHelper.MiguSong> = emptyList()
 
     private val requestAudioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showMusicPanel()
@@ -382,6 +387,11 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(panel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
 
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val headerTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val title = TextView(this).apply {
             text = "音乐播放器"
             textSize = 20f
@@ -394,8 +404,23 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#6F7A8C"))
             setPadding(0, (2 * density).toInt(), 0, (10 * density).toInt())
         }
-        panel.addView(title)
-        panel.addView(subTitle)
+        headerTexts.addView(title)
+        headerTexts.addView(subTitle)
+        headerRow.addView(headerTexts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val closeButton = TextView(this).apply {
+            text = "×"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#5D6677"))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.argb(70, 30, 136, 229))
+            }
+            setOnClickListener { musicDialog?.dismiss() }
+        }
+        headerRow.addView(closeButton, LinearLayout.LayoutParams((38 * density).toInt(), (38 * density).toInt()))
+        panel.addView(headerRow)
 
         val tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val tabScroll = HorizontalScrollView(this).apply {
@@ -410,6 +435,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         fun showLocalTab() {
+            musicPanelLastTab = MusicPanelTab.LOCAL
             content.removeAllViews()
             val list = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -444,6 +470,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun showFavoriteTab() {
+            musicPanelLastTab = MusicPanelTab.FAVORITE
             content.removeAllViews()
             val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             list.addView(makeMusicRow("收藏", "当前先预留收藏分类，后续可把选中的本地歌曲加入这里", "播放当前") {
@@ -455,6 +482,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun showMiguTab() {
+            musicPanelLastTab = MusicPanelTab.MIGU
             content.removeAllViews()
 
             val page = LinearLayout(this).apply {
@@ -493,6 +521,7 @@ class MainActivity : AppCompatActivity() {
             }
             val input = android.widget.EditText(this).apply {
                 hint = "搜索咪咕歌曲..."
+                setText(miguLastKeyword)
                 textSize = 14f
                 isSingleLine = true
                 setTextColor(Color.parseColor("#182033"))
@@ -508,34 +537,52 @@ class MainActivity : AppCompatActivity() {
                 marginEnd = (8 * density).toInt()
             })
 
-            val searchButton = makeControlButton("搜索") { _ ->
-                val keyword = input.text.toString().trim()
-                if (keyword.isBlank()) {
-                    showMiguHint("输入关键词搜索咪咕音乐库")
-                    return@makeControlButton
-                }
-
+            fun renderMiguSongs(songs: List<com.yuno.tools.util.MusicSearchHelper.MiguSong>) {
                 val listArea = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                 }
-                listArea.addView(makeHintText("正在搜索：$keyword"))
+                if (songs.isEmpty()) {
+                    listArea.addView(makeMusicRow("未搜索到结果", "尝试其他关键词", "", {}))
+                } else {
+                    for (s in songs) {
+                        val canPlay = !s.playUrl.isNullOrBlank()
+                        val desc = if (canPlay) s.artist else s.artist + " · 暂无公开播放源"
+                        listArea.addView(makeMusicRow(s.title, desc, if (canPlay) "播放" else "不可播") {
+                            val playUrl = s.playUrl
+                            if (playUrl.isNullOrBlank()) {
+                                Toast.makeText(this, "该歌曲暂未返回公开播放源", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val uri = com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(playUrl)
+                                playSelectedMusic("咪咕 · " + s.title, uri)
+                                subTitle.text = currentMusicTitle
+                            }
+                        })
+                    }
+                }
                 replaceMiguList(ScrollView(this).apply { addView(listArea) })
+            }
+
+            val searchButton = makeControlButton("搜索") { _ ->
+                val keyword = input.text.toString().trim()
+                miguLastKeyword = keyword
+                if (keyword.isBlank()) {
+                    miguCachedSongs = emptyList()
+                    showMiguHint("输入关键词搜索咪咕音乐库")
+                    return@makeControlButton
+                }
+
+                val loadingArea = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+                }
+                loadingArea.addView(makeHintText("正在搜索：$keyword"))
+                replaceMiguList(ScrollView(this).apply { addView(loadingArea) })
 
                 com.yuno.tools.util.MusicSearchHelper.searchMigu(keyword) { songs ->
                     runOnUiThread {
-                        listArea.removeAllViews()
-                        if (songs.isEmpty()) {
-                            listArea.addView(makeMusicRow("未搜索到结果", "尝试其他关键词", "", {}))
-                        } else {
-                            for (s in songs) {
-                                listArea.addView(makeMusicRow(s.title, s.artist, "播放") {
-                                    val uri = com.yuno.tools.util.MusicSearchHelper.buildListenUrl(s.contentId)
-                                    playSelectedMusic("咪咕 · " + s.title, uri)
-                                    subTitle.text = currentMusicTitle
-                                })
-                            }
-                        }
+                        miguCachedSongs = songs
+                        renderMiguSongs(songs)
                     }
                 }
             }
@@ -554,13 +601,23 @@ class MainActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
-            showMiguHint("输入关键词搜索咪咕音乐库")
+            if (miguCachedSongs.isNotEmpty()) {
+                renderMiguSongs(miguCachedSongs)
+            } else if (miguLastKeyword.isNotBlank()) {
+                showMiguHint("上次搜索：$miguLastKeyword，点击搜索恢复结果")
+            } else {
+                showMiguHint("输入关键词搜索咪咕音乐库")
+            }
         }
 
         tabRow.addView(makeMusicChip("本地音乐") { showLocalTab() })
         tabRow.addView(makeMusicChip("收藏") { showFavoriteTab() })
         tabRow.addView(makeMusicChip("咪咕曲库") { showMiguTab() })
-        showLocalTab()
+        when (musicPanelLastTab) {
+            MusicPanelTab.LOCAL -> showLocalTab()
+            MusicPanelTab.FAVORITE -> showFavoriteTab()
+            MusicPanelTab.MIGU -> showMiguTab()
+        }
 
         val controlRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL

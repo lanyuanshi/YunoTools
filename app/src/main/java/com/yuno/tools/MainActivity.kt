@@ -456,14 +456,45 @@ class MainActivity : AppCompatActivity() {
 
         fun showMiguTab() {
             content.removeAllViews()
-            // 搜索行
+
+            val page = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, 0, 0, 0)
+            }
+            val listContainer = FrameLayout(this)
+
+            fun replaceMiguList(view: View) {
+                listContainer.removeAllViews()
+                listContainer.addView(view, FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                ))
+            }
+
+            fun showMiguHint(message: String) {
+                val placeholder = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(0, (24 * density).toInt(), 0, 0)
+                }
+                placeholder.addView(TextView(this).apply {
+                    text = message
+                    textSize = 13f
+                    setTextColor(Color.parseColor("#7B8494"))
+                    gravity = Gravity.CENTER
+                })
+                replaceMiguList(placeholder)
+            }
+
             val searchRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, 0, 0, (8 * density).toInt())
             }
             val input = android.widget.EditText(this).apply {
                 hint = "搜索咪咕歌曲..."
                 textSize = 14f
+                isSingleLine = true
                 setTextColor(Color.parseColor("#182033"))
                 setHintTextColor(Color.parseColor("#A0A7B3"))
                 setPadding((12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt(), (8 * density).toInt())
@@ -476,40 +507,54 @@ class MainActivity : AppCompatActivity() {
             searchRow.addView(input, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginEnd = (8 * density).toInt()
             })
-            searchRow.addView(makeControlButton("搜索") { _ ->
+
+            val searchButton = makeControlButton("搜索") { _ ->
                 val keyword = input.text.toString().trim()
-                if (keyword.isNotBlank()) {
-                    val listArea = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; tag = "miguList" }
-                    content.removeAllViews()
-                    content.addView(ScrollView(this).apply { addView(listArea) })
-                    com.yuno.tools.util.MusicSearchHelper.searchMigu(keyword) { songs ->
-                        runOnUiThread {
-                            listArea.removeAllViews()
-                            if (songs.isEmpty()) {
-                                listArea.addView(makeMusicRow("未搜索到结果", "尝试其他关键词", "", {}))
-                            } else {
-                                for (s in songs) {
-                                    listArea.addView(makeMusicRow(s.title, s.artist, "播放") {
-                                        val uri = com.yuno.tools.util.MusicSearchHelper.buildListenUrl(s.contentId)
-                                        playSelectedMusic("咪咕 · " + s.title, uri)
-                                        subTitle.text = currentMusicTitle
-                                    })
-                                }
+                if (keyword.isBlank()) {
+                    showMiguHint("输入关键词搜索咪咕音乐库")
+                    return@makeControlButton
+                }
+
+                val listArea = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+                }
+                listArea.addView(makeHintText("正在搜索：$keyword"))
+                replaceMiguList(ScrollView(this).apply { addView(listArea) })
+
+                com.yuno.tools.util.MusicSearchHelper.searchMigu(keyword) { songs ->
+                    runOnUiThread {
+                        listArea.removeAllViews()
+                        if (songs.isEmpty()) {
+                            listArea.addView(makeMusicRow("未搜索到结果", "尝试其他关键词", "", {}))
+                        } else {
+                            for (s in songs) {
+                                listArea.addView(makeMusicRow(s.title, s.artist, "播放") {
+                                    val uri = com.yuno.tools.util.MusicSearchHelper.buildListenUrl(s.contentId)
+                                    playSelectedMusic("咪咕 · " + s.title, uri)
+                                    subTitle.text = currentMusicTitle
+                                })
                             }
                         }
                     }
                 }
-            })
-            content.addView(searchRow)
-            val placeholder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            placeholder.addView(TextView(this).apply {
-                text = "输入关键词搜索咪咕音乐库"
-                textSize = 13f
-                setTextColor(Color.parseColor("#7B8494"))
-                setPadding(0, (60 * density).toInt(), 0, 0)
-                gravity = android.view.Gravity.CENTER
-            })
-            content.addView(ScrollView(this).apply { addView(placeholder) })
+            }
+            searchRow.addView(searchButton)
+
+            page.addView(searchRow, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            page.addView(listContainer, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            ))
+            content.addView(page, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+            showMiguHint("输入关键词搜索咪咕音乐库")
         }
 
         tabRow.addView(makeMusicChip("本地音乐") { showLocalTab() })

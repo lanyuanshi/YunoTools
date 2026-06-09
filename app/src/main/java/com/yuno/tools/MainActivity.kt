@@ -163,6 +163,7 @@ class MainActivity : AppCompatActivity() {
         val navHome = findViewById<LinearLayout>(R.id.navChat)
         val navProfile = findViewById<LinearLayout>(R.id.navProfile)
         val homeSelected = tab == MainTab.HOME
+        enforceNavZOrder()
 
         tintNav(R.id.icNavHome, R.id.tvNavHome, if (homeSelected) selectedColor else normalColor, homeSelected)
         tintNav(R.id.icNavProfile, R.id.tvNavProfile, if (homeSelected) normalColor else selectedColor, !homeSelected)
@@ -175,6 +176,10 @@ class MainActivity : AppCompatActivity() {
     private fun tintNav(iconId: Int, textId: Int, color: Int, selected: Boolean) {
         findViewById<ImageView>(iconId).apply {
             imageTintList = ColorStateList.valueOf(color)
+            background = null
+            elevation = 6f * resources.displayMetrics.density
+            translationZ = 6f * resources.displayMetrics.density
+            bringToFront()
             animate().translationY(if (selected) -5f * resources.displayMetrics.density else 0f)
                 .scaleX(if (selected) 1.12f else 1f)
                 .scaleY(if (selected) 1.12f else 1f)
@@ -185,7 +190,27 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(textId).apply {
             setTextColor(color)
             setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
+            elevation = 6f * resources.displayMetrics.density
+            translationZ = 6f * resources.displayMetrics.density
+            bringToFront()
             animate().alpha(if (selected) 1f else 0.72f).setDuration(160L).start()
+        }
+    }
+
+    private fun enforceNavZOrder() {
+        val density = resources.displayMetrics.density
+        runCatching {
+            findViewById<View>(R.id.navFloatingIndicator).apply {
+                elevation = 0f
+                translationZ = 0f
+            }
+            findViewById<View>(R.id.navItemsRow).apply {
+                elevation = 4f * density
+                translationZ = 4f * density
+                bringToFront()
+            }
+            findViewById<View>(R.id.navChat).bringToFront()
+            findViewById<View>(R.id.navProfile).bringToFront()
         }
     }
 
@@ -200,7 +225,9 @@ class MainActivity : AppCompatActivity() {
     private fun moveFloatingIndicator(target: View, animate: Boolean) {
         val indicator = findViewById<View>(R.id.navFloatingIndicator)
         val inner = findViewById<View>(R.id.bottomNavInner)
+        enforceNavZOrder()
         inner.post {
+            enforceNavZOrder()
             val lp = indicator.layoutParams
             if (lp.width != target.width) {
                 lp.width = target.width

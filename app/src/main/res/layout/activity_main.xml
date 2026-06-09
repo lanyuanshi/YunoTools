@@ -642,7 +642,8 @@
                 android:layout_height="54dp"
                 android:layout_gravity="center_vertical|start"
                 android:background="@drawable/bg_nav_floating_indicator"
-                android:elevation="1dp" />
+                android:elevation="0dp"
+                android:translationZ="0dp" />
 
             <LinearLayout
                 android:id="@+id/navItemsRow"
@@ -650,6 +651,8 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false"
+                android:elevation="2dp"
+                android:translationZ="2dp"
                 android:gravity="center"
                 android:orientation="horizontal">
 
@@ -662,6 +665,7 @@
                     android:clickable="true"
                     android:clipChildren="false"
                     android:focusable="true"
+                    android:background="@android:color/transparent"
                     android:foreground="?attr/selectableItemBackgroundBorderless"
                     android:gravity="center"
                     android:orientation="vertical">
@@ -693,6 +697,7 @@
                     android:clickable="true"
                     android:clipChildren="false"
                     android:focusable="true"
+                    android:background="@android:color/transparent"
                     android:foreground="?attr/selectableItemBackgroundBorderless"
                     android:gravity="center"
                     android:orientation="vertical">

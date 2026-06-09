@@ -134,10 +134,24 @@ object ThemeApplier {
                 }
             }
             is ImageView -> {
-                if (idName in skipTintIds || shouldKeepOriginalImage(v.tag)) v.clearColorFilter() else runCatching { v.setColorFilter(t.primary) }
+                applyIconTintSafely(v, idName, t)
             }
         }
         if (v is ViewGroup) for (i in 0 until v.childCount) applyView(v.getChildAt(i), t)
+    }
+
+    private fun applyIconTintSafely(v: ImageView, idName: String, t: YunoTheme) {
+        if (idName in skipTintIds || shouldKeepOriginalImage(v.tag)) {
+            v.clearColorFilter()
+            return
+        }
+        val shouldTint = idName.startsWith("ic") || idName.startsWith("btn") || idName.startsWith("ivIcon") || idName.startsWith("ivTool") || idName.startsWith("ivNav")
+        if (shouldTint) {
+            v.background = null
+            runCatching { v.setColorFilter(t.primary) }
+        } else {
+            v.clearColorFilter()
+        }
     }
 
     private fun applyBottomNav(v: View, t: YunoTheme) {
@@ -152,6 +166,12 @@ object ThemeApplier {
             val childId = runCatching { child.resources.getResourceEntryName(child.id) }.getOrNull().orEmpty()
             if (childId == "navFloatingIndicator") {
                 child.background = roundRect(indicatorColor, 22f * density)
+                child.elevation = 0f
+                child.translationZ = 0f
+            } else if (childId == "navItemsRow") {
+                child.elevation = 4f * density
+                child.translationZ = 4f * density
+                child.bringToFront()
             }
         }
     }

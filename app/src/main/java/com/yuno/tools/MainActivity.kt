@@ -2,14 +2,18 @@ package com.yuno.tools
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.Manifest
 import android.app.Dialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -28,6 +32,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
@@ -54,6 +59,7 @@ import com.yuno.tools.util.ThemeApplier
 
 class MainActivity : AppCompatActivity() {
     private enum class MainTab { HOME, PROFILE }
+    private data class LocalSong(val title: String, val artist: String, val uri: Uri, val durationMs: Long)
 
     private var currentTab = MainTab.HOME
     private var avatarPlayer: ExoPlayer? = null
@@ -63,6 +69,11 @@ class MainActivity : AppCompatActivity() {
     private var musicShuffleEnabled = false
     private var musicRepeatMode = Player.REPEAT_MODE_ONE
     private var currentMusicTitle = "本地音乐 · 用户歌曲"
+    private var currentMusicUri: Uri? = null
+
+    private val requestAudioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) showMusicPanel()
+    }
 
     private val pickAvatar = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@registerForActivityResult
@@ -255,7 +266,7 @@ class MainActivity : AppCompatActivity() {
             musicPlayer = created
             created.repeatMode = musicRepeatMode
             created.shuffleModeEnabled = musicShuffleEnabled
-            val songUri = Uri.parse("android.resource://$packageName/${R.raw.nav_song}")
+            val songUri = currentMusicUri ?: defaultLocalSongUri()
             created.setMediaItem(MediaItem.fromUri(songUri))
             created.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -266,14 +277,86 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun playLocalMusicFromPanel() {
+    private fun playSelectedMusic(title: String, uri: Uri) {
+        currentMusicTitle = title
+        currentMusicUri = uri
         val player = ensureMusicPlayer()
-        currentMusicTitle = "本地音乐 · 用户歌曲"
+        player.stop()
+        player.clearMediaItems()
         player.repeatMode = musicRepeatMode
         player.shuffleModeEnabled = musicShuffleEnabled
+        player.setMediaItem(MediaItem.fromUri(uri))
+        player.prepare()
         player.playWhenReady = true
         player.play()
         updateMusicNavState(true)
+    }
+
+    private fun playLocalMusicFromPanel() {
+        playSelectedMusic("本地音乐 · 用户歌曲", currentMusicUri ?: defaultLocalSongUri())
+    }
+
+    private fun defaultLocalSongUri(): Uri {
+        return Uri.parse("android.resource://$packageName/${R.raw.nav_song}")
+    }
+
+    private fun hasAudioPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= 33) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestAudioPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            requestAudioPermission.launch(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            requestAudioPermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    private fun loadLocalSongs(): List<LocalSong> {
+        if (!hasAudioPermission()) return emptyList()
+        val songs = mutableListOf<LocalSong>()
+        val collection = if (Build.VERSION.SDK_INT >= 29) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.DURATION
+        )
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
+        runCatching {
+            contentResolver.query(collection, projection, selection, null, sortOrder)?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    val title = cursor.getString(titleCol)?.takeIf { it.isNotBlank() } ?: "未知歌曲"
+                    val artist = cursor.getString(artistCol)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: "本地音乐"
+                    val duration = cursor.getLong(durationCol)
+                    val uri = Uri.withAppendedPath(collection, id.toString())
+                    songs.add(LocalSong(title, artist, uri, duration))
+                }
+            }
+        }
+        return songs
+    }
+
+    private fun formatDuration(durationMs: Long): String {
+        if (durationMs <= 0) return "--:--"
+        val totalSeconds = durationMs / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return "%d:%02d".format(minutes, seconds)
     }
 
     private fun showMusicPanel() {
@@ -332,22 +415,42 @@ class MainActivity : AppCompatActivity() {
                 orientation = LinearLayout.VERTICAL
                 setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
             }
-            list.addView(makeMusicRow("本地音乐", "用户发送的歌曲 · 已内置到 APP", "播放") {
-                playLocalMusicFromPanel()
-                subTitle.text = currentMusicTitle
-            })
-            list.addView(makeHintText("这首歌来自你上次发来的 MP3，安装后不需要外部文件也能播放。"))
+            if (!hasAudioPermission()) {
+                list.addView(makeMusicRow("读取本地音乐", "需要授权后才能显示手机里的歌曲名字和列表", "授权") {
+                    requestAudioPermissionIfNeeded()
+                })
+                list.addView(makeMusicRow("备用歌曲", "你上次发来的歌曲 · 无权限时可播放", "播放") {
+                    playSelectedMusic("备用歌曲 · 用户发送", defaultLocalSongUri())
+                    subTitle.text = currentMusicTitle
+                })
+            } else {
+                val songs = loadLocalSongs()
+                if (songs.isEmpty()) {
+                    list.addView(makeMusicRow("未扫描到本地歌曲", "先播放你上次发来的备用歌曲", "播放") {
+                        playSelectedMusic("备用歌曲 · 用户发送", defaultLocalSongUri())
+                        subTitle.text = currentMusicTitle
+                    })
+                } else {
+                    songs.forEach { song ->
+                        val desc = "${song.artist} · ${formatDuration(song.durationMs)}"
+                        list.addView(makeMusicRow(song.title, desc, "选择") {
+                            playSelectedMusic("本地音乐 · ${song.title}", song.uri)
+                            subTitle.text = currentMusicTitle
+                        })
+                    }
+                }
+            }
             content.addView(ScrollView(this).apply { addView(list) })
         }
 
         fun showFavoriteTab() {
             content.removeAllViews()
             val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            list.addView(makeMusicRow("收藏", "当前先预留收藏分类，后续可把咪咕/本地歌曲加入这里", "播放本地") {
+            list.addView(makeMusicRow("收藏", "当前先预留收藏分类，后续可把选中的本地歌曲加入这里", "播放当前") {
                 playLocalMusicFromPanel()
                 subTitle.text = currentMusicTitle
             })
-            list.addView(makeHintText("收藏分类已接入面板结构；当前可先播放本地歌曲。"))
+            list.addView(makeHintText("收藏分类已接入面板结构；当前会播放你已选择的本地歌曲。"))
             content.addView(ScrollView(this).apply { addView(list) })
         }
 

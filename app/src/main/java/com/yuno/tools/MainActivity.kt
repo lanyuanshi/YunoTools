@@ -62,6 +62,7 @@ import com.yuno.tools.ui.image.GridCropActivity
 import com.yuno.tools.ui.media.AudioSeparateActivity
 import com.yuno.tools.ui.media.VideoTrimActivity
 import com.yuno.tools.ui.tools.AnimeSearchActivity
+import com.yuno.tools.ui.tools.BangumiWatchActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
 import com.yuno.tools.ui.tools.FlashPhotoActivity
@@ -158,6 +159,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardAnimeSearch).setOnClickListener {
             startActivity(Intent(this, AnimeSearchActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardBangumiWatch).setOnClickListener {
+            startActivity(Intent(this, BangumiWatchActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardSubscription).setOnClickListener {
             startActivity(Intent(this, SubscriptionActivity::class.java))

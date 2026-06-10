@@ -658,7 +658,7 @@ class MainActivity : AppCompatActivity() {
             if (onlineCachedSongs.isNotEmpty()) {
                 renderOnlineSongs(onlineCachedSongs)
             } else if (onlineLastKeyword.isNotBlank()) {
-                showOnlineHint("上次搜索：$onlineLastKeyword，点击搜索恢复结果")
+                searchButton.performClick()
             } else {
                 showOnlineHint("输入关键词搜索歌曲狗 / 歌曲海音乐")
             }
@@ -795,8 +795,7 @@ class MainActivity : AppCompatActivity() {
     private fun makeMusicActionRow(title: String, desc: String, actions: List<Pair<String, () -> Unit>>): View {
         val density = resources.displayMetrics.density
         val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
             setPadding((14 * density).toInt(), (12 * density).toInt(), (12 * density).toInt(), (12 * density).toInt())
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -810,19 +809,28 @@ class MainActivity : AppCompatActivity() {
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#182033"))
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
         })
         texts.addView(TextView(this).apply {
             text = desc
             textSize = 12f
             setTextColor(Color.parseColor("#7B8494"))
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(texts, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, (10 * density).toInt(), 0, 0)
         }
-        actions.forEach { (label, action) -> buttons.addView(makeControlButton(label) { action() }) }
-        row.addView(buttons)
+        actions.forEach { (label, action) ->
+            buttons.addView(makeControlButton(label) { action() }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = (6 * density).toInt()
+            })
+        }
+        row.addView(buttons, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         row.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = (10 * density).toInt()
         }

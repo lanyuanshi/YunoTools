@@ -36,13 +36,21 @@ import java.util.concurrent.TimeUnit
 
 class BangumiWatchActivity : AppCompatActivity() {
     private enum class Tab { BANGUMI, MINE }
-    private enum class Screen { LIST, DETAIL, SEARCH }
+    private enum class Screen { LIST, DETAIL, SEARCH, HISTORY, DOWNLOADS }
+
+    private data class WatchSource(
+        val name: String,
+        val baseUrl: String,
+        val libraryUrl: String,
+        val guarded: Boolean = false
+    )
 
     private data class AnimeItem(
         val title: String,
         val status: String,
         val cover: String,
-        val detailUrl: String
+        val detailUrl: String,
+        val source: String = "AnimeTranslation"
     )
 
     private data class EpisodeItem(
@@ -59,8 +67,11 @@ class BangumiWatchActivity : AppCompatActivity() {
         val episodes: List<EpisodeItem>
     )
 
-    private val libraryUrl = "https://www.animetranslation.com/library"
-    private val baseUrl = "https://www.animetranslation.com"
+    private val sources = listOf(
+        WatchSource("AnimeTranslation", "https://www.animetranslation.com", "https://www.animetranslation.com/library"),
+        WatchSource("风车动漫", "https://www.fsdm02.com", "https://www.fsdm02.com/", guarded = true)
+    )
+    private var selectedSource = sources.first()
     private val prefs by lazy { getSharedPreferences("yuno_bangumi_watch", Context.MODE_PRIVATE) }
     private val http by lazy {
         OkHttpClient.Builder()
@@ -85,7 +96,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeApplier.apply(this)
-        allAnime = loadCachedAnime()
+        allAnime = loadCachedAnime(selectedSource.name)
         buildUi()
         if (allAnime.isEmpty()) loadLibrary()
     }
@@ -132,13 +143,21 @@ class BangumiWatchActivity : AppCompatActivity() {
             Screen.LIST -> renderList()
             Screen.SEARCH -> renderSearch()
             Screen.DETAIL -> renderDetail()
+            Screen.HISTORY -> renderRecords("历史记录", "history")
+            Screen.DOWNLOADS -> renderRecords("下载记录", "downloads")
         }
     }
 
     private fun renderList() {
         topBar("首页", showSearch = true, showBack = false)
+        sourceChooser()
+        if (selectedSource.guarded) {
+            emptyCard("需要安全验证", "${selectedSource.name} 当前返回滑块验证，应用无法直接解析列表。可切回 AnimeTranslation 播放源。")
+            content.addView(primaryWideButton("在浏览器打开验证页") { openUrl(selectedSource.baseUrl) })
+            return
+        }
         if (loading && allAnime.isEmpty()) {
-            emptyCard("加载中", "正在加载动漫库列表。")
+            emptyCard("加载中", "正在加载${selectedSource.name}番剧列表。")
             return
         }
         if (allAnime.isEmpty()) {
@@ -213,36 +232,51 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun renderMine() {
         topBar("我的", showSearch = false, showBack = false)
-        section("历史记录")
-        val history = loadRecordList("history")
-        if (history.isEmpty()) emptyCard("暂无历史", "播放过的剧集会显示在这里。") else history.forEach { record ->
-            content.addView(recordCard(record, "继续") { openUrl(record.optString("url")) })
-        }
-        section("下载记录")
-        val downloads = loadRecordList("downloads")
-        if (downloads.isEmpty()) emptyCard("暂无下载", "在播放页点下载后会记录到这里。") else downloads.forEach { record ->
-            content.addView(recordCard(record, "打开") { openUrl(record.optString("url")) })
-        }
+        section("记录")
+        content.addView(settingCard("历史记录", "查看播放历史，点击后回到应用内播放页") { screen = Screen.HISTORY; render() })
+        content.addView(settingCard("下载记录", "查看已加入下载记录的剧集地址") { screen = Screen.DOWNLOADS; render() })
         section("设置")
-        content.addView(settingCard("刷新番剧列表", "重新从动漫库加载番剧列表") { loadLibrary() })
+        content.addView(settingCard("刷新番剧列表", "重新从当前播放源加载番剧列表") { loadLibrary() })
         content.addView(settingCard("清空历史记录", "删除本地播放历史") { clearRecords("history") })
         content.addView(settingCard("清空下载记录", "删除本地下载记录") { clearRecords("downloads") })
     }
 
+    private fun renderRecords(title: String, key: String) {
+        topBar(title, showSearch = false, showBack = true)
+        val records = loadRecordList(key)
+        if (records.isEmpty()) {
+            emptyCard("暂无$title", if (key == "history") "播放过的剧集会显示在这里。" else "加入下载记录的剧集会显示在这里。")
+            return
+        }
+        records.forEach { record ->
+            val actionText = if (key == "history") "播放" else "打开"
+            content.addView(recordCard(record, actionText) {
+                if (key == "history") openRecordInApp(record) else openUrl(record.optString("url"))
+            })
+        }
+    }
+
     private fun loadLibrary() {
         if (loading) return
+        if (selectedSource.guarded) {
+            allAnime = emptyList()
+            render()
+            Toast.makeText(this, "${selectedSource.name} 需要滑块验证，暂不能自动加载", Toast.LENGTH_LONG).show()
+            return
+        }
         loading = true
         render()
         Thread {
             val result = runCatching {
-                val html = fetch(libraryUrl)
+                val html = fetch(selectedSource.libraryUrl)
+                if (html.contains("/_guard/") || html.contains("slider_html") || html.contains("安全验证")) error("需要安全验证")
                 parseLibrary(html)
             }
             runOnUiThread {
                 loading = false
                 result.onSuccess { list ->
                     allAnime = list
-                    saveCachedAnime(list)
+                    saveCachedAnime(selectedSource.name, list)
                     Toast.makeText(this, "已加载 ${list.size} 部番剧", Toast.LENGTH_SHORT).show()
                 }.onFailure { err ->
                     Toast.makeText(this, "加载失败：${err.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
@@ -257,7 +291,9 @@ class BangumiWatchActivity : AppCompatActivity() {
         loading = true
         Thread {
             val result = runCatching {
-                val html = fetch(absUrl(item.detailUrl))
+                val source = sources.firstOrNull { it.name == item.source } ?: selectedSource
+                val html = fetch(absUrl(item.detailUrl, source))
+                if (html.contains("/_guard/") || html.contains("slider_html") || html.contains("安全验证")) error("需要安全验证")
                 parseDetail(item, html)
             }
             runOnUiThread {
@@ -273,7 +309,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
-            .header("Referer", baseUrl)
+            .header("Referer", selectedSource.baseUrl)
             .build()
         return http.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("HTTP ${response.code}")
@@ -293,7 +329,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             val cover = img?.groupValues?.getOrNull(1).orEmpty()
             val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty())
             val status = htmlText(statusRegex.find(block)?.groupValues?.getOrNull(1).orEmpty())
-            if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href)
+            if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href, selectedSource.name)
         }.distinctBy { it.detailUrl }.toList()
     }
 
@@ -310,28 +346,35 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun parseEpisodes(html: String, prefix: String): List<EpisodeItem> {
-        val sourceRegex = Regex("""<div class=\"source-tab[^\"]*\"[^>]*data-source=\"([^\"]+)\"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
-        val sourceName = sourceRegex.find(html)?.groupValues?.getOrNull(2)?.let { htmlText(it).replace(Regex("\\s+"), " ").trim() }.orEmpty().ifBlank { "播放源" }
-        val episodeRegex = Regex("""<a[^>]+class=\"episode-link[^\"]*\"[^>]*(?:data-url=\"([^\"]*)\")?[^>]*href=\"([^\"]*)\"[^>]*>(.*?)</a>|<a[^>]+href=\"([^\"]*)\"[^>]*(?:data-url=\"([^\"]*)\")?[^>]*class=\"episode-link[^\"]*\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        val found = episodeRegex.findAll(html).mapNotNull { m ->
-            val dataUrl = (m.groups[1]?.value ?: m.groups[5]?.value).orEmpty()
-            val href = (m.groups[2]?.value ?: m.groups[4]?.value).orEmpty()
-            val name = htmlText((m.groups[3]?.value ?: m.groups[6]?.value).orEmpty()).ifBlank { "播放" }
-            val raw = dataUrl.ifBlank { href }
+        val sourceLabels = Regex("""<div class=\"source-tab[^\"]*\"[^>]*data-source=\"([^\"]+)\"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(html)
+            .associate { it.groupValues[1] to htmlText(it.groupValues[2]).ifBlank { it.groupValues[1] } }
+        val linkRegex = Regex("""<a[^>]*episode-link[^>]*>.*?</a>""", RegexOption.DOT_MATCHES_ALL)
+        val hrefRegex = Regex("""href=\"([^\"]*)\"""")
+        val dataUrlRegex = Regex("""data-url=\"([^\"]*)\"""")
+        val dataSourceRegex = Regex("""data-source=\"([^\"]*)\"""")
+        val found = linkRegex.findAll(html).mapNotNull { match ->
+            val tag = match.value
+            val raw = htmlAttr(dataUrlRegex.find(tag)?.groupValues?.getOrNull(1).orEmpty()).ifBlank {
+                htmlAttr(hrefRegex.find(tag)?.groupValues?.getOrNull(1).orEmpty())
+            }
+            val name = htmlText(tag.replace(Regex("""<[^>]+>"""), " ")).ifBlank { "播放" }
+            val sourceKey = dataSourceRegex.find(tag)?.groupValues?.getOrNull(1).orEmpty()
+            val sourceName = sourceLabels[sourceKey] ?: sourceKey.ifBlank { "播放源" }
             val play = when {
                 raw.startsWith("http") -> raw
-                prefix.isNotBlank() && raw.isNotBlank() -> prefix + raw
+                prefix.isNotBlank() && raw.isNotBlank() && !raw.startsWith("/") -> prefix + raw
                 raw.isNotBlank() -> absUrl(raw)
                 else -> ""
             }
             if (play.isBlank()) null else EpisodeItem(name, play, sourceName)
-        }.toList()
-        if (found.isNotEmpty()) return found.distinctBy { it.playUrl }
+        }.distinctBy { it.playUrl }.toList()
+        if (found.isNotEmpty()) return found
         val urlRegex = Regex("""data-url=\"([^\"]+)\"[^>]*>(.*?)</""", RegexOption.DOT_MATCHES_ALL)
         return urlRegex.findAll(html).map { m ->
             val url = htmlAttr(m.groupValues[1])
             val name = htmlText(m.groupValues[2]).ifBlank { "播放" }
-            EpisodeItem(name, if (prefix.isNotBlank()) prefix + url else url, sourceName)
+            EpisodeItem(name, if (prefix.isNotBlank()) prefix + url else url, "播放源")
         }.distinctBy { it.playUrl }.toList()
     }
 
@@ -377,8 +420,8 @@ class BangumiWatchActivity : AppCompatActivity() {
         box.setOnClickListener {
             selectedAnime = item
             selectedDetail = null
+            currentEpisode = null
             screen = Screen.DETAIL
-            addHistory(item, null)
             render()
         }
         return box.apply {
@@ -459,12 +502,12 @@ class BangumiWatchActivity : AppCompatActivity() {
                 maxLines = 1
             })
             cell.addView(TextView(this).apply {
-                text = "下载记录"
+                text = "播放"
                 textSize = 11f
                 gravity = Gravity.CENTER
                 setTextColor(Color.parseColor("#4F6EF7"))
                 setPadding(0, dp(5), 0, 0)
-                setOnClickListener { addDownload(detail.item, ep) }
+                setOnClickListener { playEpisode(detail.item, ep) }
             })
             row.addView(cell)
         }
@@ -473,6 +516,8 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun playEpisode(item: AnimeItem, ep: EpisodeItem) {
+        tab = Tab.BANGUMI
+        screen = Screen.DETAIL
         addHistory(item, ep)
         currentEpisode = ep
         ensurePlayer().apply {
@@ -490,6 +535,37 @@ class BangumiWatchActivity : AppCompatActivity() {
         return ExoPlayer.Builder(this).build().also { player = it }
     }
 
+    private fun sourceChooser() {
+        val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(8)) }
+        sources.forEach { source ->
+            row.addView(TextView(this).apply {
+                text = source.name
+                textSize = 13f
+                typeface = if (source.name == selectedSource.name) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setTextColor(Color.parseColor(if (source.name == selectedSource.name) "#FFFFFF" else "#4D5562"))
+                setBackgroundColor(Color.parseColor(if (source.name == selectedSource.name) "#4F6EF7" else "#EEF1F6"))
+                setPadding(dp(12), dp(7), dp(12), dp(7))
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), 0) }
+                setOnClickListener {
+                    if (selectedSource.name != source.name) {
+                        selectedSource = source
+                        allAnime = loadCachedAnime(source.name)
+                        selectedAnime = null
+                        selectedDetail = null
+                        currentEpisode = null
+                        player?.stop()
+                        screen = Screen.LIST
+                        render()
+                        if (allAnime.isEmpty()) loadLibrary()
+                    }
+                }
+            })
+        }
+        scroll.addView(row)
+        content.addView(scroll)
+    }
+
     private fun topBar(title: String, showSearch: Boolean, showBack: Boolean) {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(10)) }
         row.addView(TextView(this).apply {
@@ -497,7 +573,15 @@ class BangumiWatchActivity : AppCompatActivity() {
             textSize = 34f
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#202124"))
-            setOnClickListener { if (showBack) { screen = Screen.LIST; render() } }
+            setOnClickListener {
+                if (showBack) {
+                    when (screen) {
+                        Screen.HISTORY, Screen.DOWNLOADS -> { tab = Tab.MINE; screen = Screen.LIST }
+                        else -> { tab = Tab.BANGUMI; screen = Screen.LIST }
+                    }
+                    render()
+                }
+            }
             layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
         })
         row.addView(TextView(this).apply {
@@ -567,19 +651,29 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun addHistory(item: AnimeItem, ep: EpisodeItem?) {
         val sub = ep?.let { "${it.source} · ${it.name}" } ?: item.status
-        val url = ep?.playUrl ?: absUrl(item.detailUrl)
-        addRecord("history", item.title, sub, url)
+        val url = ep?.playUrl.orEmpty()
+        addRecord("history", item, sub, url, ep?.name.orEmpty())
     }
 
     private fun addDownload(item: AnimeItem, ep: EpisodeItem) {
-        addRecord("downloads", item.title, "${ep.source} · ${ep.name}", ep.playUrl)
+        addRecord("downloads", item, "${ep.source} · ${ep.name}", ep.playUrl, ep.name)
         Toast.makeText(this, "已加入下载记录", Toast.LENGTH_SHORT).show()
     }
 
-    private fun addRecord(key: String, title: String, sub: String, url: String) {
+    private fun addRecord(key: String, item: AnimeItem, sub: String, url: String, episodeName: String) {
         val arr = JSONArray()
-        arr.put(JSONObject().apply { put("title", title); put("sub", sub); put("url", url) })
-        loadRecordList(key).filterNot { it.optString("url") == url }.take(29).forEach { arr.put(it) }
+        arr.put(JSONObject().apply {
+            put("title", item.title)
+            put("sub", sub)
+            put("url", url)
+            put("episode", episodeName)
+            put("status", item.status)
+            put("cover", item.cover)
+            put("detailUrl", item.detailUrl)
+            put("source", item.source)
+        })
+        val unique = if (url.isNotBlank()) url else item.detailUrl
+        loadRecordList(key).filterNot { (if (it.optString("url").isNotBlank()) it.optString("url") else it.optString("detailUrl")) == unique }.take(29).forEach { arr.put(it) }
         prefs.edit().putString(key, arr.toString()).apply()
     }
 
@@ -588,26 +682,63 @@ class BangumiWatchActivity : AppCompatActivity() {
         buildList { for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { add(it) } }
     }.getOrDefault(emptyList())
 
+    private fun openRecordInApp(record: JSONObject) {
+        val detailUrl = record.optString("detailUrl")
+        val playUrl = record.optString("url")
+        val item = AnimeItem(
+            record.optString("title"),
+            record.optString("status"),
+            record.optString("cover"),
+            detailUrl,
+            record.optString("source").ifBlank { selectedSource.name }
+        )
+        selectedSource = sources.firstOrNull { it.name == item.source } ?: selectedSource
+        tab = Tab.BANGUMI
+        selectedAnime = item
+        selectedDetail = null
+        currentEpisode = null
+        screen = Screen.DETAIL
+        if (detailUrl.isNotBlank()) {
+            render()
+        } else if (playUrl.isNotBlank()) {
+            val ep = EpisodeItem(record.optString("episode").ifBlank { "历史播放" }, playUrl, record.optString("sub").ifBlank { "播放源" })
+            currentEpisode = ep
+            selectedDetail = AnimeDetail(item, "历史记录", record.optString("sub"), "", listOf(ep))
+            ensurePlayer().apply {
+                setMediaItem(MediaItem.fromUri(ep.playUrl))
+                prepare()
+                playWhenReady = true
+            }
+            render()
+        }
+    }
+
     private fun clearRecords(key: String) {
         prefs.edit().putString(key, "[]").apply()
         Toast.makeText(this, "已清空", Toast.LENGTH_SHORT).show()
         render()
     }
 
-    private fun saveCachedAnime(list: List<AnimeItem>) {
+    private fun saveCachedAnime(sourceName: String, list: List<AnimeItem>) {
         val arr = JSONArray()
         list.forEach { item ->
-            arr.put(JSONObject().apply { put("title", item.title); put("status", item.status); put("cover", item.cover); put("detailUrl", item.detailUrl) })
+            arr.put(JSONObject().apply {
+                put("title", item.title)
+                put("status", item.status)
+                put("cover", item.cover)
+                put("detailUrl", item.detailUrl)
+                put("source", item.source)
+            })
         }
-        prefs.edit().putString("library_cache", arr.toString()).apply()
+        prefs.edit().putString("library_cache_$sourceName", arr.toString()).apply()
     }
 
-    private fun loadCachedAnime(): List<AnimeItem> = runCatching {
-        val arr = JSONArray(prefs.getString("library_cache", "[]") ?: "[]")
+    private fun loadCachedAnime(sourceName: String): List<AnimeItem> = runCatching {
+        val arr = JSONArray(prefs.getString("library_cache_$sourceName", "[]") ?: "[]")
         buildList {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
-                add(AnimeItem(obj.optString("title"), obj.optString("status"), obj.optString("cover"), obj.optString("detailUrl")))
+                add(AnimeItem(obj.optString("title"), obj.optString("status"), obj.optString("cover"), obj.optString("detailUrl"), obj.optString("source").ifBlank { sourceName }))
             }
         }
     }.getOrDefault(emptyList())
@@ -624,10 +755,10 @@ class BangumiWatchActivity : AppCompatActivity() {
             .onFailure { Toast.makeText(this, "没有可用应用打开播放地址", Toast.LENGTH_SHORT).show() }
     }
 
-    private fun absUrl(url: String): String = when {
+    private fun absUrl(url: String, source: WatchSource = selectedSource): String = when {
         url.startsWith("http") -> url
-        url.startsWith("/") -> baseUrl + url
-        else -> "$baseUrl/$url"
+        url.startsWith("/") -> source.baseUrl + url
+        else -> "${source.baseUrl}/$url"
     }
 
     private fun htmlText(raw: String): String = Html.fromHtml(raw.replace(Regex("<script.*?</script>"), ""), Html.FROM_HTML_MODE_LEGACY).toString().replace(Regex("\\s+"), " ").trim()

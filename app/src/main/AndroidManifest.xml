@@ -90,6 +90,9 @@
             android:name=".ui.tools.TinyReaderActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.tools.FlashPhotoActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.video.PlayerActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize"
             android:screenOrientation="unspecified" />

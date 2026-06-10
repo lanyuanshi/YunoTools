@@ -66,6 +66,7 @@ import com.yuno.tools.ui.media.VideoTrimActivity
 import com.yuno.tools.ui.tools.AnimeSearchActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
+import com.yuno.tools.ui.tools.FlashPhotoActivity
 import com.yuno.tools.ui.tools.SubscriptionActivity
 import com.yuno.tools.ui.tools.TinyReaderActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
@@ -164,6 +165,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardTinyReader).setOnClickListener {
             startActivity(Intent(this, TinyReaderActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardFlashPhoto).setOnClickListener {
+            startActivity(Intent(this, FlashPhotoActivity::class.java))
         }
     }
 

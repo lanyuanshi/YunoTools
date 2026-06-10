@@ -91,7 +91,19 @@
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.FlashPhotoActivity"
-            android:screenOrientation="portrait" />
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter android:label="图片留存助手">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ui.video.PlayerActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize"

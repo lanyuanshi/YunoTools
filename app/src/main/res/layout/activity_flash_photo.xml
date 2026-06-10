@@ -40,7 +40,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="闪照解析"
+                    android:text="图片留存助手"
                     android:textColor="#111827"
                     android:textSize="24sp"
                     android:textStyle="bold" />
@@ -48,7 +48,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="导入你已选择的图片，留存可保存和分享的副本"
+                    android:text="导入并留存你选择的图片，可保存到相册或分享"
                     android:textColor="#8E8E93"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -89,7 +89,7 @@
                         android:layout_height="match_parent"
                         android:gravity="center"
                         android:padding="24dp"
-                        android:text="请选择一张图片或图片文件"
+                        android:text="请选择图片，或从其他应用分享图片到此"
                         android:textColor="#8E8E93"
                         android:textSize="15sp" />
                 </FrameLayout>

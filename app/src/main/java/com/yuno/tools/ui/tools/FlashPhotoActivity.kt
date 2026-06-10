@@ -36,10 +36,11 @@ class FlashPhotoActivity : AppCompatActivity() {
     private lateinit var infoText: TextView
     private lateinit var saveButton: Button
     private lateinit var shareButton: Button
+    private lateinit var pickButton: Button
 
     private var importedFile: File? = null
     private var importedMimeType: String = "image/jpeg"
-    private var importedDisplayName: String = "flash_photo.jpg"
+    private var importedDisplayName: String = "imported_image.jpg"
     private var importedSize: Long = 0L
     private var importedWidth: Int = 0
     private var importedHeight: Int = 0
@@ -63,12 +64,21 @@ class FlashPhotoActivity : AppCompatActivity() {
         infoText = findViewById(R.id.textInfo)
         saveButton = findViewById(R.id.btnSave)
         shareButton = findViewById(R.id.btnShare)
+        pickButton = findViewById(R.id.btnPick)
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<Button>(R.id.btnPick).setOnClickListener { pickImage.launch(arrayOf("image/*")) }
+        pickButton.setOnClickListener { pickImage.launch(arrayOf("image/*")) }
         saveButton.setOnClickListener { saveImportedCopyWithPermission() }
         shareButton.setOnClickListener { shareImportedCopy() }
-        refreshEmptyState()
+
+        handleIntent(intent)
+        if (importedFile == null) refreshEmptyState()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
     }
 
     override fun onResume() {
@@ -83,10 +93,10 @@ class FlashPhotoActivity : AppCompatActivity() {
 
     private fun importSelectedImage(uri: Uri) {
         try {
-            val sourceName = queryDisplayName(uri) ?: "flash_photo_${timestamp()}.jpg"
+            val sourceName = queryDisplayName(uri) ?: "imported_image_${timestamp()}.jpg"
             val mimeType = contentResolver.getType(uri) ?: mimeTypeFromName(sourceName)
             val extension = extensionFromName(sourceName, mimeType)
-            val fileName = "flash_photo_${timestamp()}.$extension"
+            val fileName = "imported_image_${timestamp()}.$extension"
             val targetDir = File(filesDir, "flash_photos").apply { mkdirs() }
             val targetFile = File(targetDir, fileName)
 
@@ -144,12 +154,12 @@ class FlashPhotoActivity : AppCompatActivity() {
     private fun saveImportedCopy() {
         val source = importedFile ?: return
         try {
-            val savedName = "YunoFlash_${timestamp()}.${extensionFromName(source.name, importedMimeType)}"
+            val savedName = "YunoImage_${timestamp()}.${extensionFromName(source.name, importedMimeType)}"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, savedName)
                     put(MediaStore.Images.Media.MIME_TYPE, importedMimeType)
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/YunoTools/FlashPhoto")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/YunoTools/ImageKeeper")
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
                 val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
@@ -162,11 +172,11 @@ class FlashPhotoActivity : AppCompatActivity() {
                 contentResolver.update(uri, values, null, null)
             } else {
                 @Suppress("DEPRECATION")
-                val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "YunoTools/FlashPhoto")
+                val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "YunoTools/ImageKeeper")
                 dir.mkdirs()
                 source.copyTo(File(dir, savedName), overwrite = true)
             }
-            Toast.makeText(this, "已保存到相册 YunoTools/FlashPhoto", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "已保存到相册 YunoTools/ImageKeeper", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(this, "保存失败：${e.message ?: "无法写入相册"}", Toast.LENGTH_SHORT).show()
         }
@@ -180,7 +190,19 @@ class FlashPhotoActivity : AppCompatActivity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "分享闪照副本"))
+        startActivity(Intent.createChooser(intent, "分享图片副本"))
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        if (intent.action != Intent.ACTION_SEND && intent.action != Intent.ACTION_SEND_MULTIPLE) return
+        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        if (uri != null) importSelectedImage(uri)
     }
 
     private fun queryDisplayName(uri: Uri): String? {

@@ -166,6 +166,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         content.addView(sectionTitle("最近搜索"))
         historyList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(historyList)
+        setContentView(root)
     }
 
     private fun doSearch() {

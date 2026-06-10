@@ -6,9 +6,9 @@
 
 # YunoTools
 
-**当前版本：v1.0.76**
+**当前版本：v1.0.77**
 
-安装包下载：[release/YunoTools-v1.0.76.apk](release/YunoTools-v1.0.76.apk)
+安装包下载：[release/YunoTools-v1.0.77.apk](release/YunoTools-v1.0.77.apk)
 
 本版本新增“看番”功能块：参考 EasyBangumi 的番剧聚合思路，提供番剧资料检索、官方平台搜索入口与最近搜索记录；默认只跳转公开/官方页面，不内置盗版播放源，不绕过会员、登录、地区限制或 DRM。
 
@@ -105,6 +105,9 @@ app/src/main/java/com/yuno/tools/
 ```
 
 ## 版本历史
+
+### v1.0.77
+- 修复“看番”页面进入后空白的问题：动态创建界面后补充绑定根视图。
 
 ### v1.0.76
 - 更多功能新增“看番”功能块，并注册独立 `BangumiWatchActivity`。

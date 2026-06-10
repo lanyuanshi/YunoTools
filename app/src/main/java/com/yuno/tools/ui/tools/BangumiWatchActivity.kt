@@ -1,19 +1,30 @@
 package com.yuno.tools.ui.tools
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
+import android.text.Html
 import android.view.Gravity
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.GridLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.yuno.tools.util.ThemeApplier
@@ -24,40 +35,70 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 class BangumiWatchActivity : AppCompatActivity() {
-    private enum class Page { HOME, SEARCH, SOURCE, SETTINGS }
-    private data class LoadedSource(
-        val key: String,
-        val label: String,
-        val url: String,
-        val versionName: String,
-        val repo: String
+    private enum class Tab { BANGUMI, MINE }
+    private enum class Screen { LIST, DETAIL, SEARCH }
+
+    private data class AnimeItem(
+        val title: String,
+        val status: String,
+        val cover: String,
+        val detailUrl: String
     )
 
+    private data class EpisodeItem(
+        val name: String,
+        val playUrl: String,
+        val source: String
+    )
+
+    private data class AnimeDetail(
+        val item: AnimeItem,
+        val intro: String,
+        val meta: String,
+        val playerPrefix: String,
+        val episodes: List<EpisodeItem>
+    )
+
+    private val libraryUrl = "https://www.animetranslation.com/library"
+    private val baseUrl = "https://www.animetranslation.com"
     private val prefs by lazy { getSharedPreferences("yuno_bangumi_watch", Context.MODE_PRIVATE) }
     private val http by lazy {
         OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(12, TimeUnit.SECONDS)
-            .callTimeout(16, TimeUnit.SECONDS)
+            .readTimeout(14, TimeUnit.SECONDS)
+            .callTimeout(18, TimeUnit.SECONDS)
             .build()
     }
+
     private lateinit var root: LinearLayout
     private lateinit var content: LinearLayout
-    private lateinit var searchInput: EditText
-    private lateinit var repoInput: EditText
-    private var page = Page.HOME
-    private var keyword = ""
-    private var loadingRepo: String? = null
+    private var tab = Tab.BANGUMI
+    private var screen = Screen.LIST
+    private var loading = false
+    private var allAnime: List<AnimeItem> = emptyList()
+    private var searchText = ""
+    private var selectedAnime: AnimeItem? = null
+    private var selectedDetail: AnimeDetail? = null
+    private var player: ExoPlayer? = null
+    private var currentEpisode: EpisodeItem? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeApplier.apply(this)
+        allAnime = loadCachedAnime()
         buildUi()
+        if (allAnime.isEmpty()) loadLibrary()
     }
 
     override fun onResume() {
         super.onResume()
         ThemeApplier.apply(this)
+    }
+
+    override fun onDestroy() {
+        player?.release()
+        player = null
+        super.onDestroy()
     }
 
     private fun buildUi() {
@@ -68,7 +109,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         val scroll = ScrollView(this).apply { isFillViewport = true }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), dp(8), dp(10), dp(84))
+            setPadding(dp(10), dp(8), dp(10), dp(82))
         }
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -83,511 +124,525 @@ class BangumiWatchActivity : AppCompatActivity() {
             root.removeViewAt(1)
             root.addView(bottomBar())
         }
-        when (page) {
-            Page.HOME -> renderHome()
-            Page.SEARCH -> renderSearch()
-            Page.SOURCE -> renderSource()
-            Page.SETTINGS -> renderSettings()
+        if (tab == Tab.MINE) {
+            renderMine()
+            return
+        }
+        when (screen) {
+            Screen.LIST -> renderList()
+            Screen.SEARCH -> renderSearch()
+            Screen.DETAIL -> renderDetail()
         }
     }
 
-    private fun renderHome() {
-        topBar("看番", "扩展源", false)
-        searchBox()
-        val repos = loadRepos()
-        val loaded = loadSources()
-        if (repos.isEmpty()) {
-            sourceEmptyState()
+    private fun renderList() {
+        topBar("首页", showSearch = true, showBack = false)
+        if (loading && allAnime.isEmpty()) {
+            emptyCard("加载中", "正在加载动漫库列表。")
             return
         }
-        repoTabs(repos)
-        if (loaded.isEmpty()) {
-            emptyCard("暂无内容", "源仓库还没有加载出可用源。去“源”页点击加载后，加载出的源会显示在这里。")
+        if (allAnime.isEmpty()) {
+            emptyCard("暂无番剧", "列表还没有加载出来。")
+            content.addView(primaryWideButton("重新加载") { loadLibrary() })
             return
         }
-        section("已加载源")
-        loaded.forEach { source -> content.addView(sourceCard(source)) }
-        emptyCard("暂无影视内容", "加载器当前只加载源仓库元数据，不执行第三方脚本、不解析播放内容。后续接入具体源组件后，这里显示番剧列表。")
+        section("最新番剧")
+        animeGrid(allAnime)
     }
 
     private fun renderSearch() {
-        topBar("搜索", "源搜索", false)
-        searchBox()
-        val repos = loadRepos()
-        val loaded = loadSources()
-        if (repos.isEmpty()) {
-            sourceEmptyState()
-            return
-        }
-        if (loaded.isEmpty()) {
-            emptyCard("暂无可搜索源", "先到“源”页加载源仓库，加载出源后再搜索。")
-            return
-        }
-        if (keyword.isBlank()) {
-            emptyCard("输入关键词", "输入番剧名后，会交给已加载源搜索。")
-        } else {
-            emptyCard("暂无搜索结果", "关键词：$keyword。当前加载器只加载源元数据，暂未执行源搜索组件。")
-        }
-    }
-
-    private fun renderSource() {
-        topBar("源", "仓库与加载器", false)
-        val repos = loadRepos()
-        if (repos.isEmpty()) {
-            sourceEmptyState()
-            return
-        }
-        section("源仓库")
-        repos.forEachIndexed { index, repo ->
-            val state = when {
-                loadingRepo == repo -> "加载中"
-                loadSources(repo).isNotEmpty() -> "已加载 ${loadSources(repo).size} 个源"
-                else -> "未加载"
-            }
-            content.addView(repoCard("源仓库 ${index + 1}", repo, state, "加载") { loadRepo(repo) })
-        }
-        val loaded = loadSources()
-        section("已加载源")
-        if (loaded.isEmpty()) {
-            emptyCard("暂无已加载源", "点击上面的“加载”会请求仓库 URL，解析 JSONL/JSON 源列表并保存到本地。")
-        } else {
-            loaded.forEach { source -> content.addView(sourceCard(source)) }
-        }
-    }
-
-    private fun renderSettings() {
-        topBar("设置", "源仓库", false)
-        section("添加源仓库")
-        content.addView(card().apply {
-            val box = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), dp(12), dp(12), dp(12))
-            }
-            repoInput = EditText(context).apply {
-                hint = "输入源仓库 URL"
-                setSingleLine(true)
-                inputType = InputType.TYPE_TEXT_VARIATION_URI
-                imeOptions = EditorInfo.IME_ACTION_DONE
-                setTextColor(Color.parseColor("#202124"))
-                setHintTextColor(Color.parseColor("#8B9099"))
-            }
-            box.addView(repoInput)
-            val actions = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.END
-                setPadding(0, dp(8), 0, 0)
-            }
-            actions.addView(smallButton("保存并加载") { saveRepoFromInput(true) })
-            actions.addView(space(dp(8), 1))
-            actions.addView(grayButton("保存") { saveRepoFromInput(false) })
-            box.addView(actions)
-            addView(box)
-        })
-        section("已添加仓库")
-        val repos = loadRepos()
-        if (repos.isEmpty()) {
-            emptyCard("暂无源仓库", "添加源仓库后，源页可以加载仓库里的扩展源列表；没有源时不展示任何作品。")
-        } else {
-            repos.forEachIndexed { index, repo ->
-                content.addView(repoCard("源仓库 ${index + 1}", repo, "已添加", "删除") { removeRepo(repo) })
-            }
-        }
-    }
-
-    private fun loadRepo(repo: String) {
-        if (loadingRepo != null) return
-        loadingRepo = repo
-        render()
-        Thread {
-            val result = runCatching {
-                val request = Request.Builder()
-                    .url(repo)
-                    .header("User-Agent", "YunoTools/1.0")
-                    .build()
-                http.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("HTTP ${response.code}")
-                    val body = response.body?.string().orEmpty()
-                    if (body.isBlank()) error("empty body")
-                    parseRepo(repo, body)
-                }
-            }
-            runOnUiThread {
-                loadingRepo = null
-                result.onSuccess { list ->
-                    saveLoadedSources(repo, list)
-                    Toast.makeText(this, "加载完成：${list.size} 个源", Toast.LENGTH_SHORT).show()
-                    render()
-                }.onFailure { err ->
-                    saveLoadedSources(repo, emptyList())
-                    Toast.makeText(this, "加载失败：${err.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
-                    render()
-                }
-            }
-        }.start()
-    }
-
-    private fun parseRepo(repo: String, body: String): List<LoadedSource> {
-        val lines = body.lineSequence().map { it.trim() }.filter { it.startsWith("{") }.toList()
-        val fromJsonl = lines.mapNotNull { parseSourceObject(repo, runCatching { JSONObject(it) }.getOrNull()) }
-        if (fromJsonl.isNotEmpty()) return fromJsonl.distinctBy { it.key.ifBlank { it.url } }
-
-        val trimmed = body.trim()
-        if (trimmed.startsWith("[")) {
-            val arr = JSONArray(trimmed)
-            return buildList {
-                for (i in 0 until arr.length()) {
-                    parseSourceObject(repo, arr.optJSONObject(i))?.let { add(it) }
-                }
-            }.distinctBy { it.key.ifBlank { it.url } }
-        }
-        if (trimmed.startsWith("{")) {
-            val obj = JSONObject(trimmed)
-            val arrays = listOf("sources", "extensions", "items", "data", "list", "repo")
-            for (name in arrays) {
-                val arr = obj.optJSONArray(name) ?: continue
-                val parsed = buildList {
-                    for (i in 0 until arr.length()) {
-                        parseSourceObject(repo, arr.optJSONObject(i))?.let { add(it) }
-                    }
-                }
-                if (parsed.isNotEmpty()) return parsed.distinctBy { it.key.ifBlank { it.url } }
-            }
-            parseSourceObject(repo, obj)?.let { return listOf(it) }
-        }
-        return emptyList()
-    }
-
-    private fun parseSourceObject(repo: String, obj: JSONObject?): LoadedSource? {
-        obj ?: return null
-        val url = firstString(obj, "url", "downloadUrl", "download_url", "file", "src", "path")
-        val key = firstString(obj, "key", "id", "pkg", "package", "name").ifBlank { url.substringAfterLast('/').ifBlank { url } }
-        val label = firstString(obj, "label", "title", "name", "sourceName").ifBlank { key }
-        val version = firstString(obj, "versionName", "version", "ver").ifBlank {
-            val code = obj.optInt("versionCode", -1)
-            if (code > -1) code.toString() else ""
-        }
-        if (key.isBlank() && url.isBlank() && label.isBlank()) return null
-        return LoadedSource(key = key, label = label, url = url, versionName = version, repo = repo)
-    }
-
-    private fun firstString(obj: JSONObject, vararg names: String): String {
-        for (name in names) {
-            val value = obj.optString(name, "").trim()
-            if (value.isNotBlank() && value != "null") return value
-        }
-        return ""
-    }
-
-    private fun topBar(title: String, sub: String, back: Boolean) {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, dp(10))
-        }
-        row.addView(TextView(this).apply {
-            text = "‹"
-            textSize = 34f
-            gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#202124"))
-            setOnClickListener { if (back) { page = Page.HOME; render() } else finish() }
-            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
-        })
-        row.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(context).apply {
-                text = title
-                textSize = 24f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#202124"))
-                maxLines = 1
-            })
-            addView(TextView(context).apply {
-                text = sub
-                textSize = 12f
-                setTextColor(Color.parseColor("#7A7F89"))
-                maxLines = 1
-            })
-        })
-        row.addView(TextView(this).apply {
-            text = if (loadSources().isEmpty()) "无源" else "${loadSources().size} 源"
-            textSize = 12f
-            setTextColor(Color.parseColor("#4F6EF7"))
-            setPadding(dp(10), dp(6), dp(10), dp(6))
-        })
-        content.addView(row)
-    }
-
-    private fun searchBox() {
-        val wrap = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(8), dp(10), dp(8))
-            setBackgroundColor(Color.parseColor("#F0F2F6"))
-        }
-        searchInput = EditText(this).apply {
+        topBar("搜索", showSearch = false, showBack = true)
+        val input = EditText(this).apply {
             hint = "搜索番剧"
-            setText(keyword)
+            setText(searchText)
             setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setTextColor(Color.parseColor("#202124"))
             setHintTextColor(Color.parseColor("#8B9099"))
-            setBackgroundColor(Color.TRANSPARENT)
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                    doSearch()
+                    searchText = text?.toString()?.trim().orEmpty()
+                    render()
                     true
                 } else false
             }
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        wrap.addView(searchInput)
-        wrap.addView(smallButton("搜索") { doSearch() })
-        content.addView(wrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, dp(8)) })
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setBackgroundColor(Color.parseColor("#F0F2F6"))
+            addView(input, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(primaryButton("搜索") {
+                searchText = input.text?.toString()?.trim().orEmpty()
+                render()
+            })
+        }
+        content.addView(box, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, dp(10)) })
+        val result = if (searchText.isBlank()) emptyList() else allAnime.filter { it.title.contains(searchText, true) || it.status.contains(searchText, true) }
+        if (searchText.isBlank()) {
+            emptyCard("输入关键词", "右上角搜索会在已加载的番剧列表里筛选。")
+        } else if (result.isEmpty()) {
+            emptyCard("没有结果", "没有找到“$searchText”。")
+        } else {
+            section("搜索结果")
+            animeGrid(result)
+        }
     }
 
-    private fun repoTabs(repos: List<String>) {
+    private fun renderDetail() {
+        val item = selectedAnime ?: returnToList()
+        topBar(item.title, showSearch = false, showBack = true)
+        val detail = selectedDetail
+        if (detail == null) {
+            content.addView(detailHeader(item, null, "正在加载详情..."))
+            if (!loading) loadDetail(item)
+            return
+        }
+        content.addView(detailHeader(detail.item, detail.meta, detail.intro))
+        section("播放")
+        content.addView(playerBox(detail))
+        section("剧集")
+        if (detail.episodes.isEmpty()) {
+            emptyCard("暂无剧集", "没有解析到剧集列表。")
+        } else {
+            episodeGrid(detail)
+        }
+    }
+
+    private fun renderMine() {
+        topBar("我的", showSearch = false, showBack = false)
+        section("历史记录")
+        val history = loadRecordList("history")
+        if (history.isEmpty()) emptyCard("暂无历史", "播放过的剧集会显示在这里。") else history.forEach { record ->
+            content.addView(recordCard(record, "继续") { openUrl(record.optString("url")) })
+        }
+        section("下载记录")
+        val downloads = loadRecordList("downloads")
+        if (downloads.isEmpty()) emptyCard("暂无下载", "在播放页点下载后会记录到这里。") else downloads.forEach { record ->
+            content.addView(recordCard(record, "打开") { openUrl(record.optString("url")) })
+        }
+        section("设置")
+        content.addView(settingCard("刷新番剧列表", "重新从动漫库加载番剧列表") { loadLibrary() })
+        content.addView(settingCard("清空历史记录", "删除本地播放历史") { clearRecords("history") })
+        content.addView(settingCard("清空下载记录", "删除本地下载记录") { clearRecords("downloads") })
+    }
+
+    private fun loadLibrary() {
+        if (loading) return
+        loading = true
+        render()
+        Thread {
+            val result = runCatching {
+                val html = fetch(libraryUrl)
+                parseLibrary(html)
+            }
+            runOnUiThread {
+                loading = false
+                result.onSuccess { list ->
+                    allAnime = list
+                    saveCachedAnime(list)
+                    Toast.makeText(this, "已加载 ${list.size} 部番剧", Toast.LENGTH_SHORT).show()
+                }.onFailure { err ->
+                    Toast.makeText(this, "加载失败：${err.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                }
+                render()
+            }
+        }.start()
+    }
+
+    private fun loadDetail(item: AnimeItem) {
+        if (loading) return
+        loading = true
+        Thread {
+            val result = runCatching {
+                val html = fetch(absUrl(item.detailUrl))
+                parseDetail(item, html)
+            }
+            runOnUiThread {
+                loading = false
+                result.onSuccess { detail -> selectedDetail = detail }
+                    .onFailure { err -> Toast.makeText(this, "详情加载失败：${err.message ?: "未知错误"}", Toast.LENGTH_LONG).show() }
+                render()
+            }
+        }.start()
+    }
+
+    private fun fetch(url: String): String {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+            .header("Referer", baseUrl)
+            .build()
+        return http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) error("HTTP ${response.code}")
+            response.body?.string().orEmpty().ifBlank { error("empty body") }
+        }
+    }
+
+    private fun parseLibrary(html: String): List<AnimeItem> {
+        val itemRegex = Regex("""<div class=\"anime-item\">(.*?)</div>\s*</div>""", RegexOption.DOT_MATCHES_ALL)
+        val hrefRegex = Regex("""<a href=\"([^\"]+)\" class=\"anime-card\">""")
+        val imgRegex = Regex("""<img src=\"([^\"]+)\" alt=\"([^\"]*)\"""")
+        val statusRegex = Regex("""<div class=\"status-badge\">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        return itemRegex.findAll(html).mapNotNull { match ->
+            val block = match.value
+            val href = hrefRegex.find(block)?.groupValues?.getOrNull(1).orEmpty()
+            val img = imgRegex.find(block)
+            val cover = img?.groupValues?.getOrNull(1).orEmpty()
+            val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty())
+            val status = htmlText(statusRegex.find(block)?.groupValues?.getOrNull(1).orEmpty())
+            if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href)
+        }.distinctBy { it.detailUrl }.toList()
+    }
+
+    private fun parseDetail(item: AnimeItem, html: String): AnimeDetail {
+        val intro = htmlText(Regex("""<div class=\"description\">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
+            .ifBlank { "暂无简介" }
+        val year = htmlText(Regex("""<strong>年份:</strong>\s*<span>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
+        val area = htmlText(Regex("""<strong>地区:</strong>\s*<span>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
+        val type = htmlText(Regex("""<strong>类型:</strong>\s*<span>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
+        val meta = listOf(year, area, type).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { item.status }
+        val prefix = htmlAttr(Regex("""data-player-url=\"([^\"]*)\"""").find(html)?.groupValues?.getOrNull(1).orEmpty())
+        val episodes = parseEpisodes(html, prefix)
+        return AnimeDetail(item, intro, meta, prefix, episodes)
+    }
+
+    private fun parseEpisodes(html: String, prefix: String): List<EpisodeItem> {
+        val sourceRegex = Regex("""<div class=\"source-tab[^\"]*\"[^>]*data-source=\"([^\"]+)\"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        val sourceName = sourceRegex.find(html)?.groupValues?.getOrNull(2)?.let { htmlText(it).replace(Regex("\\s+"), " ").trim() }.orEmpty().ifBlank { "播放源" }
+        val episodeRegex = Regex("""<a[^>]+class=\"episode-link[^\"]*\"[^>]*(?:data-url=\"([^\"]*)\")?[^>]*href=\"([^\"]*)\"[^>]*>(.*?)</a>|<a[^>]+href=\"([^\"]*)\"[^>]*(?:data-url=\"([^\"]*)\")?[^>]*class=\"episode-link[^\"]*\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val found = episodeRegex.findAll(html).mapNotNull { m ->
+            val dataUrl = (m.groups[1]?.value ?: m.groups[5]?.value).orEmpty()
+            val href = (m.groups[2]?.value ?: m.groups[4]?.value).orEmpty()
+            val name = htmlText((m.groups[3]?.value ?: m.groups[6]?.value).orEmpty()).ifBlank { "播放" }
+            val raw = dataUrl.ifBlank { href }
+            val play = when {
+                raw.startsWith("http") -> raw
+                prefix.isNotBlank() && raw.isNotBlank() -> prefix + raw
+                raw.isNotBlank() -> absUrl(raw)
+                else -> ""
+            }
+            if (play.isBlank()) null else EpisodeItem(name, play, sourceName)
+        }.toList()
+        if (found.isNotEmpty()) return found.distinctBy { it.playUrl }
+        val urlRegex = Regex("""data-url=\"([^\"]+)\"[^>]*>(.*?)</""", RegexOption.DOT_MATCHES_ALL)
+        return urlRegex.findAll(html).map { m ->
+            val url = htmlAttr(m.groupValues[1])
+            val name = htmlText(m.groupValues[2]).ifBlank { "播放" }
+            EpisodeItem(name, if (prefix.isNotBlank()) prefix + url else url, sourceName)
+        }.distinctBy { it.playUrl }.toList()
+    }
+
+    private fun animeGrid(list: List<AnimeItem>) {
+        val grid = GridLayout(this).apply { columnCount = 3 }
+        list.forEach { item -> grid.addView(animeCard(item)) }
+        content.addView(grid)
+    }
+
+    private fun animeCard(item: AnimeItem): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(8))
+        }
+        val coverFrame = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150))
+        }
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(Color.parseColor("#EDEFF5"))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        Glide.with(this).load(item.cover).centerCrop().into(image)
+        coverFrame.addView(image)
+        if (item.status.isNotBlank()) {
+            coverFrame.addView(TextView(this).apply {
+                text = item.status
+                textSize = 10f
+                setTextColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor("#CC4F6EF7"))
+                setPadding(dp(5), dp(2), dp(5), dp(2))
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START)
+            })
+        }
+        box.addView(coverFrame)
+        box.addView(TextView(this).apply {
+            text = item.title
+            textSize = 12f
+            setTextColor(Color.parseColor("#202124"))
+            maxLines = 2
+            setPadding(0, dp(5), 0, 0)
+        })
+        box.setOnClickListener {
+            selectedAnime = item
+            selectedDetail = null
+            screen = Screen.DETAIL
+            addHistory(item, null)
+            render()
+        }
+        return box.apply {
+            layoutParams = GridLayout.LayoutParams().apply {
+                width = 0
+                height = GridLayout.LayoutParams.WRAP_CONTENT
+                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            }
+        }
+    }
+
+    private fun detailHeader(item: AnimeItem, meta: String?, intro: String) = card().apply {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        }
+        val image = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(Color.parseColor("#EDEFF5"))
+            layoutParams = LinearLayout.LayoutParams(dp(104), dp(148))
+        }
+        Glide.with(this@BangumiWatchActivity).load(item.cover).centerCrop().into(image)
+        row.addView(image)
+        row.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            addView(TextView(context).apply { text = item.title; textSize = 18f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")); maxLines = 2 })
+            addView(TextView(context).apply { text = meta ?: item.status; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(8)) })
+            addView(TextView(context).apply { text = intro; textSize = 12f; setTextColor(Color.parseColor("#4D5562")); maxLines = 5 })
+        })
+        addView(row)
+    }
+
+    private fun playerBox(detail: AnimeDetail) = card().apply {
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+        }
+        box.addView(TextView(context).apply { text = "内置播放器"; textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")) })
+        val active = currentEpisode
+        if (active == null) {
+            box.addView(TextView(context).apply { text = "选择下方剧集后在这里播放。"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(10)) })
+        } else {
+            box.addView(TextView(context).apply { text = "${active.source} · ${active.name}"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(10)) })
+            val playerView = PlayerView(context).apply {
+                useController = true
+                player = ensurePlayer()
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210))
+            }
+            box.addView(playerView)
+            val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(10), 0, 0) }
+            actions.addView(primaryButton("外部打开") { openUrl(active.playUrl) })
+            actions.addView(View(this@BangumiWatchActivity).apply { layoutParams = LinearLayout.LayoutParams(dp(8), 1) })
+            actions.addView(primaryButton("下载记录") { addDownload(detail.item, active) })
+            box.addView(actions)
+        }
+        addView(box)
+    }
+
+    private fun episodeGrid(detail: AnimeDetail) {
         val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        repos.forEachIndexed { index, repo ->
-            val count = loadSources(repo).size
-            row.addView(TextView(this).apply {
-                text = if (count > 0) "源仓库 ${index + 1} · $count" else "源仓库 ${index + 1}"
+        detail.episodes.take(80).forEach { ep ->
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(8), dp(7), dp(8), dp(7))
+                setBackgroundColor(Color.parseColor(if (currentEpisode?.playUrl == ep.playUrl) "#DCE4FF" else "#EEF1F6"))
+                layoutParams = LinearLayout.LayoutParams(dp(104), LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), dp(8)) }
+                setOnClickListener { playEpisode(detail.item, ep) }
+            }
+            cell.addView(TextView(this).apply {
+                text = ep.name
                 textSize = 13f
-                typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                setTextColor(Color.parseColor(if (index == 0) "#FFFFFF" else "#2B2F36"))
-                setBackgroundColor(Color.parseColor(if (index == 0) "#4F6EF7" else "#EEF1F6"))
-                setPadding(dp(12), dp(7), dp(12), dp(7))
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, dp(4), dp(8), dp(8)) }
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#202124"))
+                maxLines = 1
             })
+            cell.addView(TextView(this).apply {
+                text = "下载记录"
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#4F6EF7"))
+                setPadding(0, dp(5), 0, 0)
+                setOnClickListener { addDownload(detail.item, ep) }
+            })
+            row.addView(cell)
         }
         scroll.addView(row)
         content.addView(scroll)
     }
 
-    private fun sourceEmptyState() {
-        emptyCard("暂无源", "还没有添加源仓库。")
-        content.addView(smallWideButton("去设置添加源仓库") {
-            page = Page.SETTINGS
-            render()
-        })
+    private fun playEpisode(item: AnimeItem, ep: EpisodeItem) {
+        addHistory(item, ep)
+        currentEpisode = ep
+        ensurePlayer().apply {
+            setMediaItem(MediaItem.fromUri(ep.playUrl))
+            prepare()
+            playWhenReady = true
+        }
+        Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
+        render()
     }
 
-    private fun repoCard(title: String, url: String, state: String, actionText: String, action: () -> Unit) = card().apply {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        row.addView(TextView(context).apply {
-            text = "仓"
-            textSize = 14f
-            gravity = Gravity.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#4F6EF7"))
-            layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
-        })
-        row.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, dp(8), 0)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(context).apply {
-                text = "$title · $state"
-                textSize = 15f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#202124"))
-            })
-            addView(TextView(context).apply {
-                text = url
-                textSize = 12f
-                setTextColor(Color.parseColor("#7A7F89"))
-                maxLines = 2
-            })
-        })
-        row.addView(grayButton(actionText, action))
-        addView(row)
+    private fun ensurePlayer(): ExoPlayer {
+        val existing = player
+        if (existing != null) return existing
+        return ExoPlayer.Builder(this).build().also { player = it }
     }
 
-    private fun sourceCard(source: LoadedSource) = card().apply {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        row.addView(TextView(context).apply {
-            text = source.label.take(1).ifBlank { "源" }
-            textSize = 16f
+    private fun topBar(title: String, showSearch: Boolean, showBack: Boolean) {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, 0, 0, dp(10)) }
+        row.addView(TextView(this).apply {
+            text = if (showBack) "‹" else ""
+            textSize = 34f
             gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#202124"))
+            setOnClickListener { if (showBack) { screen = Screen.LIST; render() } }
+            layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+        })
+        row.addView(TextView(this).apply {
+            text = title
+            textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#607D8B"))
-            layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
-        })
-        row.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, 0, 0)
+            setTextColor(Color.parseColor("#202124"))
+            maxLines = 1
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(context).apply {
-                text = source.label
-                textSize = 15f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#202124"))
-                maxLines = 1
-            })
-            addView(TextView(context).apply {
-                text = listOf(source.key, source.versionName.ifBlank { null }).filterNotNull().joinToString(" · ")
-                textSize = 12f
-                setTextColor(Color.parseColor("#7A7F89"))
-                maxLines = 1
-            })
-            if (source.url.isNotBlank()) {
-                addView(TextView(context).apply {
-                    text = source.url
-                    textSize = 11f
-                    setTextColor(Color.parseColor("#9AA0AA"))
-                    maxLines = 1
-                })
-            }
         })
-        addView(row)
+        if (showSearch) {
+            row.addView(TextView(this).apply {
+                text = "搜索"
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#4F6EF7"))
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setOnClickListener { screen = Screen.SEARCH; render() }
+            })
+        }
+        content.addView(row)
     }
 
     private fun bottomBar(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         setBackgroundColor(Color.WHITE)
-        listOf(Page.HOME to "首页", Page.SEARCH to "搜索", Page.SOURCE to "源", Page.SETTINGS to "设置").forEach { (target, label) ->
+        listOf(Tab.BANGUMI to "番剧", Tab.MINE to "我的").forEach { (target, label) ->
             addView(TextView(context).apply {
                 text = label
-                textSize = 13f
+                textSize = 14f
                 gravity = Gravity.CENTER
-                typeface = if (page == target) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                setTextColor(Color.parseColor(if (page == target) "#4F6EF7" else "#6D737D"))
-                setOnClickListener { page = target; render() }
+                typeface = if (tab == target) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setTextColor(Color.parseColor(if (tab == target) "#4F6EF7" else "#6D737D"))
+                setOnClickListener {
+                    tab = target
+                    screen = Screen.LIST
+                    render()
+                }
             }, LinearLayout.LayoutParams(0, dp(56), 1f))
         }
     }
 
-    private fun doSearch() {
-        keyword = searchInput.text?.toString()?.trim().orEmpty()
-        if (keyword.isBlank()) {
-            Toast.makeText(this, "请输入番剧名", Toast.LENGTH_SHORT).show()
-            return
-        }
-        page = Page.SEARCH
+    private fun settingCard(title: String, sub: String, action: () -> Unit) = card().apply {
+        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)) }
+        row.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            addView(TextView(context).apply { text = title; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")) })
+            addView(TextView(context).apply { text = sub; textSize = 12f; setTextColor(Color.parseColor("#7A7F89")) })
+        })
+        row.addView(primaryButton("执行", action))
+        addView(row)
+    }
+
+    private fun recordCard(obj: JSONObject, actionText: String, action: () -> Unit) = card().apply {
+        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)) }
+        row.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            addView(TextView(context).apply { text = obj.optString("title"); textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")); maxLines = 1 })
+            addView(TextView(context).apply { text = obj.optString("sub"); textSize = 12f; setTextColor(Color.parseColor("#7A7F89")); maxLines = 1 })
+        })
+        row.addView(primaryButton(actionText, action))
+        addView(row)
+    }
+
+    private fun addHistory(item: AnimeItem, ep: EpisodeItem?) {
+        val sub = ep?.let { "${it.source} · ${it.name}" } ?: item.status
+        val url = ep?.playUrl ?: absUrl(item.detailUrl)
+        addRecord("history", item.title, sub, url)
+    }
+
+    private fun addDownload(item: AnimeItem, ep: EpisodeItem) {
+        addRecord("downloads", item.title, "${ep.source} · ${ep.name}", ep.playUrl)
+        Toast.makeText(this, "已加入下载记录", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun addRecord(key: String, title: String, sub: String, url: String) {
+        val arr = JSONArray()
+        arr.put(JSONObject().apply { put("title", title); put("sub", sub); put("url", url) })
+        loadRecordList(key).filterNot { it.optString("url") == url }.take(29).forEach { arr.put(it) }
+        prefs.edit().putString(key, arr.toString()).apply()
+    }
+
+    private fun loadRecordList(key: String): List<JSONObject> = runCatching {
+        val arr = JSONArray(prefs.getString(key, "[]") ?: "[]")
+        buildList { for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { add(it) } }
+    }.getOrDefault(emptyList())
+
+    private fun clearRecords(key: String) {
+        prefs.edit().putString(key, "[]").apply()
+        Toast.makeText(this, "已清空", Toast.LENGTH_SHORT).show()
         render()
     }
 
-    private fun saveRepoFromInput(loadNow: Boolean) {
-        val url = repoInput.text?.toString()?.trim().orEmpty()
-        if (url.isBlank()) {
-            Toast.makeText(this, "请输入源仓库 URL", Toast.LENGTH_SHORT).show()
-            return
+    private fun saveCachedAnime(list: List<AnimeItem>) {
+        val arr = JSONArray()
+        list.forEach { item ->
+            arr.put(JSONObject().apply { put("title", item.title); put("status", item.status); put("cover", item.cover); put("detailUrl", item.detailUrl) })
         }
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            Toast.makeText(this, "源仓库需要以 http:// 或 https:// 开头", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val next = (loadRepos() + url).distinct()
-        prefs.edit().putString("repos", JSONArray(next).toString()).apply()
-        repoInput.setText("")
-        Toast.makeText(this, if (loadNow) "已保存，开始加载" else "已保存源仓库", Toast.LENGTH_SHORT).show()
-        if (loadNow) {
-            page = Page.SOURCE
-            loadRepo(url)
-        } else {
-            render()
-        }
+        prefs.edit().putString("library_cache", arr.toString()).apply()
     }
 
-    private fun removeRepo(url: String) {
-        val next = loadRepos().filterNot { it == url }
-        val sources = loadSources().filterNot { it.repo == url }
-        prefs.edit()
-            .putString("repos", JSONArray(next).toString())
-            .putString("loaded_sources", sourcesToJson(sources).toString())
-            .apply()
-        Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun loadRepos(): List<String> = jsonArray("repos")
-
-    private fun loadSources(repo: String? = null): List<LoadedSource> = runCatching {
-        val arr = JSONArray(prefs.getString("loaded_sources", "[]") ?: "[]")
+    private fun loadCachedAnime(): List<AnimeItem> = runCatching {
+        val arr = JSONArray(prefs.getString("library_cache", "[]") ?: "[]")
         buildList {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
-                val item = LoadedSource(
-                    key = obj.optString("key"),
-                    label = obj.optString("label"),
-                    url = obj.optString("url"),
-                    versionName = obj.optString("versionName"),
-                    repo = obj.optString("repo")
-                )
-                if (repo == null || item.repo == repo) add(item)
+                add(AnimeItem(obj.optString("title"), obj.optString("status"), obj.optString("cover"), obj.optString("detailUrl")))
             }
         }
     }.getOrDefault(emptyList())
 
-    private fun saveLoadedSources(repo: String, list: List<LoadedSource>) {
-        val merged = loadSources().filterNot { it.repo == repo } + list
-        prefs.edit().putString("loaded_sources", sourcesToJson(merged).toString()).apply()
+    private fun returnToList(): Nothing {
+        screen = Screen.LIST
+        render()
+        throw IllegalStateException("return")
     }
 
-    private fun sourcesToJson(list: List<LoadedSource>): JSONArray {
-        val arr = JSONArray()
-        list.forEach { source ->
-            arr.put(JSONObject().apply {
-                put("key", source.key)
-                put("label", source.label)
-                put("url", source.url)
-                put("versionName", source.versionName)
-                put("repo", source.repo)
-            })
-        }
-        return arr
+    private fun openUrl(url: String) {
+        if (url.isBlank()) return
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { Toast.makeText(this, "没有可用应用打开播放地址", Toast.LENGTH_SHORT).show() }
     }
 
-    private fun jsonArray(key: String): List<String> = runCatching {
-        val arr = JSONArray(prefs.getString(key, "[]") ?: "[]")
-        buildList { for (i in 0 until arr.length()) add(arr.optString(i)) }.filter { it.isNotBlank() }
-    }.getOrDefault(emptyList())
+    private fun absUrl(url: String): String = when {
+        url.startsWith("http") -> url
+        url.startsWith("/") -> baseUrl + url
+        else -> "$baseUrl/$url"
+    }
+
+    private fun htmlText(raw: String): String = Html.fromHtml(raw.replace(Regex("<script.*?</script>"), ""), Html.FROM_HTML_MODE_LEGACY).toString().replace(Regex("\\s+"), " ").trim()
+    private fun htmlAttr(raw: String): String = Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString().trim()
 
     private fun emptyCard(title: String, msg: String) = content.addView(card().apply {
-        val box = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(36), dp(20), dp(36))
-        }
-        box.addView(TextView(context).apply {
-            text = title
-            textSize = 18f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#202124"))
-            gravity = Gravity.CENTER
-        })
-        box.addView(TextView(context).apply {
-            text = msg
-            textSize = 13f
-            setTextColor(Color.parseColor("#7A7F89"))
-            setPadding(0, dp(8), 0, 0)
-            gravity = Gravity.CENTER
-        })
+        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(20), dp(34), dp(20), dp(34)) }
+        box.addView(TextView(context).apply { text = title; textSize = 18f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")); gravity = Gravity.CENTER })
+        box.addView(TextView(context).apply { text = msg; textSize = 13f; setTextColor(Color.parseColor("#7A7F89")); setPadding(0, dp(8), 0, 0); gravity = Gravity.CENTER })
         addView(box)
     })
 
-    private fun section(text: String) = content.addView(TextView(this).apply {
-        this.text = text
-        textSize = 17f
-        typeface = Typeface.DEFAULT_BOLD
-        setTextColor(Color.parseColor("#202124"))
-        setPadding(dp(2), dp(12), 0, dp(6))
-    })
+    private fun section(text: String) = content.addView(TextView(this).apply { this.text = text; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")); setPadding(dp(2), dp(12), 0, dp(6)) })
 
-    private fun smallButton(text: String, action: () -> Unit) = MaterialButton(this).apply {
+    private fun primaryButton(text: String, action: () -> Unit) = MaterialButton(this).apply {
         this.text = text
         isAllCaps = false
         textSize = 12f
@@ -600,31 +655,8 @@ class BangumiWatchActivity : AppCompatActivity() {
         setOnClickListener { action() }
     }
 
-    private fun grayButton(text: String, action: () -> Unit) = MaterialButton(this).apply {
-        this.text = text
-        isAllCaps = false
-        textSize = 12f
-        minHeight = 0
-        minimumHeight = 0
-        minWidth = 0
-        setPadding(dp(10), dp(4), dp(10), dp(4))
-        setTextColor(Color.parseColor("#40454F"))
-        setBackgroundColor(Color.parseColor("#EEF1F6"))
-        setOnClickListener { action() }
-    }
-
-    private fun smallWideButton(text: String, action: () -> Unit) = MaterialButton(this).apply {
-        this.text = text
-        isAllCaps = false
-        textSize = 14f
-        setTextColor(Color.WHITE)
-        setBackgroundColor(Color.parseColor("#4F6EF7"))
-        setOnClickListener { action() }
+    private fun primaryWideButton(text: String, action: () -> Unit) = primaryButton(text, action).apply {
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, dp(8), 0, dp(8)) }
-    }
-
-    private fun space(width: Int, height: Int) = TextView(this).apply {
-        layoutParams = LinearLayout.LayoutParams(width, height)
     }
 
     private fun card() = MaterialCardView(this).apply {

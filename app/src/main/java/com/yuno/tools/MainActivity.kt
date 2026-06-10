@@ -39,8 +39,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
@@ -69,6 +67,7 @@ import com.yuno.tools.ui.tools.ClockActivity
 import com.yuno.tools.ui.tools.FlashPhotoActivity
 import com.yuno.tools.ui.tools.SubscriptionActivity
 import com.yuno.tools.ui.tools.TinyReaderActivity
+import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
 import com.yuno.tools.util.ThemeApplier
@@ -178,7 +177,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ParseHistoryActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardMusicDownloads).setOnClickListener {
-            showMusicDownloadsDialog()
+            startActivity(Intent(this, MusicDownloadsActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -978,23 +977,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun safeFileName(name: String): String {
         return name.replace(Regex("[\\\\/:*?\"<>|\\r\\n]+"), "_").trim().take(60).ifBlank { "online_music" }
-    }
-
-    private fun showMusicDownloadsDialog() {
-        val downloads = loadMusicRecords(MUSIC_DOWNLOADS_KEY)
-        val message = if (downloads.isEmpty()) {
-            "暂无下载歌曲。请在音乐面板的在线音乐结果中点击“下载”。\n\n保存目录：${File(getExternalFilesDir(null), "Music").absolutePath}"
-        } else {
-            downloads.joinToString("\n\n") { r ->
-                val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(r.savedAt))
-                "${r.title}\n${r.sourceLabel} · ${r.artist}\n$time\n${r.localPath}"
-            }
-        }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("下载内容")
-            .setMessage(message)
-            .setPositiveButton("知道了", null)
-            .show()
     }
 
     private fun updateMusicNavState(isPlaying: Boolean) {

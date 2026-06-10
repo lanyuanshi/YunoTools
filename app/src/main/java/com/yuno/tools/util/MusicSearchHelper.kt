@@ -1,14 +1,21 @@
 package com.yuno.tools.util
 
 import android.net.Uri
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 object MusicSearchHelper {
     enum class OnlineSource(val label: String) {
         GEQUGOU("歌曲狗"),
-        GEQUHAI("歌曲海")
+        GEQUHAI("歌曲海"),
+        INTERNET_ARCHIVE("Internet Archive")
     }
 
     data class OnlineSong(
@@ -21,8 +28,34 @@ object MusicSearchHelper {
 
     fun searchOnline(keyword: String, callback: (List<OnlineSong>) -> Unit) {
         Thread {
-            val songs = (searchGequgou(keyword) + searchGequhai(keyword))
+            val trimmed = keyword.trim()
+            if (trimmed.isBlank()) {
+                callback(emptyList())
+                return@Thread
+            }
+            val executor = Executors.newFixedThreadPool(3)
+            val latch = CountDownLatch(3)
+            val allSongs = Collections.synchronizedList(mutableListOf<OnlineSong>())
+            val jobs = listOf<() -> List<OnlineSong>>(
+                { searchGequgou(trimmed) },
+                { searchGequhai(trimmed) },
+                { searchInternetArchive(trimmed) }
+            )
+            jobs.forEach { job ->
+                executor.execute {
+                    try {
+                        allSongs += job()
+                    } catch (_: Exception) {
+                    } finally {
+                        latch.countDown()
+                    }
+                }
+            }
+            latch.await(8, TimeUnit.SECONDS)
+            executor.shutdownNow()
+            val songs = allSongs
                 .distinctBy { it.source.name + "|" + it.pageUrl + "|" + it.title }
+                .sortedWith(compareByDescending<OnlineSong> { !it.playUrl.isNullOrBlank() }.thenBy { it.source.ordinal })
             callback(songs)
         }.start()
     }
@@ -33,12 +66,12 @@ object MusicSearchHelper {
             val raw = requestText("https://www.gequgou.com/search?ac=$encoded", "https://www.gequgou.com/", "text/html,application/xhtml+xml,*/*")
             Regex("""href=["'](/music/[^"']+?\.html)["'][^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .findAll(raw)
+                .take(8)
                 .mapNotNull { match ->
                     val pageUrl = normalizeUrl(match.groupValues[1], "https://www.gequgou.com")
                     val fallbackTitle = cleanTitle(cleanHtml(match.groupValues[2]))
                     parseGequgouDetail(pageUrl, fallbackTitle)
                 }
-                .take(24)
                 .toList()
         } catch (_: Exception) {
             emptyList()
@@ -66,12 +99,12 @@ object MusicSearchHelper {
             val raw = requestText("https://www.gequhai.com/s/$encoded", "https://www.gequhai.com/", "text/html,application/xhtml+xml,*/*")
             Regex("""href=["'](/play/\d+)["'][^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .findAll(raw)
+                .take(8)
                 .mapNotNull { match ->
                     val pageUrl = normalizeUrl(match.groupValues[1], "https://www.gequhai.com")
                     val fallbackTitle = cleanTitle(cleanHtml(match.groupValues[2]))
                     parseGequhaiDetail(pageUrl, fallbackTitle)
                 }
-                .take(24)
                 .toList()
         } catch (_: Exception) {
             emptyList()
@@ -94,13 +127,58 @@ object MusicSearchHelper {
         }
     }
 
+    private fun searchInternetArchive(keyword: String): List<OnlineSong> {
+        return try {
+            val query = URLEncoder.encode("(title:$keyword OR creator:$keyword) AND mediatype:audio", "UTF-8")
+            val url = "https://archive.org/advancedsearch.php?q=$query&fl[]=identifier&fl[]=title&fl[]=creator&rows=8&page=1&output=json"
+            val raw = requestText(url, "https://archive.org/", "application/json,*/*")
+            val docs = JSONObject(raw).getJSONObject("response").getJSONArray("docs")
+            buildList {
+                for (i in 0 until docs.length()) {
+                    val doc = docs.getJSONObject(i)
+                    val identifier = doc.optString("identifier")
+                    if (identifier.isBlank()) continue
+                    val title = cleanTitle(doc.optString("title", identifier))
+                    val creator = cleanTitle(jsonValueToText(doc.opt("creator"))).ifBlank { "公开音频" }
+                    val playUrl = findArchiveAudioUrl(identifier)
+                    if (!playUrl.isNullOrBlank()) {
+                        add(OnlineSong(title, creator, OnlineSource.INTERNET_ARCHIVE, "https://archive.org/details/$identifier", playUrl))
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun findArchiveAudioUrl(identifier: String): String? {
+        return try {
+            val raw = requestText("https://archive.org/metadata/$identifier", "https://archive.org/", "application/json,*/*")
+            val files = JSONObject(raw).getJSONArray("files")
+            for (i in 0 until files.length()) {
+                val file = files.getJSONObject(i)
+                val name = file.optString("name")
+                val format = file.optString("format")
+                if (Regex("""\.(mp3|m4a|aac|wav)$""", RegexOption.IGNORE_CASE).containsMatchIn(name) ||
+                    format.contains("MP3", ignoreCase = true) || format.contains("VBR", ignoreCase = true)
+                ) {
+                    val encodedName = name.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+                    return "https://archive.org/download/$identifier/$encodedName"
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun requestText(urlStr: String, referer: String, accept: String): String {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
         conn.setRequestProperty("Referer", referer)
         conn.setRequestProperty("Accept", accept)
-        conn.connectTimeout = 10000
-        conn.readTimeout = 10000
+        conn.connectTimeout = 4500
+        conn.readTimeout = 4500
         return try {
             conn.inputStream.bufferedReader().readText()
         } finally {
@@ -178,6 +256,14 @@ object MusicSearchHelper {
             .replace("&#34;", "\"")
             .replace("&#39;", "'")
             .trim()
+    }
+
+    private fun jsonValueToText(value: Any?): String {
+        return when (value) {
+            null -> ""
+            is JSONArray -> buildList { for (i in 0 until value.length()) add(value.optString(i)) }.joinToString(", ")
+            else -> value.toString()
+        }
     }
 
     fun uriFromPublicUrl(url: String): Uri = Uri.parse(decodeHtmlEntities(url))

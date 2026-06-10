@@ -54,6 +54,9 @@
             android:name=".ui.profile.ParseHistoryActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.profile.MusicDownloadsActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.profile.SettingsActivity"
             android:screenOrientation="portrait" />
         <activity

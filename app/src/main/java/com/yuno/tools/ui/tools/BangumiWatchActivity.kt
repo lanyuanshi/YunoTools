@@ -69,7 +69,7 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private val sources = listOf(
         WatchSource("AnimeTranslation", "https://www.animetranslation.com", "https://www.animetranslation.com/library"),
-        WatchSource("风车动漫", "https://www.fsdm02.com", "https://www.fsdm02.com/", guarded = true)
+        WatchSource("嗷呜动漫", "https://www.aowu.tv", "https://www.aowu.tv/")
     )
     private var selectedSource = sources.first()
     private val prefs by lazy { getSharedPreferences("yuno_bangumi_watch", Context.MODE_PRIVATE) }
@@ -96,9 +96,9 @@ class BangumiWatchActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeApplier.apply(this)
-        allAnime = loadCachedAnime(selectedSource.name)
+        allAnime = emptyList()
         buildUi()
-        if (allAnime.isEmpty()) loadLibrary()
+        loadLibrary(force = true)
     }
 
     override fun onResume() {
@@ -135,16 +135,21 @@ class BangumiWatchActivity : AppCompatActivity() {
             root.removeViewAt(1)
             root.addView(bottomBar())
         }
-        if (tab == Tab.MINE) {
-            renderMine()
-            return
-        }
         when (screen) {
-            Screen.LIST -> renderList()
-            Screen.SEARCH -> renderSearch()
-            Screen.DETAIL -> renderDetail()
             Screen.HISTORY -> renderRecords("历史记录", "history")
             Screen.DOWNLOADS -> renderRecords("下载记录", "downloads")
+            else -> {
+                if (tab == Tab.MINE) {
+                    renderMine()
+                    return
+                }
+                when (screen) {
+                    Screen.LIST -> renderList()
+                    Screen.SEARCH -> renderSearch()
+                    Screen.DETAIL -> renderDetail()
+                    else -> renderList()
+                }
+            }
         }
     }
 
@@ -222,7 +227,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         content.addView(detailHeader(detail.item, detail.meta, detail.intro))
         section("播放")
         content.addView(playerBox(detail))
-        section("剧集")
+        section("剧集（共 ${detail.episodes.size} 集）")
         if (detail.episodes.isEmpty()) {
             emptyCard("暂无剧集", "没有解析到剧集列表。")
         } else {
@@ -256,8 +261,9 @@ class BangumiWatchActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadLibrary() {
+    private fun loadLibrary(force: Boolean = false) {
         if (loading) return
+        if (force) prefs.edit().remove("library_cache_${selectedSource.name}").apply()
         if (selectedSource.guarded) {
             allAnime = emptyList()
             render()
@@ -270,6 +276,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             val result = runCatching {
                 val html = fetch(selectedSource.libraryUrl)
                 if (html.contains("/_guard/") || html.contains("slider_html") || html.contains("安全验证")) error("需要安全验证")
+                if (html.contains("<div id=\"app\"></div>") && !html.contains("anime-item")) error("该源为前端动态站点，当前没有可直接解析的番剧列表")
                 parseLibrary(html)
             }
             runOnUiThread {
@@ -318,15 +325,28 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun parseLibrary(html: String): List<AnimeItem> {
-        val itemRegex = Regex("""<div class=\"anime-item\">(.*?)</div>\s*</div>""", RegexOption.DOT_MATCHES_ALL)
-        val hrefRegex = Regex("""<a href=\"([^\"]+)\" class=\"anime-card\">""")
-        val imgRegex = Regex("""<img src=\"([^\"]+)\" alt=\"([^\"]*)\"""")
-        val statusRegex = Regex("""<div class=\"status-badge\">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
-        return itemRegex.findAll(html).mapNotNull { match ->
-            val block = match.value
-            val href = hrefRegex.find(block)?.groupValues?.getOrNull(1).orEmpty()
+        val cardRegex = Regex("""<a\s+href=\"([^\"]+)\"\s+class=\"anime-card\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val imgRegex = Regex("""<img[^>]+src=\"([^\"]+)\"[^>]+alt=\"([^\"]*)\""", RegexOption.DOT_MATCHES_ALL)
+        val statusRegex = Regex("""<div\s+class=\"status-badge\"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        val cardList = cardRegex.findAll(html).mapNotNull { match ->
+            val href = htmlAttr(match.groupValues[1])
+            val block = match.groupValues[2]
             val img = imgRegex.find(block)
-            val cover = img?.groupValues?.getOrNull(1).orEmpty()
+            val cover = htmlAttr(img?.groupValues?.getOrNull(1).orEmpty())
+            val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty())
+            val status = htmlText(statusRegex.find(block)?.groupValues?.getOrNull(1).orEmpty())
+            if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href, selectedSource.name)
+        }.distinctBy { it.detailUrl }.toList()
+        if (cardList.isNotEmpty()) return cardList
+
+        val fallbackRegex = Regex("""<div\s+class=\"anime-item\"[^>]*>(.*?)(?=<div\s+class=\"anime-item\"|</main>|<div\s+class=\"pagination\"|$)""", RegexOption.DOT_MATCHES_ALL)
+        val hrefRegex = Regex("""href=\"([^\"]+)\"[^>]*class=\"anime-card\"|class=\"anime-card\"[^>]*href=\"([^\"]+)\""" , RegexOption.DOT_MATCHES_ALL)
+        return fallbackRegex.findAll(html).mapNotNull { match ->
+            val block = match.value
+            val hrefMatch = hrefRegex.find(block)
+            val href = htmlAttr((hrefMatch?.groups?.get(1)?.value ?: hrefMatch?.groups?.get(2)?.value).orEmpty())
+            val img = imgRegex.find(block)
+            val cover = htmlAttr(img?.groupValues?.getOrNull(1).orEmpty())
             val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty())
             val status = htmlText(statusRegex.find(block)?.groupValues?.getOrNull(1).orEmpty())
             if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href, selectedSource.name)
@@ -369,7 +389,15 @@ class BangumiWatchActivity : AppCompatActivity() {
             }
             if (play.isBlank()) null else EpisodeItem(name, play, sourceName)
         }.distinctBy { it.playUrl }.toList()
-        if (found.isNotEmpty()) return found
+        val m3u8Fallback = Regex("""href=\"([^\"]+\\.m3u8[^\"]*)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(html)
+            .mapIndexedNotNull { index, m ->
+                val url = htmlAttr(m.groupValues[1])
+                val label = htmlText(m.groupValues[2]).ifBlank { "第${(index + 1).toString().padStart(2, '0')}集" }
+                if (url.isBlank()) null else EpisodeItem(label, if (url.startsWith("http")) url else absUrl(url), "播放源")
+            }
+            .toList()
+        if (found.isNotEmpty() || m3u8Fallback.isNotEmpty()) return (found + m3u8Fallback).distinctBy { it.playUrl }
         val urlRegex = Regex("""data-url=\"([^\"]+)\"[^>]*>(.*?)</""", RegexOption.DOT_MATCHES_ALL)
         return urlRegex.findAll(html).map { m ->
             val url = htmlAttr(m.groupValues[1])
@@ -518,6 +546,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private fun playEpisode(item: AnimeItem, ep: EpisodeItem) {
         tab = Tab.BANGUMI
         screen = Screen.DETAIL
+        selectedAnime = item
         addHistory(item, ep)
         currentEpisode = ep
         ensurePlayer().apply {
@@ -526,7 +555,13 @@ class BangumiWatchActivity : AppCompatActivity() {
             playWhenReady = true
         }
         Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
-        render()
+        renderDetailOnly()
+    }
+
+    private fun renderDetailOnly() {
+        if (screen != Screen.DETAIL) return
+        content.removeAllViews()
+        renderDetail()
     }
 
     private fun ensurePlayer(): ExoPlayer {
@@ -550,14 +585,14 @@ class BangumiWatchActivity : AppCompatActivity() {
                 setOnClickListener {
                     if (selectedSource.name != source.name) {
                         selectedSource = source
-                        allAnime = loadCachedAnime(source.name)
+                        allAnime = emptyList()
                         selectedAnime = null
                         selectedDetail = null
                         currentEpisode = null
                         player?.stop()
                         screen = Screen.LIST
                         render()
-                        if (allAnime.isEmpty()) loadLibrary()
+                        loadLibrary(force = true)
                     }
                 }
             })

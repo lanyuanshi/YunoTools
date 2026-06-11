@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.0.91**
+**当前版本：v1.0.92**
 
-安装包下载：[release/YunoTools-v1.0.91.apk](release/YunoTools-v1.0.91.apk)
+安装包下载：[release/YunoTools-v1.0.92.apk](release/YunoTools-v1.0.92.apk)
 
-本版本按录屏继续修复“看番”：稀饭动漫点击剧集后如果当前播放源直链超时、404 或不可访问，会自动尝试同一集的其他播放源，避免播放器卡在 00:00/00:00；修复稀饭 player_aaaa.url 中 Unicode 转义的 M3U8 地址解析；播放器出错时在页面直接显示错误原因。AGE 仍保持解析不到直链时不自动加载解析页 WebView，以避免闪回主界面。
+本版本按最新录屏继续修复“看番”：调整点击剧集后的播放器绑定顺序，先刷新并绑定 PlayerView，再对同一个 ExoPlayer 设置播放源，避免因详情页重建导致播放器短时间卡在 00:00/00:00；增加“正在加载视频”状态，并在首帧/READY 后自动清除；继续保留稀饭同集自动换源、Unicode M3U8 解析与播放器错误显示。
 
 一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。
 

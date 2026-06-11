@@ -110,7 +110,9 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var currentEpisode: EpisodeItem? = null
     private var currentPlayDirect = true
     private var currentPlayHeaders: Map<String, String> = emptyMap()
+    private var playerHeaders: Map<String, String> = emptyMap()
     private var currentPlayError: String = ""
+    private var currentPlayLoading = false
     private var detailBackTab = Tab.BANGUMI
     private var detailBackScreen = Screen.LIST
     private var page = 1
@@ -759,7 +761,19 @@ class BangumiWatchActivity : AppCompatActivity() {
         if (active == null) {
             box.addView(TextView(context).apply { text = "选择下方剧集后在这里播放。"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(10)) })
         } else {
-            box.addView(TextView(context).apply { text = "${active.source} · ${active.name}"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(10)) })
+            box.addView(TextView(context).apply { text = "${active.source} · ${active.name}"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(6)) })
+            if (currentPlayLoading) box.addView(TextView(context).apply {
+                text = "正在加载视频，请稍候…"
+                textSize = 12f
+                setTextColor(Color.parseColor("#4F6EF7"))
+                setPadding(0, 0, 0, dp(6))
+            })
+            if (currentPlayError.isNotBlank()) box.addView(TextView(context).apply {
+                text = currentPlayError
+                textSize = 12f
+                setTextColor(Color.parseColor("#D32F2F"))
+                setPadding(0, 0, 0, dp(6))
+            })
             if (currentPlayDirect) {
                 val playerView = PlayerView(context).apply {
                     useController = true
@@ -836,9 +850,15 @@ class BangumiWatchActivity : AppCompatActivity() {
             runOnUiThread {
                 result.onSuccess { resolved ->
                     currentPlayError = ""
+                    currentPlayLoading = resolved.direct
                     val playable = ep.copy(playUrl = resolved.url, source = resolved.source)
                     addHistory(item, playable)
                     currentEpisode = playable
+                    currentPlayDirect = resolved.direct
+                    currentPlayHeaders = resolved.headers
+                    runCatching { renderDetailOnly() }.onFailure { e ->
+                        Toast.makeText(this, "播放器刷新失败：${e.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                    }
                     if (resolved.direct) {
                         ensurePlayer(resolved.headers).apply {
                             setMediaItem(MediaItem.fromUri(playable.playUrl))
@@ -848,14 +868,13 @@ class BangumiWatchActivity : AppCompatActivity() {
                         Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
                     } else {
                         player?.pause()
+                        currentPlayLoading = false
                         currentPlayError = "当前线路未提取到可内置播放地址，请换一条线路/播放源"
                         Toast.makeText(this, currentPlayError, Toast.LENGTH_LONG).show()
-                    }
-                    currentPlayDirect = resolved.direct
-                    runCatching { renderDetailOnly() }.onFailure { e ->
-                        Toast.makeText(this, "播放器刷新失败：${e.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                        runCatching { renderDetailOnly() }
                     }
                 }.onFailure { err ->
+                    currentPlayLoading = false
                     currentPlayError = "播放解析失败：${err.message ?: "未知错误"}"
                     Toast.makeText(this, currentPlayError, Toast.LENGTH_LONG).show()
                     runCatching { renderDetailOnly() }
@@ -944,9 +963,10 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun ensurePlayer(headers: Map<String, String> = currentPlayHeaders): ExoPlayer {
         val existing = player
-        if (existing != null && headers == currentPlayHeaders) return existing
+        if (existing != null && headers == playerHeaders) return existing
         existing?.release()
         currentPlayHeaders = headers
+        playerHeaders = headers
         val httpFactory = DefaultHttpDataSource.Factory()
             .setDefaultRequestProperties(headers)
             .setUserAgent(headers["User-Agent"] ?: "Mozilla/5.0")
@@ -956,7 +976,22 @@ class BangumiWatchActivity : AppCompatActivity() {
             .build()
             .also { exo ->
                 exo.addListener(object : Player.Listener {
+                    override fun onRenderedFirstFrame() {
+                        if (currentPlayLoading) {
+                            currentPlayLoading = false
+                            runOnUiThread { runCatching { renderDetailOnly() } }
+                        }
+                    }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY && currentPlayLoading) {
+                            currentPlayLoading = false
+                            runOnUiThread { runCatching { renderDetailOnly() } }
+                        }
+                    }
+
                     override fun onPlayerError(error: PlaybackException) {
+                        currentPlayLoading = false
                         currentPlayError = "播放器错误：${error.errorCodeName} ${error.message ?: ""}"
                         runOnUiThread {
                             Toast.makeText(this@BangumiWatchActivity, currentPlayError, Toast.LENGTH_LONG).show()

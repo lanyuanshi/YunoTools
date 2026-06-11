@@ -125,7 +125,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun updateNav() { listOf(navHome to TAB_HOME, navLibrary to TAB_LIBRARY, navHistory to TAB_HISTORY, navMore to TAB_MORE).forEach { (v,t) -> v.background = if (selectedTab == t) round(C_PRIMARY_LIGHT, dp(22)) else null } }
     private fun actionButton(text: String, click: () -> Unit) { actionHost.addView(Button(this).apply { this.text = text; textSize = 16f; minWidth = dp(44); setTextColor(C_PRIMARY); background = round(Color.TRANSPARENT, dp(22)); setOnClickListener { click() } }, LinearLayout.LayoutParams(dp(48), dp(48))) }
 
-    private fun showHome() { showHomeCategory("最热门", listOf(Source("DM5", "https://m.dm5.com/manhua-list-pay0/"), Source("好多漫", "https://m.haoduoman.com/"), Source("MyComic", "https://mycomic.com/cn/comics"))) }
+    private fun showHome() { showHomeCategory("最热门", listOf(Source("DM5", "https://m.dm5.com/manhua-list-pay0/"), Source("好多漫", "https://m.haoduoman.com/manhua"))) }
 
     private fun showHomeCategory(title: String, sources: List<Source>) {
         saveProgress(); currentManga = null; readerScroll = null
@@ -145,20 +145,31 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun homeCategoryBar(box: LinearLayout) {
+        section(box, "DM5 分类")
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(8)) }
-        fun chip(label: String, url: String) {
-            row.addView(Button(this).apply { text = label; textSize = 13f; setTextColor(C_PRIMARY); background = round(Color.WHITE, dp(18)); setOnClickListener { showHomeCategory(label, listOf(Source("DM5", url))) } }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        fun chip(parent: LinearLayout, label: String, source: String, url: String) {
+            parent.addView(Button(this).apply { text = label; textSize = 12f; setTextColor(C_PRIMARY); background = round(Color.WHITE, dp(18)); setOnClickListener { showHomeCategory(label, listOf(Source(source, url))) } }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
         }
-        chip("最热门", "https://m.dm5.com/manhua-list-pay0/")
-        chip("最近更新", "https://m.dm5.com/manhua-list-pay0-s2/")
-        chip("最新上架", "https://m.dm5.com/manhua-list-pay0-s18/")
+        chip(row, "最热门", "DM5", "https://m.dm5.com/manhua-list-pay0/")
+        chip(row, "最近更新", "DM5", "https://m.dm5.com/manhua-list-pay0-s2/")
+        chip(row, "最新上架", "DM5", "https://m.dm5.com/manhua-list-pay0-s18/")
         box.addView(row)
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(8)) }
-        fun chip2(label: String, url: String) { row2.addView(Button(this).apply { text = label; textSize = 13f; setTextColor(C_PRIMARY); background = round(Color.WHITE, dp(18)); setOnClickListener { showHomeCategory(label, listOf(Source("DM5", url))) } }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) }) }
-        chip2("全部", "https://m.dm5.com/manhua-list-pay0/")
-        chip2("已完结", "https://m.dm5.com/manhua-list-pay0-st2/")
-        chip2("连载中", "https://m.dm5.com/manhua-list-pay0-st1/")
+        chip(row2, "已完结", "DM5", "https://m.dm5.com/manhua-list-pay0-st2/")
+        chip(row2, "连载中", "DM5", "https://m.dm5.com/manhua-list-pay0-st1/")
+        chip(row2, "全部", "DM5", "https://m.dm5.com/manhua-list-pay0/")
         box.addView(row2)
+        section(box, "好多漫分类")
+        val row3 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(8)) }
+        chip(row3, "全部", "好多漫", "https://m.haoduoman.com/manhua")
+        chip(row3, "国内", "好多漫", "https://m.haoduoman.com/manhua/area/guonei")
+        chip(row3, "日本", "好多漫", "https://m.haoduoman.com/manhua/area/riben")
+        box.addView(row3)
+        val row4 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(8)) }
+        chip(row4, "韩国", "好多漫", "https://m.haoduoman.com/manhua/area/hanguo")
+        chip(row4, "欧美", "好多漫", "https://m.haoduoman.com/manhua/area/oumei")
+        chip(row4, "热血", "好多漫", "https://m.haoduoman.com/manhua/theme/rexue")
+        box.addView(row4)
     }
 
     private fun renderHome(title: String, groups: List<Pair<String, List<SearchResult>>>) {
@@ -179,7 +190,7 @@ class TinyReaderActivity : AppCompatActivity() {
         actionButton("⇅") { showSortDialog() }; actionButton("＋") { showMore() }
         val box = scroll(); section(box, "我的漫画")
         val favs = sortedManga(loadManga().filter { it.favorite })
-        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“更多”从好多漫 / MyComic 搜索或加载漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
+        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“更多”从 DM5 / 好多漫 搜索或加载漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
     }
 
     private fun showUpdates() { showMore() }
@@ -195,7 +206,7 @@ class TinyReaderActivity : AppCompatActivity() {
 
     private fun showMore() {
         currentManga = null; readerScroll = null
-        setHeader("更多", "DM5 / 好多漫 / MyComic / 数据", TAB_MORE)
+        setHeader("更多", "DM5 / 好多漫 / 数据", TAB_MORE)
         val box = scroll()
         section(box, "搜索漫画")
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(16), dp(10), dp(16), dp(10)) }
@@ -206,12 +217,11 @@ class TinyReaderActivity : AppCompatActivity() {
         section(box, "漫画网站")
         box.addView(menuCard("DM5 动漫屋", "https://m.dm5.com/manhua-list-pay0/ · 本地解析封面、标题、最新集数和分类") { loadSourceList(Source("DM5", "https://m.dm5.com/manhua-list-pay0/")) })
         box.addView(menuCard("好多漫", "https://m.haoduoman.com/ · 本地解析漫画列表、详情、章节和图片") { loadSourceList(Source("好多漫", "https://m.haoduoman.com/search?keyword=%s")) })
-        box.addView(menuCard("MyComic", "https://mycomic.com/cn · 本地解析漫画列表；源站 403 时会提示") { loadSourceList(Source("MyComic", "https://mycomic.com/cn/comics?keyword=%s")) })
         section(box, "数据")
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.01", "仅保留书架、历史、更多；漫画网站不内置网页、不跳转 HTML，全部在本地解析后阅读。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.02", "仅保留书架、历史、更多；漫画网站不内置网页、不跳转 HTML，全部在本地解析后阅读。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -232,8 +242,8 @@ class TinyReaderActivity : AppCompatActivity() {
         if (manga.chapters.isEmpty()) empty(box, "没有解析到章节", "可以直接查看页面图片，或换一个漫画详情页。") else manga.chapters.forEachIndexed { i, ch -> box.addView(chapterCard(i, ch, i == manga.chapterIndex) { openReader(manga, i, 0) }) }
     }
 
-    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从 DM5 / 好多漫 / MyComic 本地抓取漫画列表。") }
-    private fun fixedSources() = listOf(Source("DM5", "https://m.dm5.com/search/?title=%s"), Source("好多漫", "https://m.haoduoman.com/search?keyword=%s"), Source("MyComic", "https://mycomic.com/cn/comics?keyword=%s"))
+    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从 DM5 / 好多漫 本地抓取漫画列表。") }
+    private fun fixedSources() = listOf(Source("DM5", "https://m.dm5.com/search/?title=%s"), Source("好多漫", "https://m.haoduoman.com/search?keyword=%s"))
     private fun searchAllSources(keyword: String) {
         showSearchLoading(keyword)
         Thread {
@@ -241,7 +251,7 @@ class TinyReaderActivity : AppCompatActivity() {
             runOnUiThread { showSearchResults(keyword, results) }
         }.start()
     }
-    private fun loadSourceList(src: Source) { previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader(src.name, "正在加载漫画列表"); val box=scroll(); empty(box,"正在加载…",src.searchUrl.substringBefore('?')); Thread { val rs=runCatching { val url=when(src.name){"DM5"->"https://m.dm5.com/manhua-list-pay0/";"好多漫"->"https://m.haoduoman.com/";else->"https://mycomic.com/cn/comics"}; parseSourceResults(http(url, src.name), src.name, url) }.getOrElse { listOf(SearchResult("加载失败", src.searchUrl.substringBefore('?'), src.name, it.message ?: "源站拒绝或网络失败")) }; runOnUiThread { showSearchResults(src.name, rs) } }.start() }
+    private fun loadSourceList(src: Source) { previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader(src.name, "正在加载漫画列表"); val box=scroll(); empty(box,"正在加载…",src.searchUrl.substringBefore('?')); Thread { val rs=runCatching { val url=when(src.name){"DM5"->"https://m.dm5.com/manhua-list-pay0/";else->"https://m.haoduoman.com/manhua"}; parseSourceResults(http(url, src.name), src.name, url) }.getOrElse { listOf(SearchResult("加载失败", src.searchUrl.substringBefore('?'), src.name, it.message ?: "源站拒绝或网络失败")) }; runOnUiThread { showSearchResults(src.name, rs) } }.start() }
     private fun showSearchResults(keyword: String, results: List<SearchResult>) {
         previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索结果", keyword)
         val box = scroll(); section(box, "共 ${results.size} 条")
@@ -253,13 +263,28 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun fetchManga(titleHint: String, url: String, sourceName: String): Manga {
-        val html = http(url, sourceName); val title = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint }).take(80)
-        val cover = extractImages(html, url).firstOrNull().orEmpty()
-        val desc = clean(Regex("""<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { clean(html).take(160) }
-        val chapters = extractChapters(html, url).ifEmpty { listOf(Chapter("第 1 话", url, extractImages(html, url))) }
-        return Manga(title.ifBlank { titleHint }, url, sourceName, desc, cover, chapters, extractImages(html, url), updatedAt = System.currentTimeMillis())
+        val html = http(url, sourceName)
+        return if (sourceName == "DM5") fetchDm5Manga(titleHint, url, html) else fetchHaoduomanManga(titleHint, url, html)
     }
-    private fun fetchChapter(ch: Chapter): Chapter { if (ch.pages.isNotEmpty()) return ch; val html=http(ch.url); return ch.copy(pages=extractImages(html, ch.url)) }
+    private fun fetchDm5Manga(titleHint: String, url: String, html: String): Manga {
+        val title = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint }).substringBefore("漫画_").substringBefore("_").take(80).ifBlank { titleHint }
+        val cover = extractImages(html, url).firstOrNull { it.contains("mhfm") }.orEmpty()
+        val desc = clean(Regex("""<meta[^>]+name=["']Description["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).take(180)
+        return Manga(title, url, "DM5", desc.ifBlank { "DM5 移动端当前未向本地解析返回本漫画章节图片，已停止错误抓图。" }, cover, emptyList(), emptyList(), updatedAt = System.currentTimeMillis())
+    }
+    private fun fetchHaoduomanManga(titleHint: String, url: String, html: String): Manga {
+        val title = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint }).substringBefore(" - ").take(80)
+        val cover = extractImages(html, url).firstOrNull { it.contains("img.haoduoman.com/cover") }.orEmpty()
+        val desc = clean(Regex("""<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { clean(html).take(160) }
+        val chapters = extractHaoduomanChapters(html, url)
+        return Manga(title.ifBlank { titleHint }, url, "好多漫", desc, cover, chapters, emptyList(), updatedAt = System.currentTimeMillis())
+    }
+    private fun fetchChapter(ch: Chapter): Chapter {
+        if (ch.pages.isNotEmpty()) return ch
+        val html=http(ch.url, if(ch.url.contains("haoduoman")) "好多漫" else "DM5")
+        val pages = if (ch.url.contains("haoduoman")) extractHaoduomanChapterImages(html, ch.url) else emptyList()
+        return ch.copy(pages=pages)
+    }
     private fun openReader(manga: Manga, idx: Int, y: Int) {
         saveProgress(); screenMode = SCREEN_READER; currentManga = manga.copy(chapterIndex = idx); setHeader(manga.title, manga.chapters.getOrNull(idx)?.title ?: "图片阅读")
         actionButton("◁") { if (idx > 0) openReader(manga, idx - 1, 0) }
@@ -277,7 +302,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun renderPages(manga: Manga, idx: Int, pages: List<String>, y: Int) {
         val box=scroll(); setHeader(manga.title, manga.chapters.getOrNull(idx)?.title ?: "图片阅读")
         actionButton("◁") { if (idx > 0) openReader(manga, idx - 1, 0) }; actionButton("▷") { if (idx + 1 < manga.chapters.size) openReader(manga, idx + 1, 0) }
-        if (pages.isEmpty()) empty(box, "没有解析到图片", "这个页面可能需要专用源适配或登录。") else pages.forEachIndexed { i, u ->
+        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已阻止显示站点图标、脚本图片或推荐封面；该章节可能需要源站专用解密或被反爬拦截。") else pages.forEachIndexed { i, u ->
             val card=baseCard(); val lay=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL; setPadding(dp(6),dp(6),dp(6),dp(6))}
             lay.addView(TextView(this).apply{text="${i+1} / ${pages.size}"; textSize=12f; setTextColor(C_SUB); gravity=Gravity.CENTER; setPadding(0,dp(4),0,dp(4))})
             lay.addView(ImageView(this).apply{ adjustViewBounds=true; scaleType=ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE); Glide.with(this@TinyReaderActivity).load(u).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }, LinearLayout.LayoutParams(-1, -2))
@@ -301,6 +326,7 @@ class TinyReaderActivity : AppCompatActivity() {
 
     private fun parseSourceResults(html: String, source: String, base: String): List<SearchResult> {
         if (source == "DM5") return parseDm5Results(html, base)
+        if (source == "好多漫") return parseHaoduomanResults(html, base)
         val re = Regex("""<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
         return re.findAll(html).mapNotNull { m ->
             val href = m.groupValues[1]
@@ -309,7 +335,6 @@ class TinyReaderActivity : AppCompatActivity() {
             val title = clean(Regex("""<h[1-6][^>]*>([\s\S]*?)</h[1-6]>""", RegexOption.IGNORE_CASE).find(body)?.groupValues?.get(1) ?: body).replace(Regex("\\s+"), " " ).trim()
             val isManga = when (source) {
                 "好多漫" -> url.contains("/manhua/") && !url.endsWith(".html")
-                "MyComic" -> (url.contains("/comic") || url.contains("/comics/")) && !url.endsWith("/comics")
                 else -> false
             }
             val badTitle = title.contains("更多") || title.contains("分类") || title.contains("排行") || title.contains("更新")
@@ -334,7 +359,37 @@ class TinyReaderActivity : AppCompatActivity() {
         }.distinctBy { it.url }.take(60).toList()
     }
 
+    private fun parseHaoduomanResults(html: String, base: String): List<SearchResult> {
+        val itemRe = Regex("""<div[^>]+class=["'][^"']*comic-item[^"']*["'][^>]*>([\s\S]*?)</a>\s*</div>""", RegexOption.IGNORE_CASE)
+        return itemRe.findAll(html).mapNotNull { m ->
+            val item = m.groupValues[1]
+            val href = Regex("""<a[^>]+href=["'](/manhua/\d+)["']""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
+            val url = absUrl(href, base)
+            val title = clean(Regex("""<h3[^>]+class=["']title["'][^>]*>([\s\S]*?)</h3>""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1).orEmpty())
+            val latest = clean(Regex("""<div[^>]+class=["']txt["'][^>]*>([\s\S]*?)</div>""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1).orEmpty()).replace(Regex("""\s+"""), " ").trim()
+            val cover = extractImages(item, base).firstOrNull().orEmpty()
+            if (title.length in 1..100) SearchResult(title, url, "好多漫", latest.ifBlank { url }, cover) else null
+        }.distinctBy { it.url }.take(60).toList()
+    }
+
     private fun ifBlank(v: String, fallback: String) = if (v.isBlank()) fallback else v
+
+    private fun extractHaoduomanChapters(html: String, base: String): List<Chapter> {
+        val id = Regex("""/manhua/(\d+)""").find(base)?.groupValues?.getOrNull(1) ?: return emptyList()
+        val re = Regex("""<a[^>]+href=["'](/manhua/""" + id + """/[0-9]+\.html)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
+        return re.findAll(html).mapNotNull {
+            val t = clean(it.groupValues[2]).trim()
+            val u = absUrl(it.groupValues[1], base)
+            if (t.contains("第") || t.contains("话") || t.contains("卷")) Chapter(t.take(80), u) else null
+        }.distinctBy { it.url }.toList()
+    }
+    private fun extractHaoduomanChapterImages(html: String, base: String): List<String> {
+        // Only accept real comic image domain. Do not return site icons, JS, recommendation covers or placeholders.
+        val direct = Regex("""https?://img\.haoduoman\.com/(?!cover/)[^"'<>\s]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'<>\s]*)?""", RegexOption.IGNORE_CASE)
+            .findAll(html).map { it.value }.distinct().toList()
+        if (direct.isNotEmpty()) return direct
+        return emptyList()
+    }
 
     private fun extractChapters(html: String, base: String): List<Chapter> {
         val re=Regex("""<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
@@ -344,7 +399,7 @@ class TinyReaderActivity : AppCompatActivity() {
         val re=Regex("""(?:src|data-src|data-original|data-url|data-lazy-src)=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
         return re.findAll(html)
             .map { absUrl(it.groupValues[1], base) }
-            .filter { it.startsWith("http") && !it.startsWith("data:") && !it.contains(".js") && it.contains(Regex("""\.(jpg|jpeg|png|webp|gif)(\?|$)|/comic|/cover|image""", RegexOption.IGNORE_CASE)) }
+            .filter { it.startsWith("http") && !it.startsWith("data:") && !it.contains(".js") && !it.contains("css99") && !it.contains("/assets/") && !it.contains("/static/") && it.contains(Regex("""\.(jpg|jpeg|png|webp|gif)(\?|$)|/comic|/cover|image""", RegexOption.IGNORE_CASE)) }
             .distinct()
             .take(260)
             .toList()
@@ -357,7 +412,7 @@ class TinyReaderActivity : AppCompatActivity() {
             .header("User-Agent","Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
             .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language","zh-CN,zh;q=0.9,en;q=0.8")
-            .header("Referer", when(sourceName){"MyComic"->"https://mycomic.com/cn/comics";"DM5"->"https://m.dm5.com/";else->"https://m.haoduoman.com/"})
+            .header("Referer", when(sourceName){"DM5"->"https://m.dm5.com/";else->"https://m.haoduoman.com/"})
             .build()
         client.newCall(req).execute().use{ if(!it.isSuccessful) error("HTTP ${it.code}"); return it.body?.string().orEmpty() }
     }

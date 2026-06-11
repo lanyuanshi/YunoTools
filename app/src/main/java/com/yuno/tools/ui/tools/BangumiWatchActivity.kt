@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.text.Html
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -775,12 +776,28 @@ class BangumiWatchActivity : AppCompatActivity() {
                 setPadding(0, 0, 0, dp(6))
             })
             if (currentPlayDirect) {
-                val playerView = PlayerView(context).apply {
-                    useController = true
-                    player = ensurePlayer()
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
+                val preparedPlayer = runCatching { ensurePlayer() }
+                    .onFailure { e ->
+                        currentPlayLoading = false
+                        currentPlayError = "播放器初始化失败：${e.message ?: "未知错误"}"
+                        Log.e("BangumiWatch", currentPlayError, e)
+                    }
+                    .getOrNull()
+                if (preparedPlayer != null) {
+                    val playerView = PlayerView(context).apply {
+                        useController = true
+                        player = preparedPlayer
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
+                    }
+                    box.addView(playerView)
+                } else {
+                    box.addView(TextView(context).apply {
+                        text = currentPlayError.ifBlank { "播放器初始化失败，请换线路或稍后重试。" }
+                        textSize = 13f
+                        setTextColor(Color.parseColor("#D93025"))
+                        setPadding(0, dp(10), 0, dp(10))
+                    })
                 }
-                box.addView(playerView)
             } else {
                 player?.pause()
                 box.addView(TextView(context).apply {
@@ -848,39 +865,59 @@ class BangumiWatchActivity : AppCompatActivity() {
         Thread {
             val result = runCatching { resolvePlayableUrlWithFallback(ep) }
             runOnUiThread {
-                result.onSuccess { resolved ->
-                    currentPlayError = ""
-                    currentPlayLoading = resolved.direct
-                    val playable = ep.copy(playUrl = resolved.url, source = resolved.source)
-                    addHistory(item, playable)
-                    currentEpisode = playable
-                    currentPlayDirect = resolved.direct
-                    currentPlayHeaders = resolved.headers
-                    runCatching { renderDetailOnly() }.onFailure { e ->
-                        Toast.makeText(this, "播放器刷新失败：${e.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
-                    }
-                    if (resolved.direct) {
-                        ensurePlayer(resolved.headers).apply {
-                            setMediaItem(MediaItem.fromUri(playable.playUrl))
-                            prepare()
-                            playWhenReady = true
-                        }
-                        Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
-                    } else {
-                        player?.pause()
-                        currentPlayLoading = false
-                        currentPlayError = "当前线路未提取到可内置播放地址，请换一条线路/播放源"
-                        Toast.makeText(this, currentPlayError, Toast.LENGTH_LONG).show()
-                        runCatching { renderDetailOnly() }
+                runCatching {
+                    result.onSuccess { resolved ->
+                        handleResolvedEpisode(item, ep, resolved)
+                    }.onFailure { err ->
+                        showEpisodeError("播放解析失败：${err.message ?: "未知错误"}", err)
                     }
                 }.onFailure { err ->
-                    currentPlayLoading = false
-                    currentPlayError = "播放解析失败：${err.message ?: "未知错误"}"
-                    Toast.makeText(this, currentPlayError, Toast.LENGTH_LONG).show()
-                    runCatching { renderDetailOnly() }
+                    showEpisodeError("播放界面异常：${err.message ?: "未知错误"}", err)
                 }
             }
         }.start()
+    }
+
+    private fun handleResolvedEpisode(item: AnimeItem, ep: EpisodeItem, resolved: ResolvedPlay) {
+        currentPlayError = ""
+        currentPlayLoading = resolved.direct
+        val playable = ep.copy(playUrl = resolved.url, source = resolved.source)
+        currentEpisode = playable
+        currentPlayDirect = resolved.direct
+        currentPlayHeaders = resolved.headers
+        runCatching { addHistory(item, playable) }
+            .onFailure { Log.w("BangumiWatch", "addHistory failed", it) }
+        runCatching { renderDetailOnly() }
+            .onFailure { Log.e("BangumiWatch", "render before play failed", it) }
+        if (resolved.direct) {
+            runCatching {
+                ensurePlayer(resolved.headers).apply {
+                    setMediaItem(MediaItem.fromUri(playable.playUrl))
+                    prepare()
+                    playWhenReady = true
+                }
+            }.onSuccess {
+                Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
+            }.onFailure { err ->
+                currentPlayLoading = false
+                showEpisodeError("播放器启动失败：${err.message ?: "未知错误"}", err)
+            }
+        } else {
+            runCatching { player?.pause() }
+            currentPlayLoading = false
+            showEpisodeError("当前线路未提取到可内置播放地址，请换一条线路/播放源", null)
+        }
+    }
+
+    private fun showEpisodeError(message: String, err: Throwable?) {
+        err?.let { Log.e("BangumiWatch", message, it) } ?: Log.w("BangumiWatch", message)
+        tab = Tab.BANGUMI
+        screen = Screen.DETAIL
+        currentPlayLoading = false
+        currentPlayError = message
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        runCatching { renderDetailOnly() }
+            .onFailure { Log.e("BangumiWatch", "render error state failed", it) }
     }
 
     private data class ResolvedPlay(val url: String, val direct: Boolean, val source: String, val headers: Map<String, String> = emptyMap(), val webFallback: Boolean = false)

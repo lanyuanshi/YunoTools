@@ -6,9 +6,9 @@
 
 # YunoTools
 
-**当前版本：v1.0.92**
+**当前版本：v1.0.93**
 
-安装包下载：[release/YunoTools-v1.0.92.apk](release/YunoTools-v1.0.92.apk)
+安装包下载：[release/YunoTools-v1.0.93.apk](release/YunoTools-v1.0.93.apk)
 
 本版本按最新录屏继续修复“看番”：调整点击剧集后的播放器绑定顺序，先刷新并绑定 PlayerView，再对同一个 ExoPlayer 设置播放源，避免因详情页重建导致播放器短时间卡在 00:00/00:00；增加“正在加载视频”状态，并在首帧/READY 后自动清除；继续保留稀饭同集自动换源、Unicode M3U8 解析与播放器错误显示。
 

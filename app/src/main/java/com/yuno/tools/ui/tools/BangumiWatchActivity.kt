@@ -114,6 +114,9 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var playerHeaders: Map<String, String> = emptyMap()
     private var currentPlayError: String = ""
     private var currentPlayLoading = false
+    private var currentOriginalEpisode: EpisodeItem? = null
+    private val failedPlaybackSourceUrls = mutableSetOf<String>()
+    private var autoFallbackInProgress = false
     private var detailBackTab = Tab.BANGUMI
     private var detailBackScreen = Screen.LIST
     private var page = 1
@@ -858,9 +861,18 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun playEpisode(item: AnimeItem, ep: EpisodeItem) {
+        startPlayEpisode(item, ep, resetFailures = true)
+    }
+
+    private fun startPlayEpisode(item: AnimeItem, ep: EpisodeItem, resetFailures: Boolean) {
         tab = Tab.BANGUMI
         screen = Screen.DETAIL
         selectedAnime = item
+        currentOriginalEpisode = ep
+        if (resetFailures) {
+            failedPlaybackSourceUrls.clear()
+            autoFallbackInProgress = false
+        }
         Toast.makeText(this, "正在解析 ${ep.name}", Toast.LENGTH_SHORT).show()
         Thread {
             val result = runCatching { resolvePlayableUrlWithFallback(ep) }
@@ -882,6 +894,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         currentPlayError = ""
         currentPlayLoading = resolved.direct
         val playable = ep.copy(playUrl = resolved.url, source = resolved.source)
+        currentOriginalEpisode = ep
         currentEpisode = playable
         currentPlayDirect = resolved.direct
         currentPlayHeaders = resolved.headers
@@ -897,6 +910,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                     playWhenReady = true
                 }
             }.onSuccess {
+                autoFallbackInProgress = false
                 Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
             }.onFailure { err ->
                 currentPlayLoading = false
@@ -920,14 +934,29 @@ class BangumiWatchActivity : AppCompatActivity() {
             .onFailure { Log.e("BangumiWatch", "render error state failed", it) }
     }
 
+
+    private fun tryFallbackAfterPlayerError(error: PlaybackException) {
+        if (autoFallbackInProgress) return
+        val item = selectedAnime ?: return
+        val original = currentOriginalEpisode ?: return
+        val detail = selectedDetail ?: return
+        failedPlaybackSourceUrls.add(original.playUrl)
+        val next = detail.episodes.firstOrNull {
+            it.name == original.name && it.playUrl != original.playUrl && !failedPlaybackSourceUrls.contains(it.playUrl)
+        } ?: return
+        autoFallbackInProgress = true
+        Toast.makeText(this, "当前线路播放失败，自动切换下一线路", Toast.LENGTH_SHORT).show()
+        startPlayEpisode(item, next, resetFailures = false)
+    }
+
     private data class ResolvedPlay(val url: String, val direct: Boolean, val source: String, val headers: Map<String, String> = emptyMap(), val webFallback: Boolean = false)
 
     private fun resolvePlayableUrlWithFallback(ep: EpisodeItem): ResolvedPlay {
         val candidates = mutableListOf(ep)
-        if (ep.playUrl.contains("anime.xifanacg.com/watch/")) {
-            val sameEpisode = selectedDetail?.episodes.orEmpty().filter { it.name == ep.name && it.playUrl != ep.playUrl }
-            candidates.addAll(sameEpisode)
+        val sameEpisode = selectedDetail?.episodes.orEmpty().filter {
+            it.name == ep.name && it.playUrl != ep.playUrl && !failedPlaybackSourceUrls.contains(it.playUrl)
         }
+        candidates.addAll(sameEpisode)
         var lastError: Throwable? = null
         for (candidate in candidates.distinctBy { it.playUrl }) {
             val resolved = runCatching { resolvePlayableUrl(candidate) }
@@ -1033,6 +1062,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                         runOnUiThread {
                             Toast.makeText(this@BangumiWatchActivity, currentPlayError, Toast.LENGTH_LONG).show()
                             runCatching { renderDetailOnly() }
+                            runCatching { tryFallbackAfterPlayerError(error) }
                         }
                     }
                 })

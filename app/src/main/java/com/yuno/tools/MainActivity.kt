@@ -51,8 +51,11 @@ import androidx.core.view.isVisible
 import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.yuno.tools.data.UserSettingsStore
 import com.yuno.tools.ui.video.VideoParseActivity
@@ -107,6 +110,9 @@ class MainActivity : AppCompatActivity() {
     private var musicPanelLastTab = MusicPanelTab.LOCAL
     private var onlineLastKeyword = ""
     private var onlineCachedSongs: List<com.yuno.tools.util.MusicSearchHelper.OnlineSong> = emptyList()
+    private var currentOnlinePlayKey: String? = null
+    private var loadingOnlinePlayKey: String? = null
+    private var refreshOnlineMusicList: (() -> Unit)? = null
 
     private val requestAudioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showMusicPanel()
@@ -309,7 +315,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun ensureMusicPlayer(): ExoPlayer {
-        return musicPlayer ?: ExoPlayer.Builder(this).build().also { created ->
+        return musicPlayer ?: run {
+            val httpFactory = DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(12000)
+                .setReadTimeoutMs(12000)
+                .setDefaultRequestProperties(musicHttpHeaders())
+            ExoPlayer.Builder(this)
+                .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+                .build()
+        }.also { created ->
             musicPlayer = created
             created.repeatMode = musicRepeatMode
             created.shuffleModeEnabled = musicShuffleEnabled
@@ -318,15 +333,45 @@ class MainActivity : AppCompatActivity() {
             created.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     updateMusicNavState(isPlaying)
+                    if (isPlaying && loadingOnlinePlayKey != null) {
+                        loadingOnlinePlayKey = null
+                        refreshOnlineMusicList?.invoke()
+                    }
+                }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
+                        if (loadingOnlinePlayKey != null) {
+                            loadingOnlinePlayKey = null
+                            refreshOnlineMusicList?.invoke()
+                        }
+                    }
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    val failedTitle = currentMusicTitle.substringAfter(" · ", currentMusicTitle)
+                    loadingOnlinePlayKey = null
+                    currentOnlinePlayKey = null
+                    updateMusicNavState(false)
+                    refreshOnlineMusicList?.invoke()
+                    Toast.makeText(this@MainActivity, "播放失败：$failedTitle，可能是版权限制或临时链接失效", Toast.LENGTH_LONG).show()
                 }
             })
             created.prepare()
         }
     }
 
-    private fun playSelectedMusic(title: String, uri: Uri) {
+    private fun musicHttpHeaders(): Map<String, String> = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+        "Accept" to "*/*",
+        "Referer" to "https://music.163.com/"
+    )
+
+    private fun playSelectedMusic(title: String, uri: Uri, onlineKey: String? = null) {
         currentMusicTitle = title
         currentMusicUri = uri
+        currentOnlinePlayKey = onlineKey
+        loadingOnlinePlayKey = onlineKey
         val player = ensureMusicPlayer()
         player.stop()
         player.clearMediaItems()
@@ -338,10 +383,13 @@ class MainActivity : AppCompatActivity() {
         player.play()
         updateMusicNavState(true)
         updateMusicNotification(true)
+        refreshOnlineMusicList?.invoke()
     }
 
     private fun playLocalMusicFromPanel() {
-        playSelectedMusic("本地音乐 · 用户歌曲", currentMusicUri ?: defaultLocalSongUri())
+        currentOnlinePlayKey = null
+        loadingOnlinePlayKey = null
+        playSelectedMusic("本地音乐 · 用户歌曲", currentMusicUri ?: defaultLocalSongUri(), null)
     }
 
     private fun defaultLocalSongUri(): Uri {
@@ -607,16 +655,7 @@ class MainActivity : AppCompatActivity() {
                     listArea.addView(makeMusicRow("未搜索到结果", "可尝试更换关键词；歌曲海部分结果可能暂无公开播放源", "", {}))
                 } else {
                     for (s in songs) {
-                        listArea.addView(makeOnlineSongRow(s, {
-                            val playUrl = s.playUrl
-                            if (playUrl.isNullOrBlank()) {
-                                Toast.makeText(this, "该歌曲暂无公开播放源，不能播放或下载", Toast.LENGTH_SHORT).show()
-                            } else {
-                                val uri = com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(playUrl)
-                                playSelectedMusic(s.source.label + " · " + s.title, uri)
-                                subTitle.text = currentMusicTitle
-                            }
-                        }, onChanged = { renderOnlineSongs(songs) }))
+                        listArea.addView(makeOnlineSongRow(s, onChanged = { renderOnlineSongs(songs) }))
                     }
                 }
                 replaceOnlineList(ScrollView(this).apply {
@@ -624,6 +663,8 @@ class MainActivity : AppCompatActivity() {
                     addView(listArea)
                 })
             }
+
+            refreshOnlineMusicList = { renderOnlineSongs(onlineCachedSongs) }
 
             val searchButton = makeControlButton("搜索") { _ ->
                 val keyword = input.text.toString().trim()
@@ -765,7 +806,7 @@ class MainActivity : AppCompatActivity() {
         return row
     }
 
-    private fun makeOnlineSongRow(song: com.yuno.tools.util.MusicSearchHelper.OnlineSong, playAction: () -> Unit, onChanged: (() -> Unit)? = null): View {
+    private fun makeOnlineSongRow(song: com.yuno.tools.util.MusicSearchHelper.OnlineSong, onChanged: (() -> Unit)? = null): View {
         val record = OnlineMusicRecord(
             title = song.title,
             artist = song.artist,
@@ -774,9 +815,34 @@ class MainActivity : AppCompatActivity() {
             playUrl = song.playUrl.orEmpty()
         )
         val canPlay = record.playUrl.isNotBlank()
-        val desc = record.sourceLabel + " · " + record.artist + if (canPlay) "" else " · 暂无公开播放源"
+        val key = musicRecordKey(record)
+        val isLoading = loadingOnlinePlayKey == key
+        val isCurrent = currentOnlinePlayKey == key
+        val status = when {
+            isLoading -> " · 正在加载"
+            isCurrent && musicPlayer?.isPlaying == true -> " · 正在播放"
+            isCurrent -> " · 已选中"
+            !canPlay -> " · 暂无公开播放源"
+            else -> ""
+        }
+        val desc = record.sourceLabel + " · " + record.artist + status
         val actions = mutableListOf<Pair<String, () -> Unit>>()
-        actions += (if (canPlay) "播放" else "不可播") to playAction
+        val playLabel = when {
+            !canPlay -> "不可播"
+            isLoading -> "加载中…"
+            isCurrent && musicPlayer?.isPlaying == true -> "播放中"
+            else -> "播放"
+        }
+        actions += playLabel to {
+            if (!canPlay) {
+                Toast.makeText(this, "该歌曲暂无公开播放源，不能播放或下载", Toast.LENGTH_SHORT).show()
+            } else {
+                loadingOnlinePlayKey = key
+                currentOnlinePlayKey = key
+                onChanged?.invoke()
+                playOnlineRecord(record)
+            }
+        }
         actions += (if (isMusicFavorite(record)) "已收藏" else "收藏") to {
             toggleMusicFavorite(record)
             Toast.makeText(this, if (isMusicFavorite(record)) "已收藏：${record.title}" else "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
@@ -931,9 +997,13 @@ class MainActivity : AppCompatActivity() {
         saveMusicRecords(key, loadMusicRecords(key).filterNot { sameMusicRecord(it, record) })
     }
 
+    private fun musicRecordKey(record: OnlineMusicRecord): String {
+        return record.sourceLabel + "|" + record.pageUrl + "|" + record.title + "|" + record.artist
+    }
+
     private fun playOnlineRecord(record: OnlineMusicRecord) {
         val target = if (record.localPath.isNotBlank()) Uri.fromFile(File(record.localPath)) else com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(record.playUrl)
-        playSelectedMusic(record.sourceLabel + " · " + record.title, target)
+        playSelectedMusic(record.sourceLabel + " · " + record.title, target, musicRecordKey(record))
     }
 
     private fun downloadOnlineSong(record: OnlineMusicRecord) {

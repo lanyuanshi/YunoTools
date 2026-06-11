@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.0.89**
+**当前版本：v1.0.90**
 
-安装包下载：[release/YunoTools-v1.0.89.apk](release/YunoTools-v1.0.89.apk)
+安装包下载：[release/YunoTools-v1.0.90.apk](release/YunoTools-v1.0.90.apk)
 
-本版本继续修复“看番”：稀饭动漫详情页按真实线路/播放源分组显示剧集，不再把多个源的集数混在一起；AGE 动漫点击剧集时若未提取到可内置播放的 MP4/M3U8 直链，不再自动加载解析页 WebView，改为在 APP 内提示换线路/播放源，优先避免闪回 APP 主界面。
+本版本继续修复“看番”：保留稀饭动漫按播放源分组显示，同时恢复稀饭直链播放能力；稀饭播放页解析出的 MP4/M3U8 直链会使用带 Referer/User-Agent 的 ExoPlayer 数据源播放，避免因站点防盗链导致 v1.0.89 出现“能解析但放不了”的问题。AGE 仍保持解析不到直链时不自动加载解析页 WebView，以避免闪回主界面。
 
 一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。
 

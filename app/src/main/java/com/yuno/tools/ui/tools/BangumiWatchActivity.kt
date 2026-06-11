@@ -25,7 +25,9 @@ import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
@@ -104,6 +106,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var currentEpisode: EpisodeItem? = null
     private var currentPlayDirect = true
+    private var currentPlayHeaders: Map<String, String> = emptyMap()
     private var detailBackTab = Tab.BANGUMI
     private var detailBackScreen = Screen.LIST
     private var page = 1
@@ -830,7 +833,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                     addHistory(item, playable)
                     currentEpisode = playable
                     if (resolved.direct) {
-                        ensurePlayer().apply {
+                        ensurePlayer(resolved.headers).apply {
                             setMediaItem(MediaItem.fromUri(playable.playUrl))
                             prepare()
                             playWhenReady = true
@@ -851,7 +854,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         }.start()
     }
 
-    private data class ResolvedPlay(val url: String, val direct: Boolean, val source: String, val webFallback: Boolean = false)
+    private data class ResolvedPlay(val url: String, val direct: Boolean, val source: String, val headers: Map<String, String> = emptyMap(), val webFallback: Boolean = false)
 
     private fun resolvePlayableUrl(ep: EpisodeItem): ResolvedPlay {
         val url = ep.playUrl
@@ -872,7 +875,12 @@ class BangumiWatchActivity : AppCompatActivity() {
         val play = raw.replace("\\/", "/")
         if (play.startsWith("http")) {
             val direct = play.contains(".mp4", true) || play.contains(".m3u8", true)
-            return ResolvedPlay(play, direct, if (ep.source.isNotBlank()) ep.source else "稀饭直链")
+            val headers = mapOf(
+                "User-Agent" to "Mozilla/5.0",
+                "Referer" to url,
+                "Origin" to "https://anime.xifanacg.com"
+            )
+            return ResolvedPlay(play, direct, if (ep.source.isNotBlank()) ep.source else "稀饭直链", headers)
         }
         error("稀饭播放地址为空")
     }
@@ -892,10 +900,19 @@ class BangumiWatchActivity : AppCompatActivity() {
         renderDetail()
     }
 
-    private fun ensurePlayer(): ExoPlayer {
+    private fun ensurePlayer(headers: Map<String, String> = currentPlayHeaders): ExoPlayer {
         val existing = player
-        if (existing != null) return existing
-        return ExoPlayer.Builder(this).build().also { player = it }
+        if (existing != null && headers == currentPlayHeaders) return existing
+        existing?.release()
+        currentPlayHeaders = headers
+        val httpFactory = DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(headers)
+            .setUserAgent(headers["User-Agent"] ?: "Mozilla/5.0")
+            .setAllowCrossProtocolRedirects(true)
+        return ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+            .build()
+            .also { player = it }
     }
 
     private fun sourceChooser() {

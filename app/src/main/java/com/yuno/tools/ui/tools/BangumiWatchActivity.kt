@@ -594,18 +594,28 @@ class BangumiWatchActivity : AppCompatActivity() {
         val intro = htmlText(Regex("""<div[^>]*class="videos-description"[^>]*>.*?<span[^>]*class="videos-description-title"[^>]*>.*?</span>(.*?)(?:<div class="more-info"|</div>\s*</div>)""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { "暂无简介" }
         val title = htmlText(Regex("""<h2[^>]*class="g-box-title[^"]*"[^>]*>(.*?)</h2>""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { item.title }
         val meta = listOf(item.status).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "稀饭动漫" }
+        val lineLabels = Regex("""<a[^>]*class="swiper-slide"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(body)
+            .map { htmlText(it.groupValues[1]).replace(Regex("""\s+"""), " " ).trim().ifBlank { "线路" } }
+            .toList()
+        val lineBoxRegex = Regex("""<div[^>]*class="anthology-list-box[^"]*"[^>]*>(.*?)(?=<div[^>]*class="anthology-list-box|</div>\s*</div>\s*</div>)""", RegexOption.DOT_MATCHES_ALL)
         val watchRegex = Regex("""<a[^>]*href="(/watch/[^"]+\.html)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        val episodes = watchRegex.findAll(body)
-            .mapNotNull { m ->
+        val grouped = lineBoxRegex.findAll(body).mapIndexed { index, box ->
+            val lineName = lineLabels.getOrNull(index)?.replace(Regex("""\s*\d+\s*$"""), "")?.ifBlank { "线路${index + 1}" } ?: "线路${index + 1}"
+            watchRegex.findAll(box.groupValues[1]).mapNotNull { m ->
                 val url = m.groupValues[1]
                 val text = htmlText(m.groupValues[2])
                 val name = text.ifBlank { episodeNameFromUrl(url) }
-                if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), "稀饭")
-            }
-            .distinctBy { it.playUrl }
-            .toList()
-            .let { sortEpisodes(it) }
-        return AnimeDetail(item.copy(title = title), intro, meta, "", episodes)
+                if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), lineName)
+            }.distinctBy { it.playUrl }.toList().let { sortEpisodes(it) }
+        }.toList().flatten()
+        val fallback = if (grouped.isEmpty()) watchRegex.findAll(body).mapNotNull { m ->
+            val url = m.groupValues[1]
+            val text = htmlText(m.groupValues[2])
+            val name = text.ifBlank { episodeNameFromUrl(url) }
+            if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), "线路1")
+        }.distinctBy { it.playUrl }.toList().let { sortEpisodes(it) } else grouped
+        return AnimeDetail(item.copy(title = title), intro, meta, "", fallback)
     }
 
     private fun parseEpisodes(html: String, prefix: String): List<EpisodeItem> {
@@ -750,19 +760,12 @@ class BangumiWatchActivity : AppCompatActivity() {
                 box.addView(playerView)
             } else {
                 player?.pause()
-                val webResult = runCatching {
-                    WebView(context).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.mediaPlaybackRequiresUserGesture = false
-                        webChromeClient = WebChromeClient()
-                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240))
-                        loadUrl(active.playUrl)
-                    }
-                }
-                webResult.onSuccess { box.addView(it) }
-                    .onFailure { e -> box.addView(TextView(context).apply { text = "应用内解析播放器初始化失败：${e.message ?: "未知错误"}"; textSize = 12f; setTextColor(Color.parseColor("#D93025")); setPadding(0, dp(8), 0, 0) }) }
-                box.addView(TextView(context).apply { text = "该线路未提供可直接提取的 MP4/M3U8，已在应用内加载官方解析播放器。"; textSize = 12f; setTextColor(Color.parseColor("#7A7F89")); setPadding(0, dp(8), 0, 0) })
+                box.addView(TextView(context).apply {
+                    text = "当前线路没有解析到可内置播放的 MP4/M3U8 地址，请尝试其他线路或播放源。"
+                    textSize = 13f
+                    setTextColor(Color.parseColor("#D93025"))
+                    setPadding(0, dp(10), 0, dp(10))
+                })
             }
             val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(10), 0, 0) }
             actions.addView(primaryButton("下载记录") { addDownload(detail.item, active) })
@@ -772,36 +775,46 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun episodeGrid(detail: AnimeDetail) {
-        val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        detail.episodes.take(80).forEach { ep ->
-            val cell = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(8), dp(7), dp(8), dp(7))
-                setBackgroundColor(Color.parseColor(if (currentEpisode?.playUrl == ep.playUrl) "#DCE4FF" else "#EEF1F6"))
-                layoutParams = LinearLayout.LayoutParams(dp(104), LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), dp(8)) }
-                setOnClickListener { playEpisode(detail.item, ep) }
-            }
-            cell.addView(TextView(this).apply {
-                text = ep.name
-                textSize = 13f
+        val groups = detail.episodes.groupBy { it.source.ifBlank { "播放源" } }
+        groups.forEach { (sourceName, episodes) ->
+            content.addView(TextView(this).apply {
+                text = "$sourceName（${episodes.size} 集）"
+                textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setTextColor(Color.parseColor("#202124"))
-                maxLines = 1
+                setTextColor(Color.parseColor("#4D5562"))
+                setPadding(dp(2), dp(8), 0, dp(6))
             })
-            cell.addView(TextView(this).apply {
-                text = "播放"
-                textSize = 11f
-                gravity = Gravity.CENTER
-                setTextColor(Color.parseColor("#4F6EF7"))
-                setPadding(0, dp(5), 0, 0)
-                setOnClickListener { playEpisode(detail.item, ep) }
-            })
-            row.addView(cell)
+            val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            episodes.take(120).forEach { ep ->
+                val cell = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(8), dp(7), dp(8), dp(7))
+                    setBackgroundColor(Color.parseColor(if (currentEpisode?.playUrl == ep.playUrl) "#DCE4FF" else "#EEF1F6"))
+                    layoutParams = LinearLayout.LayoutParams(dp(104), LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), dp(8)) }
+                    setOnClickListener { playEpisode(detail.item, ep) }
+                }
+                cell.addView(TextView(this).apply {
+                    text = ep.name
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT_BOLD
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.parseColor("#202124"))
+                    maxLines = 1
+                })
+                cell.addView(TextView(this).apply {
+                    text = "播放"
+                    textSize = 11f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.parseColor("#4F6EF7"))
+                    setPadding(0, dp(5), 0, 0)
+                    setOnClickListener { playEpisode(detail.item, ep) }
+                })
+                row.addView(cell)
+            }
+            scroll.addView(row)
+            content.addView(scroll)
         }
-        scroll.addView(row)
-        content.addView(scroll)
     }
 
     private fun playEpisode(item: AnimeItem, ep: EpisodeItem) {
@@ -825,7 +838,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                         Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
                     } else {
                         player?.pause()
-                        Toast.makeText(this, "未提取到直链，已在应用内加载解析播放器", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "当前线路未提取到可内置播放地址，请换一条线路/播放源", Toast.LENGTH_LONG).show()
                     }
                     currentPlayDirect = resolved.direct
                     runCatching { renderDetailOnly() }.onFailure { e ->
@@ -838,7 +851,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         }.start()
     }
 
-    private data class ResolvedPlay(val url: String, val direct: Boolean, val source: String)
+    private data class ResolvedPlay(val url: String, val direct: Boolean, val source: String, val webFallback: Boolean = false)
 
     private fun resolvePlayableUrl(ep: EpisodeItem): ResolvedPlay {
         val url = ep.playUrl
@@ -870,7 +883,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             .map { it.value }
             .firstOrNull { !it.contains("adposter", true) }
         if (!direct.isNullOrBlank()) return ResolvedPlay(direct, true, source)
-        return ResolvedPlay(url, false, source)
+        return ResolvedPlay(url, false, source, webFallback = false)
     }
 
     private fun renderDetailOnly() {

@@ -529,16 +529,19 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun parseXifanLibrary(html: String): List<AnimeItem> {
-        val cardRegex = Regex("""<a[^>]+href=\"(/bangumi/[^\"]+\.html)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        val imgRegex = Regex("""<img[^>]+data-src=\"([^\"]+)\"[^>]+alt=\"([^\"]*)\""", RegexOption.DOT_MATCHES_ALL)
-        val titleFromLinkRegex = Regex("""title=\"([^\"]+)\"""")
-        val statusRegex = Regex("""<span[^>]+class=\"public-list-prb[^\"]*\"[^>]*>.*?<i[^>]*>(.*?)</i>.*?</span>""", RegexOption.DOT_MATCHES_ALL)
+        val cardRegex = Regex("""<a[^>]+href="(/bangumi/[^"]+\.html)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val imgTagRegex = Regex("""<img[^>]*>""", RegexOption.DOT_MATCHES_ALL)
+        val dataSrcRegex = Regex("""data-src="([^"]+)""")
+        val srcRegex = Regex("""src="([^"]+)""")
+        val altRegex = Regex("""alt="([^"]*)""")
+        val titleFromLinkRegex = Regex("""title="([^"]+)""")
+        val statusRegex = Regex("""<span[^>]+class="public-list-prb[^"]*"[^>]*>.*?<i[^>]*>(.*?)</i>.*?</span>""", RegexOption.DOT_MATCHES_ALL)
         return cardRegex.findAll(html).mapNotNull { match ->
             val href = htmlAttr(match.groupValues[1])
             val block = match.groupValues[2]
-            val img = imgRegex.find(block)
-            val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty()).ifBlank { htmlText(titleFromLinkRegex.find(match.value)?.groupValues?.getOrNull(1).orEmpty()) }
-            val cover = htmlAttr(img?.groupValues?.getOrNull(1).orEmpty())
+            val imgTag = imgTagRegex.find(block)?.value.orEmpty()
+            val title = htmlText(altRegex.find(imgTag)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { htmlText(titleFromLinkRegex.find(match.value)?.groupValues?.getOrNull(1).orEmpty()) }
+            val cover = htmlAttr(dataSrcRegex.find(imgTag)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { htmlAttr(srcRegex.find(imgTag)?.groupValues?.getOrNull(1).orEmpty()) }
             val status = htmlText(statusRegex.find(block)?.groupValues?.getOrNull(1).orEmpty())
             if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href, selectedSource.name)
         }.distinctBy { it.detailUrl }.toList()
@@ -588,10 +591,10 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun parseXifanDetail(item: AnimeItem, body: String): AnimeDetail {
-        val intro = htmlText(Regex("""<div[^>]*class=\"videos-description\"[^>]*>.*?<span[^>]*class=\"videos-description-title\"[^>]*>.*?</span>(.*?)(?:<div class=\"more-info\"|</div>\s*</div>)""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { "暂无简介" }
-        val title = htmlText(Regex("""<h2[^>]*class=\"g-box-title[^\"]*\"[^>]*>(.*?)</h2>""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { item.title }
+        val intro = htmlText(Regex("""<div[^>]*class="videos-description"[^>]*>.*?<span[^>]*class="videos-description-title"[^>]*>.*?</span>(.*?)(?:<div class="more-info"|</div>\s*</div>)""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { "暂无简介" }
+        val title = htmlText(Regex("""<h2[^>]*class="g-box-title[^"]*"[^>]*>(.*?)</h2>""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { item.title }
         val meta = listOf(item.status).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "稀饭动漫" }
-        val watchRegex = Regex("""<a[^>]*href=\"(/watch/[^\"]+\.html)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val watchRegex = Regex("""<a[^>]*href="(/watch/[^"]+\.html)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
         val episodes = watchRegex.findAll(body)
             .mapNotNull { m ->
                 val url = m.groupValues[1]
@@ -606,13 +609,13 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun parseEpisodes(html: String, prefix: String): List<EpisodeItem> {
-        val sourceLabels = Regex("""<div class=\"source-tab[^\"]*\"[^>]*data-source=\"([^\"]+)\"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        val sourceLabels = Regex("""<div class="source-tab[^"]*"[^>]*data-source="([^"]+)"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
             .findAll(html)
             .associate { it.groupValues[1] to htmlText(it.groupValues[2]).ifBlank { it.groupValues[1] } }
         val linkRegex = Regex("""<a[^>]*episode-link[^>]*>.*?</a>""", RegexOption.DOT_MATCHES_ALL)
-        val hrefRegex = Regex("""href=\"([^\"]*)\"""")
-        val dataUrlRegex = Regex("""data-url=\"([^\"]*)\"""")
-        val dataSourceRegex = Regex("""data-source=\"([^\"]*)\"""")
+        val hrefRegex = Regex("""href="([^"]*)""" )
+        val dataUrlRegex = Regex("""data-url="([^"]*)""" )
+        val dataSourceRegex = Regex("""data-source="([^"]*)""" )
         val found = linkRegex.findAll(html).mapNotNull { match ->
             val tag = match.value
             val raw = htmlAttr(dataUrlRegex.find(tag)?.groupValues?.getOrNull(1).orEmpty()).ifBlank {
@@ -629,7 +632,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             }
             if (play.isBlank()) null else EpisodeItem(name, play, sourceName)
         }.distinctBy { it.playUrl }.toList()
-        val m3u8Fallback = Regex("""href=\"([^\"]+\\.m3u8[^\"]*)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val m3u8Fallback = Regex("""href="([^"]+\\.m3u8[^"]*)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
             .findAll(html)
             .mapIndexedNotNull { index, m ->
                 val url = htmlAttr(m.groupValues[1])
@@ -638,7 +641,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             }
             .toList()
         if (found.isNotEmpty() || m3u8Fallback.isNotEmpty()) return (found + m3u8Fallback).distinctBy { it.playUrl }
-        val urlRegex = Regex("""data-url=\"([^\"]+)\"[^>]*>(.*?)</""", RegexOption.DOT_MATCHES_ALL)
+        val urlRegex = Regex("""data-url="([^"]+)"[^>]*>(.*?)</""", RegexOption.DOT_MATCHES_ALL)
         return urlRegex.findAll(html).map { m ->
             val url = htmlAttr(m.groupValues[1])
             val name = htmlText(m.groupValues[2]).ifBlank { "播放" }
@@ -747,15 +750,18 @@ class BangumiWatchActivity : AppCompatActivity() {
                 box.addView(playerView)
             } else {
                 player?.pause()
-                val web = WebView(context).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.mediaPlaybackRequiresUserGesture = false
-                    webChromeClient = WebChromeClient()
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240))
-                    loadUrl(active.playUrl)
+                val webResult = runCatching {
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        webChromeClient = WebChromeClient()
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240))
+                        loadUrl(active.playUrl)
+                    }
                 }
-                box.addView(web)
+                webResult.onSuccess { box.addView(it) }
+                    .onFailure { e -> box.addView(TextView(context).apply { text = "应用内解析播放器初始化失败：${e.message ?: "未知错误"}"; textSize = 12f; setTextColor(Color.parseColor("#D93025")); setPadding(0, dp(8), 0, 0) }) }
                 box.addView(TextView(context).apply { text = "该线路未提供可直接提取的 MP4/M3U8，已在应用内加载官方解析播放器。"; textSize = 12f; setTextColor(Color.parseColor("#7A7F89")); setPadding(0, dp(8), 0, 0) })
             }
             val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(10), 0, 0) }
@@ -822,7 +828,9 @@ class BangumiWatchActivity : AppCompatActivity() {
                         Toast.makeText(this, "未提取到直链，已在应用内加载解析播放器", Toast.LENGTH_LONG).show()
                     }
                     currentPlayDirect = resolved.direct
-                    renderDetailOnly()
+                    runCatching { renderDetailOnly() }.onFailure { e ->
+                        Toast.makeText(this, "播放器刷新失败：${e.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                    }
                 }.onFailure { err ->
                     Toast.makeText(this, "播放解析失败：${err.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
                 }
@@ -858,7 +866,7 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun resolveAgePlayerPage(url: String, source: String): ResolvedPlay {
         val html = fetch(url)
-        val direct = Regex("""https?://[^\"']+?(?:\.m3u8|\.mp4)[^\"']*""", RegexOption.IGNORE_CASE).findAll(html)
+        val direct = Regex("""https?://[^"']+?(?:\.m3u8|\.mp4)[^"']*""", RegexOption.IGNORE_CASE).findAll(html)
             .map { it.value }
             .firstOrNull { !it.contains("adposter", true) }
         if (!direct.isNullOrBlank()) return ResolvedPlay(direct, true, source)

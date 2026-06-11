@@ -40,12 +40,13 @@ class TinyReaderActivity : AppCompatActivity() {
     private lateinit var appBarSub: TextView
     private lateinit var actionHost: LinearLayout
     private lateinit var contentHost: FrameLayout
+    private lateinit var navHome: LinearLayout
     private lateinit var navLibrary: LinearLayout
     private lateinit var navHistory: LinearLayout
     private lateinit var navMore: LinearLayout
-    private var selectedTab = TAB_LIBRARY
-    private var screenMode = TAB_LIBRARY
-    private var previousScreen = TAB_LIBRARY
+    private var selectedTab = TAB_HOME
+    private var screenMode = TAB_HOME
+    private var previousScreen = TAB_HOME
     private var currentManga: Manga? = null
     private var readerScroll: ScrollView? = null
 
@@ -77,7 +78,7 @@ class TinyReaderActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { handleBack() }
         })
-        showLibrary()
+        showHome()
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
@@ -98,10 +99,11 @@ class TinyReaderActivity : AppCompatActivity() {
         root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
         val navShell = FrameLayout(this).apply { setPadding(dp(18), dp(8), dp(18), dp(14)); setBackgroundColor(C_BG) }
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; background = round(Color.WHITE, dp(28)); elevation = dp(8).toFloat(); setPadding(dp(6), 0, dp(6), 0) }
+        navHome = navItem("首页", "⌂") { showHome() }
         navLibrary = navItem("书架", "▦") { showLibrary() }
         navHistory = navItem("历史", "◴") { showHistory() }
         navMore = navItem("更多", "☰") { showMore() }
-        listOf(navLibrary, navHistory, navMore).forEach { nav.addView(it, LinearLayout.LayoutParams(0, -1, 1f)) }
+        listOf(navHome, navLibrary, navHistory, navMore).forEach { nav.addView(it, LinearLayout.LayoutParams(0, -1, 1f)) }
         navShell.addView(nav, FrameLayout.LayoutParams(-1, dp(70), Gravity.CENTER))
         root.addView(navShell, LinearLayout.LayoutParams(-1, dp(92)))
         setContentView(root)
@@ -109,18 +111,56 @@ class TinyReaderActivity : AppCompatActivity() {
 
     private fun handleBack() {
         when (screenMode) {
-            SCREEN_READER -> currentManga?.let { saveProgress(); showDetail(it) } ?: showLibrary()
-            SCREEN_DETAIL, SCREEN_SEARCH -> when (previousScreen) { TAB_HISTORY -> showHistory(); TAB_MORE -> showMore(); else -> showLibrary() }
-            TAB_LIBRARY -> finish()
-            else -> showLibrary()
+            SCREEN_READER -> currentManga?.let { saveProgress(); showDetail(it) } ?: showHome()
+            SCREEN_DETAIL, SCREEN_SEARCH -> when (previousScreen) { TAB_LIBRARY -> showLibrary(); TAB_HISTORY -> showHistory(); TAB_MORE -> showMore(); else -> showHome() }
+            TAB_HOME -> finish()
+            else -> showHome()
         }
     }
 
     private fun setHeader(title: String, sub: String, tab: Int? = null) {
         appBarTitle.text = title; appBarSub.text = sub; actionHost.removeAllViews(); tab?.let { selectedTab = it; screenMode = it }; updateNav()
     }
-    private fun updateNav() { listOf(navLibrary to TAB_LIBRARY, navHistory to TAB_HISTORY, navMore to TAB_MORE).forEach { (v,t) -> v.background = if (selectedTab == t) round(C_PRIMARY_LIGHT, dp(22)) else null } }
+    private fun updateNav() { listOf(navHome to TAB_HOME, navLibrary to TAB_LIBRARY, navHistory to TAB_HISTORY, navMore to TAB_MORE).forEach { (v,t) -> v.background = if (selectedTab == t) round(C_PRIMARY_LIGHT, dp(22)) else null } }
     private fun actionButton(text: String, click: () -> Unit) { actionHost.addView(Button(this).apply { this.text = text; textSize = 16f; minWidth = dp(44); setTextColor(C_PRIMARY); background = round(Color.TRANSPARENT, dp(22)); setOnClickListener { click() } }, LinearLayout.LayoutParams(dp(48), dp(48))) }
+
+    private fun showHome() {
+        saveProgress(); currentManga = null; readerScroll = null
+        setHeader("首页", "自动获取好多漫 / MyComic 漫画列表", TAB_HOME)
+        actionButton("↻") { showHome() }
+        val box = scroll()
+        empty(box, "正在获取首页漫画…", "从好多漫和 MyComic 抓取列表，解析后在本地展示。")
+        Thread {
+            val sources = listOf(
+                Source("好多漫", "https://m.haoduoman.com/"),
+                Source("MyComic", "https://mycomic.com/cn/comics")
+            )
+            val groups = sources.map { src ->
+                val rs = runCatching { parseSourceResults(http(src.searchUrl, src.name), src.name, src.searchUrl) }
+                    .getOrElse { listOf(SearchResult("加载失败", src.searchUrl, src.name, it.message ?: "源站拒绝或网络失败")) }
+                src.name to rs
+            }
+            runOnUiThread { renderHome(groups) }
+        }.start()
+    }
+
+    private fun renderHome(groups: List<Pair<String, List<SearchResult>>>) {
+        previousScreen = TAB_HOME
+        setHeader("首页", "好多漫 / MyComic 自动列表", TAB_HOME)
+        actionButton("↻") { showHome() }
+        val box = scroll()
+        groups.forEach { (name, results) ->
+            section(box, "$name · ${results.size} 条")
+            if (results.isEmpty()) {
+                empty(box, "$name 没有解析到漫画", "可能页面结构变化或源站拒绝访问。")
+            } else {
+                results.take(18).forEach { r ->
+                    val sub = r.sourceName + "\n" + r.snippet
+                    box.addView(menuCard(r.title, sub) { loadMangaFromUrl(r.title, r.url, r.sourceName) })
+                }
+            }
+        }
+    }
 
     private fun showLibrary() {
         saveProgress(); currentManga = null; readerScroll = null
@@ -191,7 +231,7 @@ class TinyReaderActivity : AppCompatActivity() {
     }
     private fun loadSourceList(src: Source) { previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader(src.name, "正在加载漫画列表"); val box=scroll(); empty(box,"正在加载…",src.searchUrl.substringBefore('?')); Thread { val rs=runCatching { val url=if(src.name=="好多漫") "https://m.haoduoman.com/" else "https://mycomic.com/cn/comics"; parseSourceResults(http(url, src.name), src.name, url) }.getOrElse { listOf(SearchResult("加载失败", src.searchUrl.substringBefore('?'), src.name, it.message ?: "源站拒绝或网络失败")) }; runOnUiThread { showSearchResults(src.name, rs) } }.start() }
     private fun showSearchResults(keyword: String, results: List<SearchResult>) {
-        previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader("搜索结果", keyword)
+        previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索结果", keyword)
         val box = scroll(); section(box, "共 ${results.size} 条")
         if (results.isEmpty()) empty(box, "没搜到结果", "换个关键词或漫画源试试。") else results.forEach { r -> box.addView(menuCard(r.title, "${r.sourceName}\n${r.snippet}") { loadMangaFromUrl(r.title, r.url, r.sourceName) }) }
     }
@@ -259,7 +299,9 @@ class TinyReaderActivity : AppCompatActivity() {
                 "MyComic" -> url.contains("/comic") || url.contains("/comics/")
                 else -> false
             }
-            if (isManga && title.length in 2..100) SearchResult(title, url, source, extractImages(body, base).firstOrNull().orEmpty().ifBlank { url }) else null
+            val badTitle = title.contains("更多") || title.contains("分类") || title.contains("排行") || title.contains("更新")
+            val badUrl = url.contains("/area/") || url.contains("/category") || url.contains("/rank")
+            if (isManga && !badTitle && !badUrl && title.length in 2..100) SearchResult(title, url, source, extractImages(body, base).firstOrNull().orEmpty().ifBlank { url }) else null
         }.distinctBy { it.url }.take(60).toList()
     }
 
@@ -314,5 +356,5 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun share(s:String){ startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,s),"分享")) }
     private fun saveProgress(){ val m=currentManga ?: return; val y=readerScroll?.scrollY ?: m.progressY; saveManga(m.copy(progressY=y,lastReadAt=if(screenMode==SCREEN_READER)System.currentTimeMillis() else m.lastReadAt)) }
 
-    companion object { private const val TAB_LIBRARY=0; private const val TAB_HISTORY=2; private const val TAB_MORE=4; private const val SCREEN_DETAIL=10; private const val SCREEN_READER=11; private const val SCREEN_SEARCH=12; private const val KEY_MANGA="manga";  private const val KEY_SORT="sort"; private const val C_BG=0xFFF8F7FC.toInt(); private const val C_TEXT=0xFF1D1B20.toInt(); private const val C_SUB=0xFF6F6A78.toInt(); private const val C_PRIMARY=0xFF6750A4.toInt(); private const val C_PRIMARY_LIGHT=0xFFEADDFF.toInt(); private const val C_STROKE=0xFFE7E0EC.toInt() }
+    companion object { private const val TAB_HOME=0; private const val TAB_LIBRARY=1; private const val TAB_HISTORY=2; private const val TAB_MORE=4; private const val SCREEN_DETAIL=10; private const val SCREEN_READER=11; private const val SCREEN_SEARCH=12; private const val KEY_MANGA="manga";  private const val KEY_SORT="sort"; private const val C_BG=0xFFF8F7FC.toInt(); private const val C_TEXT=0xFF1D1B20.toInt(); private const val C_SUB=0xFF6F6A78.toInt(); private const val C_PRIMARY=0xFF6750A4.toInt(); private const val C_PRIMARY_LIGHT=0xFFEADDFF.toInt(); private const val C_STROKE=0xFFE7E0EC.toInt() }
 }

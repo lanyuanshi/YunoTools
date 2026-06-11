@@ -522,7 +522,7 @@ class MainActivity : AppCompatActivity() {
             }
             val favorites = loadMusicRecords(MUSIC_FAVORITES_KEY)
             if (favorites.isEmpty()) {
-                list.addView(makeHintText("暂无在线歌曲收藏。搜索歌曲狗 / 歌曲海后，点击“收藏”即可保存到这里。"))
+                list.addView(makeHintText("暂无在线歌曲收藏。搜索网易云榜单 / 歌曲海后，点击“收藏”即可保存到这里。"))
             } else {
                 favorites.forEach { record ->
                     list.addView(makeOnlineRecordRow(
@@ -548,24 +548,128 @@ class MainActivity : AppCompatActivity() {
 
             val page = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(0, (6 * density).toInt(), 0, 0)
+                setPadding(0, 0, 0, 0)
             }
-            page.addView(makeHintText("在线音乐入口已切换为网页曲库，点击后在浏览器打开。"))
-            page.addView(makeMusicRow("歌曲海", "https://www.gequhai.com/?ref=codernav.com", "打开") {
-                openExternalUrl("https://www.gequhai.com/?ref=codernav.com")
-            })
-            page.addView(makeMusicRow("网易云榜单", "https://netease-music.fe-mm.com/#/music/toplist", "打开") {
-                openExternalUrl("https://netease-music.fe-mm.com/#/music/toplist")
-            })
-            page.addView(makeHintText("提示：长按底部音乐键仍可打开本面板；底部播放键内会显示迷你流动歌词。"))
+            val listContainer = FrameLayout(this)
 
-            content.addView(ScrollView(this).apply {
-                isFillViewport = true
-                addView(page)
-            }, FrameLayout.LayoutParams(
+            fun replaceOnlineList(view: View) {
+                listContainer.removeAllViews()
+                listContainer.addView(view, FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                ))
+            }
+
+            fun showOnlineHint(message: String) {
+                val placeholder = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(0, (24 * density).toInt(), 0, 0)
+                }
+                placeholder.addView(TextView(this).apply {
+                    text = message
+                    textSize = 13f
+                    setTextColor(Color.parseColor("#7B8494"))
+                    gravity = Gravity.CENTER
+                })
+                replaceOnlineList(placeholder)
+            }
+
+            val searchRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 0, 0, (8 * density).toInt())
+            }
+            val input = android.widget.EditText(this).apply {
+                hint = "搜索网易云榜单 / 歌曲海音乐..."
+                setText(onlineLastKeyword)
+                textSize = 14f
+                isSingleLine = true
+                setTextColor(Color.parseColor("#182033"))
+                setHintTextColor(Color.parseColor("#A0A7B3"))
+                setPadding((12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt(), (8 * density).toInt())
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 20f * density
+                    setColor(Color.argb(120, 255, 255, 255))
+                }
+            }
+            searchRow.addView(input, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = (8 * density).toInt()
+            })
+
+            fun renderOnlineSongs(songs: List<com.yuno.tools.util.MusicSearchHelper.OnlineSong>) {
+                val listArea = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+                }
+                if (songs.isEmpty()) {
+                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试更换关键词；歌曲海部分结果可能暂无公开播放源", "", {}))
+                } else {
+                    for (s in songs) {
+                        listArea.addView(makeOnlineSongRow(s, {
+                            val playUrl = s.playUrl
+                            if (playUrl.isNullOrBlank()) {
+                                Toast.makeText(this, "该歌曲暂无公开播放源，不能播放或下载", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val uri = com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(playUrl)
+                                playSelectedMusic(s.source.label + " · " + s.title, uri)
+                                subTitle.text = currentMusicTitle
+                            }
+                        }, onChanged = { renderOnlineSongs(songs) }))
+                    }
+                }
+                replaceOnlineList(ScrollView(this).apply {
+                    isFillViewport = true
+                    addView(listArea)
+                })
+            }
+
+            val searchButton = makeControlButton("搜索") { _ ->
+                val keyword = input.text.toString().trim()
+                onlineLastKeyword = keyword
+                if (keyword.isBlank()) {
+                    onlineCachedSongs = emptyList()
+                    showOnlineHint("输入关键词搜索网易云榜单 / 歌曲海音乐")
+                    return@makeControlButton
+                }
+
+                val loadingArea = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+                }
+                loadingArea.addView(makeHintText("正在搜索：$keyword"))
+                replaceOnlineList(ScrollView(this).apply { addView(loadingArea) })
+
+                com.yuno.tools.util.MusicSearchHelper.searchOnline(keyword) { songs ->
+                    runOnUiThread {
+                        onlineCachedSongs = songs
+                        renderOnlineSongs(songs)
+                    }
+                }
+            }
+            searchRow.addView(searchButton)
+
+            page.addView(searchRow, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ))
+            page.addView(listContainer, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            ))
+            content.addView(page, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
+            if (onlineCachedSongs.isNotEmpty()) {
+                renderOnlineSongs(onlineCachedSongs)
+            } else if (onlineLastKeyword.isNotBlank()) {
+                searchButton.performClick()
+            } else {
+                showOnlineHint("输入关键词搜索网易云榜单 / 歌曲海音乐")
+            }
         }
 
         tabRow.addView(makeMusicChip("本地音乐") { showLocalTab() })
@@ -606,14 +710,6 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.show()
         dialog.window?.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
-    }
-
-    private fun openExternalUrl(url: String) {
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }.onFailure {
-            Toast.makeText(this, "没有可用浏览器打开链接", Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun makeMusicChip(text: String, action: () -> Unit): TextView {

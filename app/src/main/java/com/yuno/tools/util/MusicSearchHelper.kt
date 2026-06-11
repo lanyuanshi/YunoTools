@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 object MusicSearchHelper {
     enum class OnlineSource(val label: String) {
-        GEQUGOU("歌曲狗"),
+        NETEASE_TOPLIST("网易云榜单"),
         GEQUHAI("歌曲海"),
         INTERNET_ARCHIVE("Internet Archive")
     }
@@ -37,7 +37,7 @@ object MusicSearchHelper {
             val latch = CountDownLatch(3)
             val allSongs = Collections.synchronizedList(mutableListOf<OnlineSong>())
             val jobs = listOf<() -> List<OnlineSong>>(
-                { searchGequgou(trimmed) },
+                { searchNeteaseToplist(trimmed) },
                 { searchGequhai(trimmed) },
                 { searchInternetArchive(trimmed) }
             )
@@ -60,43 +60,34 @@ object MusicSearchHelper {
         }.start()
     }
 
-    private fun searchGequgou(keyword: String): List<OnlineSong> {
+    private fun searchNeteaseToplist(keyword: String): List<OnlineSong> {
+        val base = "https://netease-music.fe-mm.com"
+        val entry = "$base/#/music/toplist"
         return try {
-            val encoded = URLEncoder.encode(keyword.trim(), "UTF-8")
-            val raw = requestText("https://www.gequgou.com/search?ac=$encoded", "https://www.gequgou.com/", "text/html,application/xhtml+xml,*/*")
-            Regex("""href=["'](/music/[^"']+?\.html)["'][^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            val raw = requestText(entry, entry, "text/html,application/xhtml+xml,*/*")
+            val audioMatches = Regex("""https?://[^\s"'<>]+\.(?:mp3|m4a|aac|wav)(?:\?[^\s"'<>]*)?""", RegexOption.IGNORE_CASE)
                 .findAll(raw)
+                .map { decodeHtmlEntities(it.value) }
+                .filter { isPublicAudioUrl(it) }
                 .take(8)
-                .mapNotNull { match ->
-                    val pageUrl = normalizeUrl(match.groupValues[1], "https://www.gequgou.com")
-                    val fallbackTitle = cleanTitle(cleanHtml(match.groupValues[2]))
-                    parseGequgouDetail(pageUrl, fallbackTitle)
-                }
                 .toList()
+            if (audioMatches.isNotEmpty()) {
+                audioMatches.mapIndexed { index, url ->
+                    OnlineSong("${keyword.trim()} 榜单音频 ${index + 1}", "网易云榜单", OnlineSource.NETEASE_TOPLIST, entry, url)
+                }
+            } else {
+                val title = cleanTitle(keyword).ifBlank { "网易云榜单" }
+                listOf(OnlineSong(title, "网易云榜单", OnlineSource.NETEASE_TOPLIST, entry, null))
+            }
         } catch (_: Exception) {
             emptyList()
-        }
-    }
-
-    private fun parseGequgouDetail(pageUrl: String, fallbackTitle: String): OnlineSong? {
-        return try {
-            val raw = requestText(pageUrl, "https://www.gequgou.com/", "text/html,application/xhtml+xml,*/*")
-            val h1 = Regex("""<h1[^>]*>(.*?)</h1>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty()
-            val htmlTitle = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty()
-            val fullTitle = cleanTitle(h1.ifBlank { fallbackTitle }.ifBlank { htmlTitle }.ifBlank { "歌曲狗音乐" })
-            val (title, artist) = splitTitleArtist(fullTitle)
-            OnlineSong(title, artist, OnlineSource.GEQUGOU, pageUrl, findAudioUrl(raw))
-        } catch (_: Exception) {
-            null
         }
     }
 
     private fun searchGequhai(keyword: String): List<OnlineSong> {
         return try {
             val encoded = URLEncoder.encode(keyword.trim(), "UTF-8")
-            val raw = requestText("https://www.gequhai.com/s/$encoded", "https://www.gequhai.com/", "text/html,application/xhtml+xml,*/*")
+            val raw = requestText("https://www.gequhai.com/s/$encoded", "https://www.gequhai.com/?ref=codernav.com", "text/html,application/xhtml+xml,*/*")
             Regex("""href=["'](/play/\d+)["'][^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .findAll(raw)
                 .take(8)
@@ -113,7 +104,7 @@ object MusicSearchHelper {
 
     private fun parseGequhaiDetail(pageUrl: String, fallbackTitle: String): OnlineSong? {
         return try {
-            val raw = requestText(pageUrl, "https://www.gequhai.com/", "text/html,application/xhtml+xml,*/*")
+            val raw = requestText(pageUrl, "https://www.gequhai.com/?ref=codernav.com", "text/html,application/xhtml+xml,*/*")
             val title = extractJsString(raw, "mp3_title").ifBlank {
                 Regex("""<h1[^>]*>(.*?)</h1>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                     .find(raw)?.groupValues?.get(1)?.let(::cleanHtml).orEmpty()
@@ -229,7 +220,7 @@ object MusicSearchHelper {
 
     private fun cleanTitle(text: String): String {
         return decodeHtmlEntities(text)
-            .replace("歌曲狗", "")
+            .replace("网易云榜单", "")
             .replace("歌曲海", "")
             .replace("在线试听", "")
             .replace("免费下载", "")

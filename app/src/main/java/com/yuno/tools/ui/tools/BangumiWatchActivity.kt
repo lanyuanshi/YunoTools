@@ -25,6 +25,8 @@ import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -69,7 +71,8 @@ class BangumiWatchActivity : AppCompatActivity() {
     private data class EpisodeItem(
         val name: String,
         val playUrl: String,
-        val source: String
+        val source: String,
+        val referer: String = ""
     )
 
     private data class AnimeDetail(
@@ -107,6 +110,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var currentEpisode: EpisodeItem? = null
     private var currentPlayDirect = true
     private var currentPlayHeaders: Map<String, String> = emptyMap()
+    private var currentPlayError: String = ""
     private var detailBackTab = Tab.BANGUMI
     private var detailBackScreen = Screen.LIST
     private var page = 1
@@ -603,20 +607,22 @@ class BangumiWatchActivity : AppCompatActivity() {
             .toList()
         val lineBoxRegex = Regex("""<div[^>]*class="anthology-list-box[^"]*"[^>]*>(.*?)(?=<div[^>]*class="anthology-list-box|</div>\s*</div>\s*</div>)""", RegexOption.DOT_MATCHES_ALL)
         val watchRegex = Regex("""<a[^>]*href="(/watch/[^"]+\.html)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        val grouped = lineBoxRegex.findAll(body).mapIndexed { index, box ->
+        val detailUrl = item.detailUrl
+        val grouped = lineBoxRegex.findAll(body).mapIndexedNotNull { index, box ->
             val lineName = lineLabels.getOrNull(index)?.replace(Regex("""\s*\d+\s*$"""), "")?.ifBlank { "线路${index + 1}" } ?: "线路${index + 1}"
-            watchRegex.findAll(box.groupValues[1]).mapNotNull { m ->
+            val episodes = watchRegex.findAll(box.groupValues[1]).mapNotNull { m ->
                 val url = m.groupValues[1]
                 val text = htmlText(m.groupValues[2])
                 val name = text.ifBlank { episodeNameFromUrl(url) }
-                if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), lineName)
+                if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), lineName, detailUrl)
             }.distinctBy { it.playUrl }.toList().let { sortEpisodes(it) }
+            episodes.takeIf { it.isNotEmpty() }
         }.toList().flatten()
         val fallback = if (grouped.isEmpty()) watchRegex.findAll(body).mapNotNull { m ->
             val url = m.groupValues[1]
             val text = htmlText(m.groupValues[2])
             val name = text.ifBlank { episodeNameFromUrl(url) }
-            if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), "线路1")
+            if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), "线路1", item.detailUrl)
         }.distinctBy { it.playUrl }.toList().let { sortEpisodes(it) } else grouped
         return AnimeDetail(item.copy(title = title), intro, meta, "", fallback)
     }
@@ -826,9 +832,10 @@ class BangumiWatchActivity : AppCompatActivity() {
         selectedAnime = item
         Toast.makeText(this, "正在解析 ${ep.name}", Toast.LENGTH_SHORT).show()
         Thread {
-            val result = runCatching { resolvePlayableUrl(ep) }
+            val result = runCatching { resolvePlayableUrlWithFallback(ep) }
             runOnUiThread {
                 result.onSuccess { resolved ->
+                    currentPlayError = ""
                     val playable = ep.copy(playUrl = resolved.url, source = resolved.source)
                     addHistory(item, playable)
                     currentEpisode = playable
@@ -841,20 +848,56 @@ class BangumiWatchActivity : AppCompatActivity() {
                         Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
                     } else {
                         player?.pause()
-                        Toast.makeText(this, "当前线路未提取到可内置播放地址，请换一条线路/播放源", Toast.LENGTH_LONG).show()
+                        currentPlayError = "当前线路未提取到可内置播放地址，请换一条线路/播放源"
+                        Toast.makeText(this, currentPlayError, Toast.LENGTH_LONG).show()
                     }
                     currentPlayDirect = resolved.direct
                     runCatching { renderDetailOnly() }.onFailure { e ->
                         Toast.makeText(this, "播放器刷新失败：${e.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
                     }
                 }.onFailure { err ->
-                    Toast.makeText(this, "播放解析失败：${err.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                    currentPlayError = "播放解析失败：${err.message ?: "未知错误"}"
+                    Toast.makeText(this, currentPlayError, Toast.LENGTH_LONG).show()
+                    runCatching { renderDetailOnly() }
                 }
             }
         }.start()
     }
 
     private data class ResolvedPlay(val url: String, val direct: Boolean, val source: String, val headers: Map<String, String> = emptyMap(), val webFallback: Boolean = false)
+
+    private fun resolvePlayableUrlWithFallback(ep: EpisodeItem): ResolvedPlay {
+        val candidates = mutableListOf(ep)
+        if (ep.playUrl.contains("anime.xifanacg.com/watch/")) {
+            val sameEpisode = selectedDetail?.episodes.orEmpty().filter { it.name == ep.name && it.playUrl != ep.playUrl }
+            candidates.addAll(sameEpisode)
+        }
+        var lastError: Throwable? = null
+        for (candidate in candidates.distinctBy { it.playUrl }) {
+            val resolved = runCatching { resolvePlayableUrl(candidate) }
+                .onFailure { lastError = it }
+                .getOrNull() ?: continue
+            if (!resolved.direct) return resolved
+            if (!candidate.playUrl.contains("anime.xifanacg.com/watch/") || isPlayableReachable(resolved)) {
+                return if (candidate.playUrl != ep.playUrl) resolved.copy(source = "${resolved.source} · 自动换源") else resolved
+            }
+            lastError = IllegalStateException("${resolved.source} 源不可访问")
+        }
+        throw lastError ?: IllegalStateException("没有可用播放源")
+    }
+
+    private fun isPlayableReachable(resolved: ResolvedPlay): Boolean {
+        return runCatching {
+            val builder = Request.Builder()
+                .url(resolved.url)
+                .get()
+                .header("Range", "bytes=0-1023")
+            resolved.headers.forEach { (k, v) -> builder.header(k, v) }
+            http.newCall(builder.build()).execute().use { response ->
+                response.isSuccessful || response.code == 206
+            }
+        }.getOrDefault(false)
+    }
 
     private fun resolvePlayableUrl(ep: EpisodeItem): ResolvedPlay {
         val url = ep.playUrl
@@ -871,12 +914,11 @@ class BangumiWatchActivity : AppCompatActivity() {
     private fun resolveXifanWatch(url: String, ep: EpisodeItem): ResolvedPlay {
         val html = fetch(url)
         val block = Regex("""var\s+player_aaaa\s*=\s*(\{.*?\})</script>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty()
-        val raw = Regex(""""url"\s*:\s*"([^"]+)"""").find(block)?.groupValues?.getOrNull(1).orEmpty()
-        val play = raw.replace("\\/", "/")
+        val play = JSONObject(block).optString("url").replace("\\/", "/")
         if (play.startsWith("http")) {
             val direct = play.contains(".mp4", true) || play.contains(".m3u8", true)
             val headers = mapOf(
-                "User-Agent" to "Mozilla/5.0",
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
                 "Referer" to url,
                 "Origin" to "https://anime.xifanacg.com"
             )
@@ -912,7 +954,18 @@ class BangumiWatchActivity : AppCompatActivity() {
         return ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
             .build()
-            .also { player = it }
+            .also { exo ->
+                exo.addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        currentPlayError = "播放器错误：${error.errorCodeName} ${error.message ?: ""}"
+                        runOnUiThread {
+                            Toast.makeText(this@BangumiWatchActivity, currentPlayError, Toast.LENGTH_LONG).show()
+                            runCatching { renderDetailOnly() }
+                        }
+                    }
+                })
+                player = exo
+            }
     }
 
     private fun sourceChooser() {

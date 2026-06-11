@@ -733,7 +733,8 @@
                     android:layout_marginHorizontal="6dp"
                     android:layout_weight="1"
                     android:clickable="true"
-                    android:clipChildren="false"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
                     android:focusable="true"
                     android:background="@android:color/transparent"
                     android:gravity="center"
@@ -765,15 +766,16 @@
                     android:layout_weight="1"
                     android:background="@android:color/transparent"
                     android:clickable="true"
-                    android:clipChildren="false"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
                     android:focusable="true"
                     android:gravity="center"
                     android:orientation="vertical">
 
                     <ImageView
                         android:id="@+id/ivNavMusicDisc"
-                        android:layout_width="34dp"
-                        android:layout_height="34dp"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
                         android:src="@drawable/ic_nav_music_disc"
                         app:tint="#A0A7B3" />
 
@@ -784,8 +786,23 @@
                         android:layout_marginTop="0dp"
                         android:text="播放"
                         android:textColor="#A0A7B3"
-                        android:textSize="11sp"
+                        android:textSize="10sp"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvNavMusicLyric"
+                        android:layout_width="58dp"
+                        android:layout_height="10dp"
+                        android:layout_marginTop="-1dp"
+                        android:ellipsize="marquee"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:marqueeRepeatLimit="marquee_forever"
+                        android:singleLine="true"
+                        android:text=""
+                        android:textColor="#7C8BFF"
+                        android:textSize="7sp" />
                 </LinearLayout>
 
                 <LinearLayout

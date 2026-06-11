@@ -41,9 +41,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private lateinit var actionHost: LinearLayout
     private lateinit var contentHost: FrameLayout
     private lateinit var navLibrary: LinearLayout
-    private lateinit var navUpdates: LinearLayout
     private lateinit var navHistory: LinearLayout
-    private lateinit var navBrowse: LinearLayout
     private lateinit var navMore: LinearLayout
     private var selectedTab = TAB_LIBRARY
     private var screenMode = TAB_LIBRARY
@@ -101,11 +99,9 @@ class TinyReaderActivity : AppCompatActivity() {
         val navShell = FrameLayout(this).apply { setPadding(dp(18), dp(8), dp(18), dp(14)); setBackgroundColor(C_BG) }
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; background = round(Color.WHITE, dp(28)); elevation = dp(8).toFloat(); setPadding(dp(6), 0, dp(6), 0) }
         navLibrary = navItem("书架", "▦") { showLibrary() }
-        navUpdates = navItem("更新", "↻") { showUpdates() }
         navHistory = navItem("历史", "◴") { showHistory() }
-        navBrowse = navItem("浏览", "⌕") { showBrowse() }
         navMore = navItem("更多", "☰") { showMore() }
-        listOf(navLibrary, navUpdates, navHistory, navBrowse, navMore).forEach { nav.addView(it, LinearLayout.LayoutParams(0, -1, 1f)) }
+        listOf(navLibrary, navHistory, navMore).forEach { nav.addView(it, LinearLayout.LayoutParams(0, -1, 1f)) }
         navShell.addView(nav, FrameLayout.LayoutParams(-1, dp(70), Gravity.CENTER))
         root.addView(navShell, LinearLayout.LayoutParams(-1, dp(92)))
         setContentView(root)
@@ -114,7 +110,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun handleBack() {
         when (screenMode) {
             SCREEN_READER -> currentManga?.let { saveProgress(); showDetail(it) } ?: showLibrary()
-            SCREEN_DETAIL, SCREEN_SEARCH -> when (previousScreen) { TAB_BROWSE -> showBrowse(); TAB_HISTORY -> showHistory(); TAB_UPDATES -> showUpdates(); TAB_MORE -> showMore(); else -> showLibrary() }
+            SCREEN_DETAIL, SCREEN_SEARCH -> when (previousScreen) { TAB_HISTORY -> showHistory(); TAB_MORE -> showMore(); else -> showLibrary() }
             TAB_LIBRARY -> finish()
             else -> showLibrary()
         }
@@ -123,24 +119,19 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun setHeader(title: String, sub: String, tab: Int? = null) {
         appBarTitle.text = title; appBarSub.text = sub; actionHost.removeAllViews(); tab?.let { selectedTab = it; screenMode = it }; updateNav()
     }
-    private fun updateNav() { listOf(navLibrary to TAB_LIBRARY, navUpdates to TAB_UPDATES, navHistory to TAB_HISTORY, navBrowse to TAB_BROWSE, navMore to TAB_MORE).forEach { (v,t) -> v.background = if (selectedTab == t) round(C_PRIMARY_LIGHT, dp(22)) else null } }
+    private fun updateNav() { listOf(navLibrary to TAB_LIBRARY, navHistory to TAB_HISTORY, navMore to TAB_MORE).forEach { (v,t) -> v.background = if (selectedTab == t) round(C_PRIMARY_LIGHT, dp(22)) else null } }
     private fun actionButton(text: String, click: () -> Unit) { actionHost.addView(Button(this).apply { this.text = text; textSize = 16f; minWidth = dp(44); setTextColor(C_PRIMARY); background = round(Color.TRANSPARENT, dp(22)); setOnClickListener { click() } }, LinearLayout.LayoutParams(dp(48), dp(48))) }
 
     private fun showLibrary() {
         saveProgress(); currentManga = null; readerScroll = null
         setHeader("小小漫画", "书架 / 收藏 / 最近阅读", TAB_LIBRARY)
-        actionButton("⇅") { showSortDialog() }; actionButton("＋") { showBrowse() }
+        actionButton("⇅") { showSortDialog() }; actionButton("＋") { showMore() }
         val box = scroll(); section(box, "我的漫画")
         val favs = sortedManga(loadManga().filter { it.favorite })
-        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“浏览”搜索漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
+        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“更多”从好多漫 / MyComic 搜索或加载漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
     }
 
-    private fun showUpdates() {
-        setHeader("更新", "收藏漫画的章节更新", TAB_UPDATES); actionButton("↻") { refreshLibrary() }
-        val box = scroll(); section(box, "最近更新")
-        val favs = loadManga().filter { it.favorite }.sortedByDescending { it.updatedAt }
-        if (favs.isEmpty()) empty(box, "暂无收藏", "收藏漫画后这里会显示更新。") else favs.forEach { box.addView(mangaCard(it, false) { showDetail(it) }) }
-    }
+    private fun showUpdates() { showMore() }
 
     private fun showHistory() {
         setHeader("历史", "最近看过的漫画", TAB_HISTORY)
@@ -149,27 +140,26 @@ class TinyReaderActivity : AppCompatActivity() {
         if (history.isEmpty()) empty(box, "暂无历史", "打开漫画章节后会自动记录。") else history.forEach { box.addView(mangaCard(it, false) { showDetail(it) }) }
     }
 
-    private fun showBrowse() {
-        currentManga = null; readerScroll = null
-        setHeader("浏览", "搜索漫画源 / 发现漫画", TAB_BROWSE); actionButton("源") { showSourceDialog() }
-        val box = scroll(); section(box, "搜索漫画")
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(16), dp(10), dp(16), dp(10)) }
-        val input = EditText(this).apply { hint = "输入漫画名或作者"; setSingleLine(true); background = round(Color.WHITE, dp(18)); setPadding(dp(14), 0, dp(14), 0) }
-        row.addView(input, LinearLayout.LayoutParams(0, dp(52), 1f))
-        row.addView(Button(this).apply { text = "搜索"; setTextColor(Color.WHITE); background = round(C_PRIMARY, dp(18)); setOnClickListener { val q=input.text.toString().trim(); if(q.isNotEmpty()) searchAllSources(q) } }, LinearLayout.LayoutParams(dp(88), dp(52)).apply{marginStart=dp(10)})
-        box.addView(row)
-        section(box, "漫画源")
-        loadSources().forEach { s -> box.addView(menuCard(s.name, s.searchUrl) { promptSearch(s) }) }
-    }
+    private fun showBrowse() { showMore() }
 
     private fun showMore() {
         currentManga = null; readerScroll = null
-        setHeader("更多", "设置 / 数据 / 关于", TAB_MORE)
-        val box = scroll(); section(box, "漫画设置"); settingCard(box); section(box, "数据")
-        box.addView(menuCard("备份漫画数据", "复制书架、历史、漫画源、阅读设置 JSON。") { backupData() })
+        setHeader("更多", "好多漫 / MyComic / 数据", TAB_MORE)
+        val box = scroll()
+        section(box, "搜索漫画")
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(16), dp(10), dp(16), dp(10)) }
+        val input = EditText(this).apply { hint = "输入漫画名"; setSingleLine(true); background = round(Color.WHITE, dp(18)); setPadding(dp(14), 0, dp(14), 0) }
+        row.addView(input, LinearLayout.LayoutParams(0, dp(52), 1f))
+        row.addView(Button(this).apply { text = "搜索"; setTextColor(Color.WHITE); background = round(C_PRIMARY, dp(18)); setOnClickListener { val q=input.text.toString().trim(); if(q.isNotEmpty()) searchAllSources(q) } }, LinearLayout.LayoutParams(dp(88), dp(52)).apply{marginStart=dp(10)})
+        box.addView(row)
+        section(box, "漫画网站")
+        box.addView(menuCard("好多漫", "https://m.haoduoman.com/ · 本地解析漫画列表、详情、章节和图片") { loadSourceList(Source("好多漫", "https://m.haoduoman.com/search?keyword=%s")) })
+        box.addView(menuCard("MyComic", "https://mycomic.com/cn · 本地解析漫画列表；源站 403 时会提示") { loadSourceList(Source("MyComic", "https://mycomic.com/cn/comics?keyword=%s")) })
+        section(box, "数据")
+        box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
-        box.addView(menuCard("清空漫画数据", "删除书架、历史、源设置") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).remove(KEY_SOURCES).apply(); ensureDefaultSources(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.0.60", "漫画书架、搜索、详情、章节、图片阅读、收藏、更新、历史、备份恢复。") {})
+        box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.0.99", "仅保留书架、历史、更多；漫画网站不内置网页、不跳转 HTML，全部在本地解析后阅读。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -190,18 +180,18 @@ class TinyReaderActivity : AppCompatActivity() {
         if (manga.chapters.isEmpty()) empty(box, "没有解析到章节", "可以直接查看页面图片，或换一个漫画详情页。") else manga.chapters.forEachIndexed { i, ch -> box.addView(chapterCard(i, ch, i == manga.chapterIndex) { openReader(manga, i, 0) }) }
     }
 
-    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从漫画源抓取结果。") }
+    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从好多漫 / MyComic 本地抓取漫画列表。") }
+    private fun fixedSources() = listOf(Source("好多漫", "https://m.haoduoman.com/search?keyword=%s"), Source("MyComic", "https://mycomic.com/cn/comics?keyword=%s"))
     private fun searchAllSources(keyword: String) {
         showSearchLoading(keyword)
         Thread {
-            val results = loadSources().flatMap { src -> runCatching { parseSearchResults(http(src.searchUrl.replace("%s", URLEncoder.encode(keyword, "UTF-8"))), src.name) }.getOrDefault(emptyList()) }.distinctBy { it.url }.take(50)
+            val results = fixedSources().flatMap { src -> runCatching { parseSourceResults(http(src.searchUrl.replace("%s", URLEncoder.encode(keyword, "UTF-8")), src.name), src.name, src.searchUrl.substringBefore("/search").substringBefore("/cn/comics")) }.getOrDefault(emptyList()) }.distinctBy { it.url }.take(60)
             runOnUiThread { showSearchResults(keyword, results) }
         }.start()
     }
-    private fun promptSearch(src: Source) { val input=EditText(this).apply{hint="漫画关键词"}; AlertDialog.Builder(this).setTitle(src.name).setView(input).setNegativeButton("取消",null).setPositiveButton("搜索"){_,_-> val q=input.text.toString().trim(); if(q.isNotEmpty()) searchSource(src,q)}.show() }
-    private fun searchSource(src: Source, keyword: String) { showSearchLoading(keyword); Thread { val rs=runCatching { parseSearchResults(http(src.searchUrl.replace("%s", URLEncoder.encode(keyword, "UTF-8"))), src.name) }.getOrDefault(emptyList()); runOnUiThread { showSearchResults(keyword, rs) } }.start() }
+    private fun loadSourceList(src: Source) { previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader(src.name, "正在加载漫画列表"); val box=scroll(); empty(box,"正在加载…",src.searchUrl.substringBefore('?')); Thread { val rs=runCatching { val url=if(src.name=="好多漫") "https://m.haoduoman.com/" else "https://mycomic.com/cn/comics"; parseSourceResults(http(url, src.name), src.name, url) }.getOrElse { listOf(SearchResult("加载失败", src.searchUrl.substringBefore('?'), src.name, it.message ?: "源站拒绝或网络失败")) }; runOnUiThread { showSearchResults(src.name, rs) } }.start() }
     private fun showSearchResults(keyword: String, results: List<SearchResult>) {
-        previousScreen = TAB_BROWSE; screenMode = SCREEN_SEARCH; setHeader("搜索结果", keyword)
+        previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader("搜索结果", keyword)
         val box = scroll(); section(box, "共 ${results.size} 条")
         if (results.isEmpty()) empty(box, "没搜到结果", "换个关键词或漫画源试试。") else results.forEach { r -> box.addView(menuCard(r.title, "${r.sourceName}\n${r.snippet}") { loadMangaFromUrl(r.title, r.url, r.sourceName) }) }
     }
@@ -211,7 +201,7 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun fetchManga(titleHint: String, url: String, sourceName: String): Manga {
-        val html = http(url); val title = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint }).take(80)
+        val html = http(url, sourceName); val title = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint }).take(80)
         val cover = extractImages(html, url).firstOrNull().orEmpty()
         val desc = clean(Regex("""<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { clean(html).take(160) }
         val chapters = extractChapters(html, url).ifEmpty { listOf(Chapter("第 1 话", url, extractImages(html, url))) }
@@ -244,7 +234,7 @@ class TinyReaderActivity : AppCompatActivity() {
         readerScroll?.post { readerScroll?.smoothScrollTo(0, y) }
     }
 
-    private fun refreshLibrary() { val favs=loadManga().filter{it.favorite}; if(favs.isEmpty()){toast("没有收藏需要刷新");return}; toast("开始刷新 ${favs.size} 部漫画"); Thread{ favs.forEach{runCatching{saveManga(mergeOld(fetchManga(it.title,it.url,it.sourceName)))}}; runOnUiThread{showUpdates();toast("刷新完成")} }.start() }
+    private fun refreshLibrary() { val favs=loadManga().filter{it.favorite}; if(favs.isEmpty()){toast("没有收藏需要刷新");return}; toast("开始刷新 ${favs.size} 部漫画"); Thread{ favs.forEach{runCatching{saveManga(mergeOld(fetchManga(it.title,it.url,it.sourceName)))}}; runOnUiThread{showLibrary();toast("刷新完成")} }.start() }
     private fun refreshManga(manga: Manga) { toast("正在刷新"); Thread{ val m=runCatching{mergeOld(fetchManga(manga.title,manga.url,manga.sourceName))}.getOrDefault(manga); saveManga(m); runOnUiThread{showDetail(m);toast("已刷新")} }.start() }
     private fun toggleFavorite(manga: Manga) { val m=manga.copy(favorite=!manga.favorite, updatedAt=System.currentTimeMillis()); saveManga(m); showDetail(m); toast(if(m.favorite)"已加入书架" else "已取消收藏") }
     private fun showMangaMenu(manga: Manga) { val items=arrayOf(if(manga.favorite)"取消收藏" else "加入书架","复制链接","分享漫画","删除记录"); AlertDialog.Builder(this).setTitle(manga.title).setItems(items){_,w-> when(w){0->toggleFavorite(manga);1->{clip(manga.url);toast("已复制")};2->share("${manga.title}\n${manga.url}");3->{deleteManga(manga.url);showLibrary()}}}.show() }
@@ -252,33 +242,55 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun settingCard(box: LinearLayout) { box.addView(menuCard("阅读模式", "当前为漫画纵向连续阅读，图片自适应宽度。") { toast("已是漫画阅读模式") }) }
     private fun showSortDialog() { val items=arrayOf("最近阅读","标题","最近更新","章节数"); AlertDialog.Builder(this).setTitle("书架排序").setItems(items){_,w->prefs().edit().putInt(KEY_SORT,w).apply();showLibrary()}.show() }
     private fun sortedManga(list: List<Manga>) = when(prefs().getInt(KEY_SORT,0)){1->list.sortedBy{it.title};2->list.sortedByDescending{it.updatedAt};3->list.sortedByDescending{it.chapters.size};else->list.sortedByDescending{max(it.lastReadAt,it.updatedAt)}}
-    private fun showSourceDialog() { val input=EditText(this).apply{hint="源名称|搜索URL，用 %s 代表关键词"; setText(loadSources().joinToString("\n"){"${it.name}|${it.searchUrl}"})}; AlertDialog.Builder(this).setTitle("漫画源").setView(input).setNegativeButton("取消",null).setPositiveButton("保存"){_,_-> val arr=input.text.toString().lines().mapNotNull{val p=it.split('|',limit=2); if(p.size==2&&p[1].contains("%s")) Source(p[0].trim(),p[1].trim()) else null}; if(arr.isNotEmpty()){saveSources(arr);toast("已保存")}}.show() }
 
-    private fun backupData() { val o=JSONObject().put("manga", JSONArray(prefs().getString(KEY_MANGA,"[]"))).put("sources", JSONArray(prefs().getString(KEY_SOURCES,"[]"))).put("sort", prefs().getInt(KEY_SORT,0)).put("version",60); val s=o.toString(2); clip(s); share(s); toast("备份已复制") }
+    private fun backupData() { val o=JSONObject().put("manga", JSONArray(prefs().getString(KEY_MANGA,"[]"))).put("sort", prefs().getInt(KEY_SORT,0)).put("version",99); val s=o.toString(2); clip(s); share(s); toast("备份已复制") }
     private fun showRestoreDialog() { val input=EditText(this).apply{hint="粘贴备份 JSON"; minLines=6}; AlertDialog.Builder(this).setTitle("恢复备份").setView(input).setNegativeButton("取消",null).setPositiveButton("恢复"){_,_->restoreData(input.text.toString())}.show() }
-    private fun restoreData(json: String) { runCatching{ val o=JSONObject(json); prefs().edit().putString(KEY_MANGA,o.optJSONArray("manga")?.toString()?:"[]").putString(KEY_SOURCES,o.optJSONArray("sources")?.toString()?:prefs().getString(KEY_SOURCES,"[]")).putInt(KEY_SORT,o.optInt("sort",0)).apply(); ensureDefaultSources(); showLibrary(); toast("恢复完成") }.onFailure{toast("恢复失败：${it.message}")} }
+    private fun restoreData(json: String) { runCatching{ val o=JSONObject(json); prefs().edit().putString(KEY_MANGA,o.optJSONArray("manga")?.toString()?:"[]").putInt(KEY_SORT,o.optInt("sort",0)).apply(); showLibrary(); toast("恢复完成") }.onFailure{toast("恢复失败：${it.message}")} }
 
-    private fun parseSearchResults(html: String, source: String): List<SearchResult> {
-        val re=Regex("""<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
-        return re.findAll(html).mapNotNull { m -> val u=absUrl(m.groupValues[1], ""); val title=clean(m.groupValues[2]).replace(Regex("""\s+""")," ").trim(); if(u.startsWith("http") && title.length in 2..80) SearchResult(title,u,source,u.take(120)) else null }.distinctBy{it.url}.take(40).toList()
+    private fun parseSourceResults(html: String, source: String, base: String): List<SearchResult> {
+        val re = Regex("""<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
+        return re.findAll(html).mapNotNull { m ->
+            val href = m.groupValues[1]
+            val body = m.groupValues[2]
+            val url = absUrl(href, base)
+            val title = clean(Regex("""<h[1-6][^>]*>([\s\S]*?)</h[1-6]>""", RegexOption.IGNORE_CASE).find(body)?.groupValues?.get(1) ?: body).replace(Regex("\\s+"), " " ).trim()
+            val isManga = when (source) {
+                "好多漫" -> url.contains("/manhua/") && !url.endsWith(".html")
+                "MyComic" -> url.contains("/comic") || url.contains("/comics/")
+                else -> false
+            }
+            if (isManga && title.length in 2..100) SearchResult(title, url, source, extractImages(body, base).firstOrNull().orEmpty().ifBlank { url }) else null
+        }.distinctBy { it.url }.take(60).toList()
     }
+
     private fun extractChapters(html: String, base: String): List<Chapter> {
         val re=Regex("""<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
         return re.findAll(html).mapNotNull{ val t=clean(it.groupValues[2]).trim(); val u=absUrl(it.groupValues[1],base); val hit=t.contains(Regex("第.{1,8}[话回章节卷]|chapter|episode|chap", RegexOption.IGNORE_CASE)); if(hit && u.startsWith("http")) Chapter(t.take(80),u) else null }.distinctBy{it.url}.take(300).toList().let{ if(it.size>1) it else emptyList() }
     }
     private fun extractImages(html: String, base: String): List<String> {
-        val re=Regex("""<(?:img|source)[^>]+(?:src|data-src|data-original|data-url|data-lazy-src)=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-        return re.findAll(html).map{absUrl(it.groupValues[1],base)}.filter{ it.startsWith("http") && it.contains(Regex("\\.(jpg|jpeg|png|webp|gif)(\\?|$)|image", RegexOption.IGNORE_CASE)) }.distinct().take(200).toList()
+        val re=Regex("""(?:src|data-src|data-original|data-url|data-lazy-src)=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        return re.findAll(html)
+            .map { absUrl(it.groupValues[1], base) }
+            .filter { it.startsWith("http") && !it.startsWith("data:") && !it.contains(".js") && it.contains(Regex("""\.(jpg|jpeg|png|webp|gif)(\?|$)|/comic|/cover|image""", RegexOption.IGNORE_CASE)) }
+            .distinct()
+            .take(260)
+            .toList()
     }
     private fun textBetween(s:String,a:String,b:String):String{ val i=s.indexOf(a,ignoreCase=true); if(i<0) return ""; val j=s.indexOf('>',i); val k=s.indexOf(b,if(j<0)i else j,ignoreCase=true); return if(j>=0&&k>j)s.substring(j+1,k) else "" }
     private fun clean(s:String)=s.replace(Regex("<script[\\s\\S]*?</script>",RegexOption.IGNORE_CASE),"").replace(Regex("<style[\\s\\S]*?</style>",RegexOption.IGNORE_CASE),"").replace(Regex("<[^>]+>"),"").replace("&nbsp;"," ").replace("&amp;","&").replace("&lt;","<").replace("&gt;",">").trim()
     private fun absUrl(u:String,base:String):String=runCatching{ if(u.startsWith("//")) "https:$u" else if(u.startsWith("http")) u else if(base.isNotBlank()) URI(base).resolve(u).toString() else u }.getOrDefault(u)
-    private fun http(url: String): String { val req=Request.Builder().url(url).header("User-Agent","Mozilla/5.0 YunoTools Manga Reader").build(); client.newCall(req).execute().use{ if(!it.isSuccessful) error("HTTP ${it.code}"); return it.body?.string().orEmpty() } }
+    private fun http(url: String, sourceName: String = ""): String {
+        val req=Request.Builder().url(url)
+            .header("User-Agent","Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+            .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept-Language","zh-CN,zh;q=0.9,en;q=0.8")
+            .header("Referer", if(sourceName=="MyComic") "https://mycomic.com/cn/comics" else "https://m.haoduoman.com/")
+            .build()
+        client.newCall(req).execute().use{ if(!it.isSuccessful) error("HTTP ${it.code}"); return it.body?.string().orEmpty() }
+    }
 
     private fun prefs()=getSharedPreferences("tiny_manga", MODE_PRIVATE)
-    private fun ensureDefaultSources(){ if(prefs().getString(KEY_SOURCES,null)==null) saveSources(listOf(Source("Bing 漫画搜索","https://www.bing.com/search?q=%s+漫画"), Source("DuckDuckGo 漫画搜索","https://duckduckgo.com/html/?q=%s+manga"), Source("通用网页搜索","https://www.sogou.com/web?query=%s+漫画"))) }
-    private fun loadSources():List<Source>{ val a=JSONArray(prefs().getString(KEY_SOURCES,"[]")); return (0 until a.length()).map{a.getJSONObject(it)}.map{Source(it.optString("name"),it.optString("searchUrl"))} }
-    private fun saveSources(list:List<Source>){ val a=JSONArray(); list.forEach{a.put(JSONObject().put("name",it.name).put("searchUrl",it.searchUrl))}; prefs().edit().putString(KEY_SOURCES,a.toString()).apply() }
+    private fun ensureDefaultSources(){}
     private fun loadManga():List<Manga>{ val a=JSONArray(prefs().getString(KEY_MANGA,"[]")); return (0 until a.length()).map{jsonToManga(a.getJSONObject(it))} }
     private fun saveManga(m:Manga){ val arr=loadManga().filter{it.url!=m.url}.toMutableList(); arr.add(m); saveAll(arr) }
     private fun saveAll(list:List<Manga>){ val a=JSONArray(); list.forEach{a.put(mangaToJson(it))}; prefs().edit().putString(KEY_MANGA,a.toString()).apply() }
@@ -302,5 +314,5 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun share(s:String){ startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,s),"分享")) }
     private fun saveProgress(){ val m=currentManga ?: return; val y=readerScroll?.scrollY ?: m.progressY; saveManga(m.copy(progressY=y,lastReadAt=if(screenMode==SCREEN_READER)System.currentTimeMillis() else m.lastReadAt)) }
 
-    companion object { private const val TAB_LIBRARY=0; private const val TAB_UPDATES=1; private const val TAB_HISTORY=2; private const val TAB_BROWSE=3; private const val TAB_MORE=4; private const val SCREEN_DETAIL=10; private const val SCREEN_READER=11; private const val SCREEN_SEARCH=12; private const val KEY_MANGA="manga"; private const val KEY_SOURCES="sources"; private const val KEY_SORT="sort"; private const val C_BG=0xFFF8F7FC.toInt(); private const val C_TEXT=0xFF1D1B20.toInt(); private const val C_SUB=0xFF6F6A78.toInt(); private const val C_PRIMARY=0xFF6750A4.toInt(); private const val C_PRIMARY_LIGHT=0xFFEADDFF.toInt(); private const val C_STROKE=0xFFE7E0EC.toInt() }
+    companion object { private const val TAB_LIBRARY=0; private const val TAB_HISTORY=2; private const val TAB_MORE=4; private const val SCREEN_DETAIL=10; private const val SCREEN_READER=11; private const val SCREEN_SEARCH=12; private const val KEY_MANGA="manga";  private const val KEY_SORT="sort"; private const val C_BG=0xFFF8F7FC.toInt(); private const val C_TEXT=0xFF1D1B20.toInt(); private const val C_SUB=0xFF6F6A78.toInt(); private const val C_PRIMARY=0xFF6750A4.toInt(); private const val C_PRIMARY_LIGHT=0xFFEADDFF.toInt(); private const val C_STROKE=0xFFE7E0EC.toInt() }
 }

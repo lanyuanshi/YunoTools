@@ -32,16 +32,23 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class BangumiWatchActivity : AppCompatActivity() {
     private enum class Tab { BANGUMI, MINE }
     private enum class Screen { LIST, DETAIL, SEARCH, HISTORY, DOWNLOADS }
 
+    private enum class SourceKind { AGE, XIFAN }
+
     private data class WatchSource(
         val name: String,
         val baseUrl: String,
         val libraryUrl: String,
+        val kind: SourceKind,
+        val note: String = "",
         val guarded: Boolean = false
     )
 
@@ -68,8 +75,8 @@ class BangumiWatchActivity : AppCompatActivity() {
     )
 
     private val sources = listOf(
-        WatchSource("AnimeTranslation", "https://www.animetranslation.com", "https://www.animetranslation.com/library"),
-        WatchSource("嗷呜动漫", "https://www.aowu.tv", "https://www.aowu.tv/")
+        WatchSource("AGE动漫", "https://m.agedm.io", "https://api.agedm.io/v2/home-list", SourceKind.AGE, note = "API: api.agedm.io/v2/home-list"),
+        WatchSource("稀饭动漫", "https://anime.xifanacg.com", "https://anime.xifanacg.com/", SourceKind.XIFAN)
     )
     private var selectedSource = sources.first()
     private val prefs by lazy { getSharedPreferences("yuno_bangumi_watch", Context.MODE_PRIVATE) }
@@ -253,11 +260,32 @@ class BangumiWatchActivity : AppCompatActivity() {
             emptyCard("暂无$title", if (key == "history") "播放过的剧集会显示在这里。" else "加入下载记录的剧集会显示在这里。")
             return
         }
-        records.forEach { record ->
+        records.forEachIndexed { index, record ->
             val actionText = if (key == "history") "播放" else "打开"
             content.addView(recordCard(record, actionText) {
                 if (key == "history") openRecordInApp(record) else openUrl(record.optString("url"))
+            }.also { card ->
+                (card as? MaterialCardView)?.setOnLongClickListener {
+                    removeRecordAt(key, index)
+                    true
+                }
             })
+        }
+        content.addView(TextView(this).apply {
+            text = "长按记录可删除单条"
+            textSize = 12f
+            setTextColor(Color.parseColor("#7A7F89"))
+            setPadding(dp(4), dp(8), 0, 0)
+        })
+    }
+
+    private fun removeRecordAt(key: String, index: Int) {
+        val arr = JSONArray(prefs.getString(key, "[]") ?: "[]")
+        if (index in 0 until arr.length()) {
+            val newArr = JSONArray()
+            for (i in 0 until arr.length()) if (i != index) newArr.put(arr.opt(i))
+            prefs.edit().putString(key, newArr.toString()).apply()
+            render()
         }
     }
 
@@ -274,10 +302,12 @@ class BangumiWatchActivity : AppCompatActivity() {
         render()
         Thread {
             val result = runCatching {
-                val html = fetch(selectedSource.libraryUrl)
-                if (html.contains("/_guard/") || html.contains("slider_html") || html.contains("安全验证")) error("需要安全验证")
-                if (html.contains("<div id=\"app\"></div>") && !html.contains("anime-item")) error("该源为前端动态站点，当前没有可直接解析的番剧列表")
-                parseLibrary(html)
+                val body = fetch(selectedSource.libraryUrl)
+                if (body.contains("/_guard/") || body.contains("slider_html") || body.contains("安全验证")) error("需要安全验证")
+                when (selectedSource.kind) {
+                    SourceKind.AGE -> parseAgeLibrary(body)
+                    SourceKind.XIFAN -> parseXifanLibrary(body)
+                }
             }
             runOnUiThread {
                 loading = false
@@ -299,9 +329,13 @@ class BangumiWatchActivity : AppCompatActivity() {
         Thread {
             val result = runCatching {
                 val source = sources.firstOrNull { it.name == item.source } ?: selectedSource
-                val html = fetch(absUrl(item.detailUrl, source))
-                if (html.contains("/_guard/") || html.contains("slider_html") || html.contains("安全验证")) error("需要安全验证")
-                parseDetail(item, html)
+                val detailUrl = when (source.kind) {
+                    SourceKind.AGE -> "https://api.agedm.io/v2/detail/" + item.detailUrl.substringAfterLast("/")
+                    SourceKind.XIFAN -> absUrl(item.detailUrl, source)
+                }
+                val body = fetch(detailUrl)
+                if (body.contains("/_guard/") || body.contains("slider_html") || body.contains("安全验证")) error("需要安全验证")
+                parseDetail(item, body)
             }
             runOnUiThread {
                 loading = false
@@ -324,45 +358,88 @@ class BangumiWatchActivity : AppCompatActivity() {
         }
     }
 
-    private fun parseLibrary(html: String): List<AnimeItem> {
-        val cardRegex = Regex("""<a\s+href=\"([^\"]+)\"\s+class=\"anime-card\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-        val imgRegex = Regex("""<img[^>]+src=\"([^\"]+)\"[^>]+alt=\"([^\"]*)\""", RegexOption.DOT_MATCHES_ALL)
-        val statusRegex = Regex("""<div\s+class=\"status-badge\"[^>]*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
-        val cardList = cardRegex.findAll(html).mapNotNull { match ->
+    private fun parseAgeLibrary(jsonText: String): List<AnimeItem> {
+        val root = JSONObject(jsonText)
+        val lists = listOf(
+            root.optJSONArray("latest"),
+            root.optJSONArray("recommend")
+        ).filterNotNull()
+        val fromArray = lists.flatMap { arr ->
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val title = obj.optString("Title")
+                    val status = obj.optString("NewTitle")
+                    val cover = obj.optString("PicSmall")
+                    val href = obj.optString("Href")
+                    if (title.isNotBlank() && href.isNotBlank()) add(AnimeItem(title, status, cover, href, selectedSource.name))
+                }
+            }
+        }.distinctBy { it.detailUrl }
+        if (fromArray.isNotEmpty()) return fromArray
+        return emptyList()
+    }
+
+    private fun parseXifanLibrary(html: String): List<AnimeItem> {
+        val cardRegex = Regex("""<a[^>]+href=\"(/bangumi/[^\"]+\.html)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val imgRegex = Regex("""<img[^>]+data-src=\"([^\"]+)\"[^>]+alt=\"([^\"]*)\""", RegexOption.DOT_MATCHES_ALL)
+        val titleFromLinkRegex = Regex("""title=\"([^\"]+)\"""")
+        val statusRegex = Regex("""<span[^>]+class=\"public-list-prb[^\"]*\"[^>]*>.*?<i[^>]*>(.*?)</i>.*?</span>""", RegexOption.DOT_MATCHES_ALL)
+        return cardRegex.findAll(html).mapNotNull { match ->
             val href = htmlAttr(match.groupValues[1])
             val block = match.groupValues[2]
             val img = imgRegex.find(block)
+            val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty()).ifBlank { htmlText(titleFromLinkRegex.find(match.value)?.groupValues?.getOrNull(1).orEmpty()) }
             val cover = htmlAttr(img?.groupValues?.getOrNull(1).orEmpty())
-            val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty())
-            val status = htmlText(statusRegex.find(block)?.groupValues?.getOrNull(1).orEmpty())
-            if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href, selectedSource.name)
-        }.distinctBy { it.detailUrl }.toList()
-        if (cardList.isNotEmpty()) return cardList
-
-        val fallbackRegex = Regex("""<div\s+class=\"anime-item\"[^>]*>(.*?)(?=<div\s+class=\"anime-item\"|</main>|<div\s+class=\"pagination\"|$)""", RegexOption.DOT_MATCHES_ALL)
-        val hrefRegex = Regex("""href=\"([^\"]+)\"[^>]*class=\"anime-card\"|class=\"anime-card\"[^>]*href=\"([^\"]+)\""" , RegexOption.DOT_MATCHES_ALL)
-        return fallbackRegex.findAll(html).mapNotNull { match ->
-            val block = match.value
-            val hrefMatch = hrefRegex.find(block)
-            val href = htmlAttr((hrefMatch?.groups?.get(1)?.value ?: hrefMatch?.groups?.get(2)?.value).orEmpty())
-            val img = imgRegex.find(block)
-            val cover = htmlAttr(img?.groupValues?.getOrNull(1).orEmpty())
-            val title = htmlText(img?.groupValues?.getOrNull(2).orEmpty())
             val status = htmlText(statusRegex.find(block)?.groupValues?.getOrNull(1).orEmpty())
             if (title.isBlank() || href.isBlank()) null else AnimeItem(title, status, cover, href, selectedSource.name)
         }.distinctBy { it.detailUrl }.toList()
     }
 
-    private fun parseDetail(item: AnimeItem, html: String): AnimeDetail {
-        val intro = htmlText(Regex("""<div class=\"description\">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
-            .ifBlank { "暂无简介" }
-        val year = htmlText(Regex("""<strong>年份:</strong>\s*<span>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
-        val area = htmlText(Regex("""<strong>地区:</strong>\s*<span>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
-        val type = htmlText(Regex("""<strong>类型:</strong>\s*<span>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.getOrNull(1).orEmpty())
-        val meta = listOf(year, area, type).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { item.status }
-        val prefix = htmlAttr(Regex("""data-player-url=\"([^\"]*)\"""").find(html)?.groupValues?.getOrNull(1).orEmpty())
-        val episodes = parseEpisodes(html, prefix)
-        return AnimeDetail(item, intro, meta, prefix, episodes)
+    private fun parseDetail(item: AnimeItem, body: String): AnimeDetail {
+        return when (selectedSource.kind) {
+            SourceKind.AGE -> parseAgeDetail(item, body)
+            SourceKind.XIFAN -> parseXifanDetail(item, body)
+        }
+    }
+
+    private fun parseAgeDetail(item: AnimeItem, body: String): AnimeDetail {
+        val root = JSONObject(body)
+        val video = root.optJSONObject("video") ?: error("AGE 详情解析失败")
+        val intro = listOf(video.optString("plot"), video.optJSONArray("plot_arr")?.let { arr -> buildList { for (i in 0 until arr.length()) add(arr.optString(i)) }?.joinToString(" / ") }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "暂无简介" }
+        val meta = listOf(video.optString("type"), video.optString("company"), video.optString("writer")).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { item.status }
+        val playerPrefix = "https://api.agedm.io/v2/play/"
+        val playlists = video.optJSONObject("playlists") ?: JSONObject()
+        val episodes = mutableListOf<EpisodeItem>()
+        for (key in playlists.keys()) {
+            val arr = playlists.optJSONArray(key) ?: continue
+            for (i in 0 until arr.length()) {
+                val row = arr.optJSONArray(i) ?: continue
+                val epName = row.optString(0)
+                val token = row.optString(1)
+                if (epName.isNotBlank() && token.isNotBlank()) {
+                    val playUrl = "$playerPrefix${video.optInt("id")}/$key/${i + 1}"
+                    episodes.add(EpisodeItem(epName, playUrl, key))
+                }
+            }
+        }
+        return AnimeDetail(item.copy(title = video.optString("name").ifBlank { item.title }), intro, meta, playerPrefix, episodes.distinctBy { it.playUrl })
+    }
+
+    private fun parseXifanDetail(item: AnimeItem, body: String): AnimeDetail {
+        val intro = htmlText(Regex("""<div[^>]*class=\"videos-description\"[^>]*>.*?<span[^>]*class=\"videos-description-title\"[^>]*>.*?</span>(.*?)(?:<div class=\"more-info\"|</div>\s*</div>)""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { "暂无简介" }
+        val title = htmlText(Regex("""<h2[^>]*class=\"g-box-title[^\"]*\"[^>]*>(.*?)</h2>""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { item.title }
+        val meta = listOf(item.status).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "稀饭动漫" }
+        val episodes = Regex("""<a[^>]*class=\"hide this-link\"[^>]*href=\"(/watch/[^\"]+)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(body)
+            .mapNotNull { m ->
+                val url = m.groupValues[1]
+                val name = htmlText(m.groupValues[2])
+                if (url.isBlank() || name.isBlank()) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), "稀饭")
+            }
+            .distinctBy { it.playUrl }
+            .toList()
+        return AnimeDetail(item.copy(title = title), intro, meta, "", episodes)
     }
 
     private fun parseEpisodes(html: String, prefix: String): List<EpisodeItem> {
@@ -572,9 +649,10 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun sourceChooser() {
         val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(8)) }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(8)) }
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         sources.forEach { source ->
-            row.addView(TextView(this).apply {
+            chips.addView(TextView(this).apply {
                 text = source.name
                 textSize = 13f
                 typeface = if (source.name == selectedSource.name) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
@@ -597,6 +675,8 @@ class BangumiWatchActivity : AppCompatActivity() {
                 }
             })
         }
+        row.addView(chips)
+        if (selectedSource.note.isNotBlank()) row.addView(TextView(this).apply { text = selectedSource.note; textSize = 11f; setTextColor(Color.parseColor("#7A7F89")); setPadding(0, dp(6), 0, 0) })
         scroll.addView(row)
         content.addView(scroll)
     }
@@ -678,7 +758,9 @@ class BangumiWatchActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             addView(TextView(context).apply { text = obj.optString("title"); textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")); maxLines = 1 })
-            addView(TextView(context).apply { text = obj.optString("sub"); textSize = 12f; setTextColor(Color.parseColor("#7A7F89")); maxLines = 1 })
+            addView(TextView(context).apply { text = listOf(obj.optString("source"), obj.optString("episodeSource"), obj.optString("episode"), obj.optString("time")).filter { it.isNotBlank() }.joinToString(" · "); textSize = 12f; setTextColor(Color.parseColor("#7A7F89")); maxLines = 2 })
+            val sub = obj.optString("sub")
+            if (sub.isNotBlank()) addView(TextView(context).apply { text = sub; textSize = 12f; setTextColor(Color.parseColor("#4D5562")); maxLines = 2 })
         })
         row.addView(primaryButton(actionText, action))
         addView(row)
@@ -687,15 +769,15 @@ class BangumiWatchActivity : AppCompatActivity() {
     private fun addHistory(item: AnimeItem, ep: EpisodeItem?) {
         val sub = ep?.let { "${it.source} · ${it.name}" } ?: item.status
         val url = ep?.playUrl.orEmpty()
-        addRecord("history", item, sub, url, ep?.name.orEmpty())
+        addRecord("history", item, sub, url, ep?.name.orEmpty(), ep?.source.orEmpty())
     }
 
     private fun addDownload(item: AnimeItem, ep: EpisodeItem) {
-        addRecord("downloads", item, "${ep.source} · ${ep.name}", ep.playUrl, ep.name)
+        addRecord("downloads", item, "${ep.source} · ${ep.name}", ep.playUrl, ep.name, ep.source)
         Toast.makeText(this, "已加入下载记录", Toast.LENGTH_SHORT).show()
     }
 
-    private fun addRecord(key: String, item: AnimeItem, sub: String, url: String, episodeName: String) {
+    private fun addRecord(key: String, item: AnimeItem, sub: String, url: String, episodeName: String, sourceName: String) {
         val arr = JSONArray()
         arr.put(JSONObject().apply {
             put("title", item.title)
@@ -706,9 +788,11 @@ class BangumiWatchActivity : AppCompatActivity() {
             put("cover", item.cover)
             put("detailUrl", item.detailUrl)
             put("source", item.source)
+            put("episodeSource", sourceName)
+            put("time", nowText())
         })
         val unique = if (url.isNotBlank()) url else item.detailUrl
-        loadRecordList(key).filterNot { (if (it.optString("url").isNotBlank()) it.optString("url") else it.optString("detailUrl")) == unique }.take(29).forEach { arr.put(it) }
+        loadRecordList(key).filterNot { (if (it.optString("url").isNotBlank()) it.optString("url") else it.optString("detailUrl")) == unique }.take(49).forEach { arr.put(it) }
         prefs.edit().putString(key, arr.toString()).apply()
     }
 
@@ -753,6 +837,8 @@ class BangumiWatchActivity : AppCompatActivity() {
         Toast.makeText(this, "已清空", Toast.LENGTH_SHORT).show()
         render()
     }
+
+    private fun nowText(): String = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date())
 
     private fun saveCachedAnime(sourceName: String, list: List<AnimeItem>) {
         val arr = JSONArray()

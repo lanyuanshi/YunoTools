@@ -20,6 +20,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -100,6 +103,9 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var selectedDetail: AnimeDetail? = null
     private var player: ExoPlayer? = null
     private var currentEpisode: EpisodeItem? = null
+    private var currentPlayDirect = true
+    private var detailBackTab = Tab.BANGUMI
+    private var detailBackScreen = Screen.LIST
     private var page = 1
     private var hasMore = true
     private var searchResults: List<AnimeItem> = emptyList()
@@ -112,6 +118,11 @@ class BangumiWatchActivity : AppCompatActivity() {
         ThemeApplier.apply(this)
         allAnime = emptyList()
         buildUi()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                navigateBack()
+            }
+        })
         loadLibrary(force = true)
     }
 
@@ -253,9 +264,9 @@ class BangumiWatchActivity : AppCompatActivity() {
             if (!loading) loadDetail(item)
             return
         }
-        content.addView(detailHeader(detail.item, detail.meta, detail.intro))
         section("播放")
         content.addView(playerBox(detail))
+        content.addView(detailHeader(detail.item, detail.meta, detail.intro))
         section("剧集（共 ${detail.episodes.size} 集）")
         if (detail.episodes.isEmpty()) {
             emptyCard("暂无剧集", "没有解析到剧集列表。")
@@ -554,36 +565,43 @@ class BangumiWatchActivity : AppCompatActivity() {
         val vipKeys = root.optString("player_vip").split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
         val labels = root.optJSONObject("player_label_arr") ?: JSONObject()
         val playlists = video.optJSONObject("playlists") ?: JSONObject()
+        val candidates = mutableListOf<Pair<String, JSONArray>>()
+        for (key in playlists.keys()) playlists.optJSONArray(key)?.let { candidates.add(key to it) }
+        val preferred = candidates.sortedWith(
+            compareByDescending<Pair<String, JSONArray>> { !vipKeys.contains(it.first) }
+                .thenByDescending { it.second.length() }
+        ).firstOrNull()
         val episodes = mutableListOf<EpisodeItem>()
-        for (key in playlists.keys()) {
-            val arr = playlists.optJSONArray(key) ?: continue
+        if (preferred != null) {
+            val key = preferred.first
+            val arr = preferred.second
             val prefix = if (vipKeys.contains(key)) playerJx.optString("vip") else playerJx.optString("zj")
             val label = labels.optString(key).ifBlank { key }
             for (i in 0 until arr.length()) {
                 val row = arr.optJSONArray(i) ?: continue
-                val epName = row.optString(0)
+                val epName = row.optString(0).ifBlank { "第${i + 1}集" }
                 val token = row.optString(1)
-                if (epName.isNotBlank() && token.isNotBlank() && prefix.isNotBlank()) {
-                    episodes.add(EpisodeItem(epName, prefix + token, label))
-                }
+                if (token.isNotBlank() && prefix.isNotBlank()) episodes.add(EpisodeItem(epName, prefix + token, label))
             }
         }
-        return AnimeDetail(item.copy(title = video.optString("name").ifBlank { item.title }), intro, meta, "", episodes.distinctBy { it.playUrl })
+        return AnimeDetail(item.copy(title = video.optString("name").ifBlank { item.title }), intro, meta, "", sortEpisodes(episodes.distinctBy { it.playUrl }))
     }
 
     private fun parseXifanDetail(item: AnimeItem, body: String): AnimeDetail {
         val intro = htmlText(Regex("""<div[^>]*class=\"videos-description\"[^>]*>.*?<span[^>]*class=\"videos-description-title\"[^>]*>.*?</span>(.*?)(?:<div class=\"more-info\"|</div>\s*</div>)""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { "暂无简介" }
         val title = htmlText(Regex("""<h2[^>]*class=\"g-box-title[^\"]*\"[^>]*>(.*?)</h2>""", RegexOption.DOT_MATCHES_ALL).find(body)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { item.title }
         val meta = listOf(item.status).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "稀饭动漫" }
-        val episodes = Regex("""<a[^>]*class=\"hide this-link\"[^>]*href=\"(/watch/[^\"]+)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(body)
+        val watchRegex = Regex("""<a[^>]*href=\"(/watch/[^\"]+\.html)\"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        val episodes = watchRegex.findAll(body)
             .mapNotNull { m ->
                 val url = m.groupValues[1]
-                val name = htmlText(m.groupValues[2])
-                if (url.isBlank() || name.isBlank()) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), "稀饭")
+                val text = htmlText(m.groupValues[2])
+                val name = text.ifBlank { episodeNameFromUrl(url) }
+                if (url.isBlank() || name.isBlank() || text.contains("播放预告")) null else EpisodeItem(name, absUrl(url, sources.first { it.kind == SourceKind.XIFAN }), "稀饭")
             }
             .distinctBy { it.playUrl }
             .toList()
+            .let { sortEpisodes(it) }
         return AnimeDetail(item.copy(title = title), intro, meta, "", episodes)
     }
 
@@ -668,9 +686,12 @@ class BangumiWatchActivity : AppCompatActivity() {
             setPadding(0, dp(5), 0, 0)
         })
         box.setOnClickListener {
+            detailBackTab = tab
+            detailBackScreen = screen
             selectedAnime = item
             selectedDetail = null
             currentEpisode = null
+            currentPlayDirect = true
             screen = Screen.DETAIL
             render()
         }
@@ -717,15 +738,27 @@ class BangumiWatchActivity : AppCompatActivity() {
             box.addView(TextView(context).apply { text = "选择下方剧集后在这里播放。"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(10)) })
         } else {
             box.addView(TextView(context).apply { text = "${active.source} · ${active.name}"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(10)) })
-            val playerView = PlayerView(context).apply {
-                useController = true
-                player = ensurePlayer()
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210))
+            if (currentPlayDirect) {
+                val playerView = PlayerView(context).apply {
+                    useController = true
+                    player = ensurePlayer()
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
+                }
+                box.addView(playerView)
+            } else {
+                player?.pause()
+                val web = WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = false
+                    webChromeClient = WebChromeClient()
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240))
+                    loadUrl(active.playUrl)
+                }
+                box.addView(web)
+                box.addView(TextView(context).apply { text = "该线路未提供可直接提取的 MP4/M3U8，已在应用内加载官方解析播放器。"; textSize = 12f; setTextColor(Color.parseColor("#7A7F89")); setPadding(0, dp(8), 0, 0) })
             }
-            box.addView(playerView)
             val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(10), 0, 0) }
-            actions.addView(primaryButton("外部打开") { openUrl(active.playUrl) })
-            actions.addView(View(this@BangumiWatchActivity).apply { layoutParams = LinearLayout.LayoutParams(dp(8), 1) })
             actions.addView(primaryButton("下载记录") { addDownload(detail.item, active) })
             box.addView(actions)
         }
@@ -785,9 +818,10 @@ class BangumiWatchActivity : AppCompatActivity() {
                         }
                         Toast.makeText(this, "正在播放 ${ep.name}", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this, "该线路需要解析页播放，已打开外部播放器页", Toast.LENGTH_LONG).show()
-                        openUrl(playable.playUrl)
+                        player?.pause()
+                        Toast.makeText(this, "未提取到直链，已在应用内加载解析播放器", Toast.LENGTH_LONG).show()
                     }
+                    currentPlayDirect = resolved.direct
                     renderDetailOnly()
                 }.onFailure { err ->
                     Toast.makeText(this, "播放解析失败：${err.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
@@ -863,6 +897,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                         selectedAnime = null
                         selectedDetail = null
                         currentEpisode = null
+                        currentPlayDirect = true
                         page = 1
                         hasMore = true
                         searchText = ""
@@ -891,13 +926,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#202124"))
             setOnClickListener {
-                if (showBack) {
-                    when (screen) {
-                        Screen.HISTORY, Screen.DOWNLOADS -> { tab = Tab.MINE; screen = Screen.LIST }
-                        else -> { tab = Tab.BANGUMI; screen = Screen.LIST }
-                    }
-                    render()
-                }
+if (showBack) navigateBack()
             }
             layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
         })
@@ -1014,10 +1043,13 @@ class BangumiWatchActivity : AppCompatActivity() {
             record.optString("source").ifBlank { selectedSource.name }
         )
         selectedSource = sources.firstOrNull { it.name == item.source } ?: selectedSource
+        detailBackTab = Tab.MINE
+        detailBackScreen = Screen.HISTORY
         tab = Tab.BANGUMI
         selectedAnime = item
         selectedDetail = null
         currentEpisode = null
+        currentPlayDirect = true
         screen = Screen.DETAIL
         if (detailUrl.isNotBlank()) {
             render()
@@ -1065,6 +1097,45 @@ class BangumiWatchActivity : AppCompatActivity() {
             }
         }
     }.getOrDefault(emptyList())
+
+    private fun sortEpisodes(list: List<EpisodeItem>): List<EpisodeItem> = list.sortedWith(compareBy<EpisodeItem> { episodeNumber(it.name).let { n -> if (n <= 0) Int.MAX_VALUE else n } }.thenBy { it.name })
+
+    private fun episodeNumber(text: String): Int {
+        val n = Regex("""(\d+)""").find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        if (n != null) return n
+        val cn = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9, '十' to 10)
+        val m = Regex("第([一二三四五六七八九十]+)[集话話]").find(text)?.groupValues?.getOrNull(1) ?: return Int.MAX_VALUE
+        if (m == "十") return 10
+        if (m.startsWith("十")) return 10 + (cn[m.getOrNull(1)] ?: 0)
+        if (m.endsWith("十")) return (cn[m.first()] ?: 0) * 10
+        if (m.contains("十")) return (cn[m.first()] ?: 0) * 10 + (cn[m.last()] ?: 0)
+        return cn[m.first()] ?: Int.MAX_VALUE
+    }
+
+    private fun episodeNameFromUrl(url: String): String {
+        val n = Regex("""/watch/[^/]+/[^/]+/(\d+)\.html""").find(url)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        return if (n != null) "第${n}集" else "播放"
+    }
+
+    private fun navigateBack() {
+        when (screen) {
+            Screen.DETAIL -> {
+                player?.pause()
+                currentEpisode = null
+                currentPlayDirect = true
+                selectedDetail = null
+                selectedAnime = null
+                tab = detailBackTab
+                screen = detailBackScreen
+                render()
+            }
+            Screen.SEARCH -> { tab = Tab.BANGUMI; screen = Screen.LIST; render() }
+            Screen.HISTORY, Screen.DOWNLOADS -> { tab = Tab.MINE; screen = Screen.LIST; render() }
+            Screen.LIST -> {
+                if (tab == Tab.MINE) { tab = Tab.BANGUMI; render() } else finish()
+            }
+        }
+    }
 
     private fun returnToList(): Nothing {
         screen = Screen.LIST

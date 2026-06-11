@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.0.86**
+**当前版本：v1.0.87**
 
-安装包下载：[release/YunoTools-v1.0.86.apk](release/YunoTools-v1.0.86.apk)
+安装包下载：[release/YunoTools-v1.0.87.apk](release/YunoTools-v1.0.87.apk)
 
-本版本继续完善“看番”：AGE动漫改用 `api.agedm.io/v2/update?page=&size=30` 分页加载并接入 `search?query=&page=` 真实搜索；稀饭动漫接入分类分页 `/type/1-2.html` 与 `index.php/ajax/suggest` 真实搜索；播放时先解析真实播放地址，稀饭 `/watch/...` 页会提取公开 `player_aaaa.url` 的 MP4/M3U8 直链，AGE 按官方前端逻辑构造解析页，能提取直链则内置播放，否则外部打开解析页。
+本版本继续修复“看番”：返回键改为看番内部逐级返回，不再从详情/搜索/记录直接退回 APP 主页面；播放器移动到番剧介绍上方；播放不再跳外部浏览器，直链用内置 ExoPlayer，AGE 解析页兜底用应用内 WebView；搜索结果与首页使用同样 3 列卡片；优化 AGE 线路选择与稀饭剧集解析/排序，减少集数不对。
 
 一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。
 

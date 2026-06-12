@@ -1,5 +1,6 @@
 package com.yuno.tools.ui.tools
 
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -11,6 +12,7 @@ import android.text.Html
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.WindowManager
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -141,6 +143,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var bottomLoadArmed = false
     private var bottomLoadTriggered = false
     private var pendingFullscreenRestore = false
+    private var fullscreenDialog: Dialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -185,6 +188,8 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        fullscreenDialog?.dismiss()
+        fullscreenDialog = null
         player?.release()
         player = null
         super.onDestroy()
@@ -956,7 +961,7 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun playerBox(detail: AnimeDetail) = FrameLayout(this).apply {
         setBackgroundColor(Color.BLACK)
-        val h = if (isFullscreenPlayer) (resources.displayMetrics.heightPixels * 0.72f).toInt() else dp(260)
+        val h = dp(260)
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { setMargins(-dp(10), -dp(8), -dp(10), dp(12)) }
         val active = currentEpisode
         if (active != null && currentPlayDirect) {
@@ -995,7 +1000,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             setOnClickListener { navigateBack() }
         }, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.START or Gravity.TOP).apply { topMargin = dp(8); leftMargin = dp(6) })
         addView(TextView(context).apply {
-            text = if (isFullscreenPlayer) "×" else "⛶"
+            text = "⛶"
             textSize = 28f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
@@ -1415,13 +1420,43 @@ if (showBack) navigateBack()
         .replace("\\u002f", "/")
 
     private fun toggleFullscreenPlayer() {
-        isFullscreenPlayer = !isFullscreenPlayer
-        window.decorView.systemUiVisibility = if (isFullscreenPlayer) {
-            View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-        } else {
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        showFullscreenPlayer()
+    }
+
+    private fun showFullscreenPlayer() {
+        val detail = selectedDetail ?: return
+        if (currentEpisode == null) {
+            detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) }
+            return
         }
-        renderDetailOnly()
+        val preparedPlayer = runCatching { ensurePlayer() }.getOrNull() ?: return
+        fullscreenDialog?.dismiss()
+        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        fullscreenDialog = dialog
+        dialog.window?.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        frame.addView(PlayerView(this).apply {
+            useController = true
+            player = preparedPlayer
+            setBackgroundColor(Color.BLACK)
+            controllerShowTimeoutMs = 3000
+        }, FrameLayout.LayoutParams(-1, -1))
+        frame.addView(TextView(this).apply {
+            text = "×"
+            textSize = 34f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#44000000"))
+            setOnClickListener { dialog.dismiss() }
+        }, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.TOP or Gravity.END).apply { topMargin = dp(12); rightMargin = dp(12) })
+        dialog.setContentView(frame)
+        dialog.setOnDismissListener {
+            fullscreenDialog = null
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            runCatching { renderDetailOnly() }
+        }
+        dialog.show()
+        dialog.window?.decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
     }
 
     private fun bottomBar(): LinearLayout = LinearLayout(this).apply {

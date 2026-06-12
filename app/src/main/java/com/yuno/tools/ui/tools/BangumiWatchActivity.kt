@@ -137,8 +137,9 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var searchHasMore = false
     private var selectedCategory = ""
     private var isFullscreenPlayer = false
-    private var pullStartY = 0f
-    private var pullTriggered = false
+    private var touchStartY = 0f
+    private var bottomLoadArmed = false
+    private var bottomLoadTriggered = false
     private var pendingFullscreenRestore = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -197,24 +198,28 @@ class BangumiWatchActivity : AppCompatActivity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             setOnTouchListener { _, event ->
+                val child = getChildAt(0)
+                val atBottom = child != null && scrollY >= child.measuredHeight - height - dp(8)
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> { pullStartY = event.rawY; pullTriggered = false }
+                    MotionEvent.ACTION_DOWN -> {
+                        touchStartY = event.rawY
+                        bottomLoadArmed = atBottom
+                        bottomLoadTriggered = false
+                    }
                     MotionEvent.ACTION_MOVE -> {
-                        if (!pullTriggered && scrollY == 0 && event.rawY - pullStartY > dp(90) && screen == Screen.LIST && tab == Tab.BANGUMI && !loading) {
-                            pullTriggered = true
-                            Toast.makeText(this@BangumiWatchActivity, "正在刷新列表", Toast.LENGTH_SHORT).show()
-                            loadLibrary(force = true)
+                        // 只在“已经滑到底部以后，继续向上滑/往下翻”的手势触发加载更多；不做下拉刷新，不到最底不自动加载。
+                        val continueUpAtBottom = bottomLoadArmed && atBottom && touchStartY - event.rawY > dp(42)
+                        if (!bottomLoadTriggered && continueUpAtBottom && screen == Screen.LIST && tab == Tab.BANGUMI && hasMore && !loading) {
+                            bottomLoadTriggered = true
+                            loadMoreLibrary()
                         }
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pullTriggered = false
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        bottomLoadArmed = false
+                        bottomLoadTriggered = false
+                    }
                 }
                 false
-            }
-            setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                val child = getChildAt(0)
-                if (screen == Screen.LIST && tab == Tab.BANGUMI && child != null && hasMore && !loading && scrollY >= child.measuredHeight - height - dp(160)) {
-                    loadMoreLibrary()
-                }
             }
         }
         content = LinearLayout(this).apply {
@@ -270,7 +275,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         animeGrid(allAnime)
         if (hasMore) {
             content.addView(TextView(this).apply {
-                text = if (loading) "正在加载更多…" else "上拉自动加载更多，下拉自动刷新"
+                text = if (loading) "正在加载更多…" else "已到底部，继续上滑加载更多"
                 textSize = 12f
                 gravity = Gravity.CENTER
                 setTextColor(Color.parseColor("#8B9099"))

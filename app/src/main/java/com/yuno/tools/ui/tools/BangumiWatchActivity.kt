@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
-import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
@@ -140,23 +139,48 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var isFullscreenPlayer = false
     private var pullStartY = 0f
     private var pullTriggered = false
+    private var pendingFullscreenRestore = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeApplier.apply(this)
         allAnime = emptyList()
+        if (savedInstanceState != null) {
+            pendingFullscreenRestore = savedInstanceState.getBoolean("fullscreen", false)
+            isFullscreenPlayer = pendingFullscreenRestore
+            savedInstanceState.getString("detailUrl")?.takeIf { it.isNotBlank() }?.let { url ->
+                selectedAnime = AnimeItem(savedInstanceState.getString("title").orEmpty(), savedInstanceState.getString("status").orEmpty(), savedInstanceState.getString("cover").orEmpty(), url, savedInstanceState.getString("source").orEmpty().ifBlank { selectedSource.name })
+                screen = Screen.DETAIL
+            }
+        }
         buildUi()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 navigateBack()
             }
         })
-        loadLibrary(force = true)
+        if (screen == Screen.DETAIL && selectedAnime != null) {
+            loadDetail(selectedAnime!!)
+        } else {
+            loadLibrary(force = true)
+        }
     }
 
     override fun onResume() {
         super.onResume()
         ThemeApplier.apply(this)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("fullscreen", isFullscreenPlayer)
+        selectedAnime?.let {
+            outState.putString("detailUrl", it.detailUrl)
+            outState.putString("title", it.title)
+            outState.putString("status", it.status)
+            outState.putString("cover", it.cover)
+            outState.putString("source", it.source)
+        }
     }
 
     override fun onDestroy() {
@@ -922,7 +946,7 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun playerBox(detail: AnimeDetail) = FrameLayout(this).apply {
         setBackgroundColor(Color.BLACK)
-        val h = if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(260)
+        val h = if (isFullscreenPlayer) (resources.displayMetrics.heightPixels * 0.72f).toInt() else dp(260)
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { setMargins(-dp(10), -dp(8), -dp(10), dp(12)) }
         val active = currentEpisode
         if (active != null && currentPlayDirect) {
@@ -961,12 +985,13 @@ class BangumiWatchActivity : AppCompatActivity() {
             setOnClickListener { navigateBack() }
         }, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.START or Gravity.TOP).apply { topMargin = dp(8); leftMargin = dp(6) })
         addView(TextView(context).apply {
-            text = if (isFullscreenPlayer) "↙" else "⛶"
-            textSize = 30f
+            text = if (isFullscreenPlayer) "×" else "⛶"
+            textSize = 28f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#33000000"))
             setOnClickListener { toggleFullscreenPlayer() }
-        }, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.END or Gravity.BOTTOM).apply { rightMargin = dp(8); bottomMargin = dp(8) })
+        }, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.END or Gravity.TOP).apply { rightMargin = dp(8); topMargin = dp(8) })
     }
 
     private fun videoTabs() = LinearLayout(this).apply {
@@ -1013,7 +1038,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                 val cell = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(dp(8), dp(7), dp(8), dp(7))
-                    val isActive = normalizedEpisodeUrl(currentOriginalEpisode) == normalizedEpisodeUrl(ep) || normalizedEpisodeUrl(currentEpisode) == normalizedEpisodeUrl(ep)
+                    val isActive = isCurrentEpisode(ep)
                     setBackgroundColor(Color.parseColor(if (isActive) "#4F6EF7" else "#EEF1F6"))
                     layoutParams = LinearLayout.LayoutParams(dp(104), LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), dp(8)) }
                     setOnClickListener { playEpisode(detail.item, ep) }
@@ -1023,11 +1048,11 @@ class BangumiWatchActivity : AppCompatActivity() {
                     textSize = 13f
                     typeface = Typeface.DEFAULT_BOLD
                     gravity = Gravity.CENTER
-                    setTextColor(Color.parseColor("#202124"))
+                    setTextColor(Color.parseColor(if (isCurrentEpisode(ep)) "#FFFFFF" else "#202124"))
                     maxLines = 1
                 })
                 cell.addView(TextView(this).apply {
-                    val isActive = normalizedEpisodeUrl(currentOriginalEpisode) == normalizedEpisodeUrl(ep) || normalizedEpisodeUrl(currentEpisode) == normalizedEpisodeUrl(ep)
+                    val isActive = isCurrentEpisode(ep)
                     text = if (isActive) { if (currentPlayLoading) "解析中" else "播放中" } else "播放"
                     textSize = 11f
                     gravity = Gravity.CENTER
@@ -1367,7 +1392,12 @@ if (showBack) navigateBack()
         if (!shouldShow && hasBar) root.removeViewAt(1)
     }
 
-    private fun normalizedEpisodeUrl(ep: EpisodeItem?): String = ep?.playUrl?.substringBefore("?").orEmpty()
+    private fun isCurrentEpisode(ep: EpisodeItem): Boolean {
+        val original = currentOriginalEpisode
+        if (original != null && original.playUrl.isNotBlank() && ep.playUrl.isNotBlank() && original.playUrl == ep.playUrl) return true
+        val active = currentEpisode
+        return active != null && active.playUrl.isNotBlank() && ep.playUrl.isNotBlank() && active.playUrl == ep.playUrl
+    }
 
     private fun normalizeNg3Html(text: String): String = text
         .replace("""\/""", "/")
@@ -1376,7 +1406,6 @@ if (showBack) navigateBack()
 
     private fun toggleFullscreenPlayer() {
         isFullscreenPlayer = !isFullscreenPlayer
-        requestedOrientation = if (isFullscreenPlayer) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         window.decorView.systemUiVisibility = if (isFullscreenPlayer) {
             View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         } else {

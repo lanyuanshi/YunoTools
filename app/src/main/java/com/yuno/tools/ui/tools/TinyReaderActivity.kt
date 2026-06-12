@@ -24,6 +24,8 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
+import com.bumptech.glide.load.model.LazyHeaders
 import com.google.android.material.card.MaterialCardView
 import com.yuno.tools.R
 import com.yuno.tools.util.ThemeApplier
@@ -33,6 +35,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.net.URLEncoder
+import android.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import kotlin.math.max
 
 class TinyReaderActivity : AppCompatActivity() {
@@ -221,7 +227,7 @@ class TinyReaderActivity : AppCompatActivity() {
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.02", "仅保留书架、历史、更多；漫画网站不内置网页、不跳转 HTML，全部在本地解析后阅读。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.03", "仅保留书架、历史、更多；漫画网站不内置网页、不跳转 HTML，全部在本地解析后阅读。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -302,13 +308,21 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun renderPages(manga: Manga, idx: Int, pages: List<String>, y: Int) {
         val box=scroll(); setHeader(manga.title, manga.chapters.getOrNull(idx)?.title ?: "图片阅读")
         actionButton("◁") { if (idx > 0) openReader(manga, idx - 1, 0) }; actionButton("▷") { if (idx + 1 < manga.chapters.size) openReader(manga, idx + 1, 0) }
-        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已阻止显示站点图标、脚本图片或推荐封面；该章节可能需要源站专用解密或被反爬拦截。") else pages.forEachIndexed { i, u ->
+        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已阻止显示站点图标、脚本图片或推荐封面；好多漫会尝试专用 AES 解密；DM5 若源站反爬未返回图片则不会显示错图。") else pages.forEachIndexed { i, u ->
             val card=baseCard(); val lay=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL; setPadding(dp(6),dp(6),dp(6),dp(6))}
             lay.addView(TextView(this).apply{text="${i+1} / ${pages.size}"; textSize=12f; setTextColor(C_SUB); gravity=Gravity.CENTER; setPadding(0,dp(4),0,dp(4))})
-            lay.addView(ImageView(this).apply{ adjustViewBounds=true; scaleType=ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE); Glide.with(this@TinyReaderActivity).load(u).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }, LinearLayout.LayoutParams(-1, -2))
+            lay.addView(ImageView(this).apply{ adjustViewBounds=true; scaleType=ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE); Glide.with(this@TinyReaderActivity).load(glideUrl(u, manga.sourceName)).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }, LinearLayout.LayoutParams(-1, -2))
             card.addView(lay); box.addView(card)
         }
         readerScroll?.post { readerScroll?.smoothScrollTo(0, y) }
+    }
+
+    private fun glideUrl(url: String, sourceName: String): GlideUrl {
+        val referer = if (sourceName == "DM5") "https://m.dm5.com/" else "https://m.haoduoman.com/"
+        return GlideUrl(url, LazyHeaders.Builder()
+            .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+            .addHeader("Referer", referer)
+            .build())
     }
 
     private fun refreshLibrary() { val favs=loadManga().filter{it.favorite}; if(favs.isEmpty()){toast("没有收藏需要刷新");return}; toast("开始刷新 ${favs.size} 部漫画"); Thread{ favs.forEach{runCatching{saveManga(mergeOld(fetchManga(it.title,it.url,it.sourceName)))}}; runOnUiThread{showLibrary();toast("刷新完成")} }.start() }
@@ -384,12 +398,45 @@ class TinyReaderActivity : AppCompatActivity() {
         }.distinctBy { it.url }.toList()
     }
     private fun extractHaoduomanChapterImages(html: String, base: String): List<String> {
-        // Only accept real comic image domain. Do not return site icons, JS, recommendation covers or placeholders.
-        val direct = Regex("""https?://img\.haoduoman\.com/(?!cover/)[^"'<>\s]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'<>\s]*)?""", RegexOption.IGNORE_CASE)
-            .findAll(html).map { it.value }.distinct().toList()
-        if (direct.isNotEmpty()) return direct
-        return emptyList()
+        // 好多漫专用解析：章节页 var params 是 AES/CBC/PKCS5Padding 加密 JSON。
+        // Base64 解码后前 16 字节是 IV，后续是密文；key 来自源站 CMS.chapter.decrypt。
+        val enc = Regex("""var\s+params\s*=\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()
+        if (enc.isNotBlank()) {
+            runCatching {
+                val all = Base64.decode(enc, Base64.DEFAULT)
+                if (all.size > 32) {
+                    val iv = all.copyOfRange(0, 16)
+                    val cipherBytes = all.copyOfRange(16, all.size)
+                    val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+                    cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec("5V&RoR%Jf@pJPydF".toByteArray(Charsets.UTF_8), "AES"), IvParameterSpec(iv))
+                    val json = String(cipher.doFinal(cipherBytes), Charsets.UTF_8)
+                    val o = JSONObject(json)
+                    val status = o.optString("comic_status")
+                    if (status.isNotBlank() && status != "normal") return emptyList()
+                    val arr = o.optJSONArray("chapter_images") ?: JSONArray()
+                    val domain = o.optString("images_domain")
+                    val useBase64 = o.optBoolean("images_base64", false)
+                    return (0 until arr.length()).mapNotNull { i ->
+                        var u = arr.optString(i).trim()
+                        if (u.isBlank()) return@mapNotNull null
+                        if (domain.isNotBlank() && !u.startsWith("http") && !u.startsWith("//")) {
+                            u = domain + if (useBase64) android.util.Base64.encodeToString(u.toByteArray(), android.util.Base64.NO_WRAP) else u
+                        }
+                        absUrl(u, base)
+                    }.filter { isComicPageImage(it) }.distinct().take(260)
+                }
+                emptyList<String>()
+            }.getOrElse { emptyList() }.also { if (it.isNotEmpty()) return it }
+        }
+        // 兜底：只接受明确非封面的漫画图片域名，避免站点图标/推荐封面。
+        return Regex("""https?://(?:s\d+\.bzcdn\.net|img\.haoduoman\.com)/(?!cover/)[^"'<>\s]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'<>\s]*)?""", RegexOption.IGNORE_CASE)
+            .findAll(html).map { it.value }.filter { isComicPageImage(it) }.distinct().take(260).toList()
     }
+    private fun isComicPageImage(url: String): Boolean {
+        val u = url.lowercase()
+        return (u.contains("/scomic/") || u.contains("img.haoduoman.com/")) && !u.contains("/cover/") && !u.contains("/assets/") && !u.contains("/static/") && !u.contains(".js") && u.contains(Regex("""\.(jpg|jpeg|png|webp)(\?|$)"""))
+    }
+
 
     private fun extractChapters(html: String, base: String): List<Chapter> {
         val re=Regex("""<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)

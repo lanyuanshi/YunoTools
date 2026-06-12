@@ -225,7 +225,7 @@ class TinyReaderActivity : AppCompatActivity() {
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.05", "首页搜索和本地分类；漫画源为包子漫画 / 好多漫。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.06", "首页搜索和本地分类；漫画源为包子漫画 / 好多漫。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -307,7 +307,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun renderPages(manga: Manga, idx: Int, pages: List<String>, y: Int) {
         val box=scroll(); setHeader(manga.title, manga.chapters.getOrNull(idx)?.title ?: "图片阅读")
         actionButton("◁") { if (idx > 0) openReader(manga, idx - 1, 0) }; actionButton("▷") { if (idx + 1 < manga.chapters.size) openReader(manga, idx + 1, 0) }
-        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已阻止显示站点图标、脚本图片或推荐封面；好多漫会尝试专用 AES 解密；包子漫画 / 好多漫若源站未返回图片则不会显示错图。") else pages.forEachIndexed { i, u ->
+        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已阻止显示站点图标、推荐封面和包子漫画 APP 二维码宣传图；若源站只返回 APP 引导页则不显示错图。") else pages.forEachIndexed { i, u ->
             val card=baseCard(); val lay=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL; setPadding(dp(6),dp(6),dp(6),dp(6))}
             lay.addView(TextView(this).apply{text="${i+1} / ${pages.size}"; textSize=12f; setTextColor(C_SUB); gravity=Gravity.CENTER; setPadding(0,dp(4),0,dp(4))})
             lay.addView(ImageView(this).apply{ adjustViewBounds=true; scaleType=ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE); Glide.with(this@TinyReaderActivity).load(glideUrl(u, manga.sourceName)).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }, LinearLayout.LayoutParams(-1, -2))
@@ -414,8 +414,23 @@ class TinyReaderActivity : AppCompatActivity() {
         return list.distinctBy { it.url }.take(300)
     }
     private fun extractBzChapterImages(html: String, base: String): List<String> {
-        return Regex("""(?:src|data-src)=["'](https?://s\d+\.bzcdn\.net/scomic/[^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)""", RegexOption.IGNORE_CASE)
-            .findAll(html).map { it.groupValues[1].replace("&amp;", "&") }.filter { isComicPageImage(it) }.distinct().take(260).toList()
+        // 包子漫画网页端部分章节会把“请在 APP 内阅读/二维码下载 APP”的宣传图伪装成 scomic 图片。
+        // 这类图不是漫画页，必须过滤，不能再当成第 1 页显示。
+        val pageText = clean(html).lowercase()
+        val appOnly = pageText.contains("app内") || pageText.contains("app內") || pageText.contains("下载app") || pageText.contains("下載app") || pageText.contains("二维码") || pageText.contains("二維碼") || pageText.contains("扫码") || pageText.contains("掃描") || pageText.contains("請在包子") || pageText.contains("请在包子")
+        val re = Regex("""<amp-img[^>]+(?:src|data-src)=["'](https?://s\d+\.bzcdn\.net/scomic/[^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["'][^>]*>""", RegexOption.IGNORE_CASE)
+        val items = re.findAll(html).mapNotNull { m ->
+            val tag = m.value
+            val around = html.substring((m.range.first - 500).coerceAtLeast(0), (m.range.last + 500).coerceAtMost(html.length)).lowercase()
+            val alt = Regex("""alt=["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.getOrNull(1).orEmpty().lowercase()
+            val url = m.groupValues[1].replace("&amp;", "&")
+            val bad = listOf("app", "baozimh.com", "qrcode", "qr", "二维码", "二維碼", "下载", "下載", "扫码", "掃描", "請在", "请在", "android-icon", "ios").any { k ->
+                around.contains(k) || alt.contains(k) || url.lowercase().contains(k)
+            }
+            if (!bad && isComicPageImage(url)) url else null
+        }.distinct().take(260).toList()
+        // 如果页面明确是 APP 引导页，宁可返回空，让 UI 提示源站限制，也不显示错误二维码图。
+        return if (appOnly && items.size <= 6) emptyList() else items
     }
 
     private fun extractHaoduomanChapterImages(html: String, base: String): List<String> {

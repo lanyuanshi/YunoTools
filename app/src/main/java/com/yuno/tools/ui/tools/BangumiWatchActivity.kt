@@ -97,7 +97,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private val sources = listOf(
         WatchSource("AGE动漫", "https://m.agedm.io", "https://api.agedm.io/v2/home-list", SourceKind.AGE, note = "AGE 分类自适应", categories = listOf(Category("更新", "update"), Category("TV", "tv"), Category("剧场", "movie"), Category("OVA", "ova"))),
         WatchSource("稀饭动漫", "https://anime.xifanacg.com", "https://anime.xifanacg.com/", SourceKind.XIFAN, categories = listOf(Category("动漫", "1"), Category("国产", "2"), Category("电影", "3"), Category("剧集", "4"))),
-        WatchSource("瓜子影视", "https://ng3.app", "https://ng3.app/home", SourceKind.NG3, note = "接口列表 + 页面播放解析", categories = listOf(Category("推荐", "home"), Category("电影", "1"), Category("剧集", "2"), Category("综艺", "3"), Category("动漫", "4")))
+        WatchSource("瓜子影视", "https://ng3.app", "https://ng3.app/home", SourceKind.NG3, note = "接口列表 + 页面播放解析", categories = listOf(Category("推荐", "home"), Category("电影", "1"), Category("电视剧", "2"), Category("综艺", "3"), Category("动漫", "4")))
     )
     private var selectedSource = sources.first()
     private val prefs by lazy { getSharedPreferences("yuno_bangumi_watch", Context.MODE_PRIVATE) }
@@ -311,21 +311,18 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun renderDetail() {
         val item = selectedAnime ?: returnToList()
-        topBar(item.title, showSearch = false, showBack = true)
         val detail = selectedDetail
         if (detail == null) {
-            content.addView(detailHeader(item, null, "正在加载详情..."))
+            content.addView(playerBox(AnimeDetail(item, "", item.status, "", emptyList())))
             if (!loading) loadDetail(item)
             return
         }
         content.addView(playerBox(detail))
+        content.addView(videoTabs())
         content.addView(detailHeader(detail.item, detail.meta, detail.intro))
-        section("选集 · 共 ${detail.episodes.size} 集")
-        if (detail.episodes.isEmpty()) {
-            emptyCard("暂无剧集", "没有解析到剧集列表。")
-        } else {
-            episodeGrid(detail)
-        }
+        content.addView(watchActions(detail))
+        section("选集")
+        if (detail.episodes.isNotEmpty()) episodeGrid(detail)
     }
 
     private fun renderMine() {
@@ -899,67 +896,105 @@ class BangumiWatchActivity : AppCompatActivity() {
         }
     }
 
-    private fun detailHeader(item: AnimeItem, meta: String?, intro: String) = card().apply {
-        val row = LinearLayout(context).apply {
+    private fun detailHeader(item: AnimeItem, meta: String?, intro: String) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(4), dp(8), dp(4), dp(6))
+        addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-        }
-        val image = ImageView(context).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            setBackgroundColor(Color.parseColor("#EDEFF5"))
-            layoutParams = LinearLayout.LayoutParams(dp(104), dp(148))
-        }
-        Glide.with(this@BangumiWatchActivity).load(item.cover).centerCrop().into(image)
-        row.addView(image)
-        row.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(context).apply { text = item.title; textSize = 18f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")); maxLines = 2 })
-            addView(TextView(context).apply { text = meta ?: item.status; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(8)) })
-            addView(TextView(context).apply { text = intro; textSize = 12f; setTextColor(Color.parseColor("#4D5562")); maxLines = 5 })
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(context).apply {
+                text = item.title
+                textSize = 24f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#202124"))
+                maxLines = 1
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(context).apply { text = "简介 ›"; textSize = 16f; setTextColor(Color.parseColor("#6D737D")) })
         })
-        addView(row)
+        addView(TextView(context).apply {
+            text = (meta ?: item.status).ifBlank { item.source }
+            textSize = 15f
+            setTextColor(Color.parseColor("#6D737D"))
+            setPadding(0, dp(8), 0, 0)
+            maxLines = 2
+        })
     }
 
-    private fun playerBox(detail: AnimeDetail) = card().apply {
-        setCardBackgroundColor(Color.parseColor("#111318"))
-        strokeColor = Color.parseColor("#20242C")
-        radius = dp(14).toFloat()
-        val box = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-        }
+    private fun playerBox(detail: AnimeDetail) = FrameLayout(this).apply {
+        setBackgroundColor(Color.BLACK)
+        val h = if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(260)
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { setMargins(-dp(10), -dp(8), -dp(10), dp(12)) }
         val active = currentEpisode
-        box.addView(TextView(context).apply { text = detail.item.title; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 2 })
-        box.addView(TextView(context).apply { text = active?.let { "${it.source} · ${it.name}" } ?: "选择下方剧集后在这里播放"; textSize = 12f; setTextColor(Color.parseColor("#A8B0BF")); setPadding(0, dp(5), 0, dp(10)) })
-        if (active == null) {
-            box.addView(FrameLayout(context).apply {
-                setBackgroundColor(Color.BLACK)
-                addView(TextView(context).apply { text = "▶"; textSize = 42f; setTextColor(Color.parseColor("#66FFFFFF")); gravity = Gravity.CENTER }, FrameLayout.LayoutParams(-1, -1))
-                setOnClickListener { detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) } ?: Toast.makeText(this@BangumiWatchActivity, "没有可播放剧集", Toast.LENGTH_SHORT).show() }
-                layoutParams = LinearLayout.LayoutParams(-1, if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(220))
-            })
-        } else {
-            if (currentPlayLoading) box.addView(TextView(context).apply { text = "正在加载视频，请稍候…"; textSize = 12f; setTextColor(Color.parseColor("#8EA2FF")); setPadding(0, 0, 0, dp(6)) })
-            if (currentPlayError.isNotBlank()) box.addView(TextView(context).apply { text = currentPlayError; textSize = 12f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, 0, 0, dp(6)) })
-            if (currentPlayDirect) {
-                val preparedPlayer = runCatching { ensurePlayer() }.onFailure { e -> currentPlayLoading = false; currentPlayError = "播放器初始化失败：${e.message ?: "未知错误"}"; Log.e("BangumiWatch", currentPlayError, e) }.getOrNull()
-                if (preparedPlayer != null) {
-                    box.addView(PlayerView(context).apply { useController = true; player = preparedPlayer; setBackgroundColor(Color.BLACK); layoutParams = LinearLayout.LayoutParams(-1, if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(230)) })
-                } else {
-                    box.addView(TextView(context).apply { text = currentPlayError.ifBlank { "播放器初始化失败，请换线路或稍后重试。" }; textSize = 13f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, dp(10), 0, dp(10)) })
-                }
-            } else {
-                player?.pause()
-                box.addView(TextView(context).apply { text = "当前线路没有解析到可内置播放的 MP4/M3U8 地址，请尝试其他线路或播放源。"; textSize = 13f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, dp(10), 0, dp(10)) })
+        if (active != null && currentPlayDirect) {
+            val preparedPlayer = runCatching { ensurePlayer() }
+                .onFailure { e -> currentPlayLoading = false; currentPlayError = "播放器初始化失败：${e.message ?: "未知错误"}"; Log.e("BangumiWatch", currentPlayError, e) }
+                .getOrNull()
+            if (preparedPlayer != null) {
+                addView(PlayerView(context).apply {
+                    useController = true
+                    player = preparedPlayer
+                    setBackgroundColor(Color.BLACK)
+                }, FrameLayout.LayoutParams(-1, -1))
             }
-            val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(10), 0, 0) }
-            actions.addView(primaryButton(if (isFullscreenPlayer) "退出放大" else "放大") { toggleFullscreenPlayer() })
-            actions.addView(primaryButton("下载记录") { addDownload(detail.item, active) })
-            box.addView(actions)
+        } else {
+            val poster = ImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(Color.BLACK)
+                alpha = 0.72f
+            }
+            Glide.with(this@BangumiWatchActivity).load(detail.item.cover).centerCrop().into(poster)
+            addView(poster, FrameLayout.LayoutParams(-1, -1))
+            addView(TextView(context).apply {
+                text = "▶"
+                textSize = 48f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                setBackgroundColor(Color.parseColor("#33000000"))
+            }, FrameLayout.LayoutParams(dp(88), dp(88), Gravity.CENTER))
+            setOnClickListener { detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) } ?: Toast.makeText(this@BangumiWatchActivity, "没有可播放剧集", Toast.LENGTH_SHORT).show() }
         }
-        addView(box)
+        addView(TextView(context).apply {
+            text = "‹"
+            textSize = 42f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setOnClickListener { navigateBack() }
+        }, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.START or Gravity.TOP).apply { topMargin = dp(8); leftMargin = dp(6) })
+        addView(TextView(context).apply {
+            text = if (isFullscreenPlayer) "↙" else "⛶"
+            textSize = 30f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setOnClickListener { toggleFullscreenPlayer() }
+        }, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.END or Gravity.BOTTOM).apply { rightMargin = dp(8); bottomMargin = dp(8) })
+    }
+
+    private fun videoTabs() = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(4), dp(6), dp(4), dp(12))
+        addView(TextView(context).apply { text = "视频"; textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")) })
+        addView(TextView(context).apply { text = "讨论"; textSize = 20f; setTextColor(Color.parseColor("#9AA0A6")); setPadding(dp(34), 0, 0, 0) })
+    }
+
+    private fun watchActions(detail: AnimeDetail) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER
+        setPadding(0, dp(12), 0, dp(18))
+        val active = currentEpisode ?: detail.episodes.firstOrNull()
+        listOf(
+            Triple("⇄", "换源") { if (detail.episodes.isNotEmpty()) playEpisode(detail.item, detail.episodes.first()) },
+            Triple("⇩", "下载") { active?.let { addDownload(detail.item, it) } ?: Toast.makeText(this@BangumiWatchActivity, "请先选择剧集", Toast.LENGTH_SHORT).show() },
+            Triple("☆", "收藏") { Toast.makeText(this@BangumiWatchActivity, "已收藏", Toast.LENGTH_SHORT).show() }
+        ).forEach { (icon, label, action) ->
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setOnClickListener { action() }
+                addView(TextView(context).apply { text = icon; textSize = 34f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#202124")) })
+                addView(TextView(context).apply { text = label; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#9AA0A6")) })
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
     }
 
     private fun episodeGrid(detail: AnimeDetail) {
@@ -1075,7 +1110,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         tab = Tab.BANGUMI
         screen = Screen.DETAIL
         currentPlayLoading = false
-        currentPlayError = message
+        currentPlayError = ""
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         runCatching { renderDetailOnly() }
             .onFailure { Log.e("BangumiWatch", "render error state failed", it) }

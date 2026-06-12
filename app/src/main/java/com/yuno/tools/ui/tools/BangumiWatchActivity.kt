@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.text.Html
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -57,13 +59,16 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private enum class SourceKind { AGE, XIFAN, NG3 }
 
+    private data class Category(val name: String, val id: String)
+
     private data class WatchSource(
         val name: String,
         val baseUrl: String,
         val libraryUrl: String,
         val kind: SourceKind,
         val note: String = "",
-        val guarded: Boolean = false
+        val guarded: Boolean = false,
+        val categories: List<Category> = emptyList()
     )
 
     private data class AnimeItem(
@@ -90,9 +95,9 @@ class BangumiWatchActivity : AppCompatActivity() {
     )
 
     private val sources = listOf(
-        WatchSource("AGE动漫", "https://m.agedm.io", "https://api.agedm.io/v2/home-list", SourceKind.AGE, note = "API: api.agedm.io/v2/home-list"),
-        WatchSource("稀饭动漫", "https://anime.xifanacg.com", "https://anime.xifanacg.com/", SourceKind.XIFAN),
-        WatchSource("瓜子影视", "https://ng3.app", "https://ng3.app/home", SourceKind.NG3, note = "ng3.app/home")
+        WatchSource("AGE动漫", "https://m.agedm.io", "https://api.agedm.io/v2/home-list", SourceKind.AGE, note = "AGE 分类自适应", categories = listOf(Category("更新", "update"), Category("TV", "tv"), Category("剧场", "movie"), Category("OVA", "ova"))),
+        WatchSource("稀饭动漫", "https://anime.xifanacg.com", "https://anime.xifanacg.com/", SourceKind.XIFAN, categories = listOf(Category("动漫", "1"), Category("国产", "2"), Category("电影", "3"), Category("剧集", "4"))),
+        WatchSource("瓜子影视", "https://ng3.app", "https://ng3.app/home", SourceKind.NG3, note = "接口列表 + 页面播放解析", categories = listOf(Category("推荐", "home"), Category("电影", "1"), Category("剧集", "2"), Category("综艺", "3"), Category("动漫", "4")))
     )
     private var selectedSource = sources.first()
     private val prefs by lazy { getSharedPreferences("yuno_bangumi_watch", Context.MODE_PRIVATE) }
@@ -131,6 +136,10 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var searchLoading = false
     private var searchPage = 1
     private var searchHasMore = false
+    private var selectedCategory = ""
+    private var isFullscreenPlayer = false
+    private var pullStartY = 0f
+    private var pullTriggered = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -161,7 +170,29 @@ class BangumiWatchActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#FAFAFA"))
         }
-        val scroll = ScrollView(this).apply { isFillViewport = true }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> { pullStartY = event.rawY; pullTriggered = false }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (!pullTriggered && scrollY == 0 && event.rawY - pullStartY > dp(90) && screen == Screen.LIST && tab == Tab.BANGUMI && !loading) {
+                            pullTriggered = true
+                            Toast.makeText(this@BangumiWatchActivity, "正在刷新列表", Toast.LENGTH_SHORT).show()
+                            loadLibrary(force = true)
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pullTriggered = false
+                }
+                false
+            }
+            setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                val child = getChildAt(0)
+                if (screen == Screen.LIST && tab == Tab.BANGUMI && child != null && hasMore && !loading && scrollY >= child.measuredHeight - height - dp(160)) {
+                    loadMoreLibrary()
+                }
+            }
+        }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(10), dp(8), dp(10), dp(82))
@@ -175,10 +206,7 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun render() {
         content.removeAllViews()
-        if (root.childCount > 1) {
-            root.removeViewAt(1)
-            root.addView(bottomBar())
-        }
+        updateBottomBarVisibility()
         when (screen) {
             Screen.HISTORY -> renderRecords("历史记录", "history")
             Screen.DOWNLOADS -> renderRecords("下载记录", "downloads")
@@ -217,9 +245,14 @@ class BangumiWatchActivity : AppCompatActivity() {
         section("最新番剧")
         animeGrid(allAnime)
         if (hasMore) {
-            content.addView(primaryWideButton(if (loading) "加载中..." else "加载更多") { loadMoreLibrary() })
+            content.addView(TextView(this).apply {
+                text = if (loading) "正在加载更多…" else "上拉自动加载更多，下拉自动刷新"
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#8B9099"))
+                setPadding(0, dp(12), 0, dp(8))
+            })
         }
-        content.addView(primaryWideButton("刷新列表") { loadLibrary(force = true) })
     }
 
     private fun renderSearch() {
@@ -238,6 +271,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                     searchResults = emptyList()
                     searchPage = 1
                     searchHasMore = false
+                    searchRemote(searchText, reset = true)
                     render()
                     true
                 } else false
@@ -254,6 +288,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                 searchResults = emptyList()
                 searchPage = 1
                 searchHasMore = false
+                searchRemote(searchText, reset = true)
                 render()
             })
         }
@@ -269,7 +304,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             } else {
                 section("搜索结果")
                 animeGrid(searchResults)
-                if (searchHasMore) content.addView(primaryWideButton(if (searchLoading) "搜索中..." else "加载更多结果") { searchRemote(searchText, reset = false) })
+                if (searchHasMore) content.addView(TextView(this).apply { text = if (searchLoading) "正在搜索更多…" else "继续下滑会自动加载更多结果"; textSize = 12f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#8B9099")); setPadding(0, dp(12), 0, dp(8)) })
             }
         }
     }
@@ -299,7 +334,6 @@ class BangumiWatchActivity : AppCompatActivity() {
         content.addView(settingCard("历史记录", "查看播放历史，点击后回到应用内播放页") { screen = Screen.HISTORY; render() })
         content.addView(settingCard("下载记录", "查看已加入下载记录的剧集地址") { screen = Screen.DOWNLOADS; render() })
         section("设置")
-        content.addView(settingCard("刷新番剧列表", "重新从当前播放源加载番剧列表") { loadLibrary() })
         content.addView(settingCard("清空历史记录", "删除本地播放历史") { clearRecords("history") })
         content.addView(settingCard("清空下载记录", "删除本地下载记录") { clearRecords("downloads") })
     }
@@ -400,10 +434,14 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun fetchLibraryPage(targetPage: Int): List<AnimeItem> {
+        val category = selectedCategory.ifBlank { selectedSource.categories.firstOrNull()?.id.orEmpty() }
         val url = when (selectedSource.kind) {
-            SourceKind.AGE -> "https://api.agedm.io/v2/update?page=$targetPage&size=30"
-            SourceKind.XIFAN -> if (targetPage <= 1) "https://anime.xifanacg.com/type/1.html" else "https://anime.xifanacg.com/type/1-$targetPage.html"
-            SourceKind.NG3 -> "ng3-api-home:$targetPage"
+            SourceKind.AGE -> if (category == "update" || category.isBlank()) "https://api.agedm.io/v2/update?page=$targetPage&size=30" else "https://api.agedm.io/v2/catalog?label=$category&page=$targetPage&size=30"
+            SourceKind.XIFAN -> {
+                val id = category.ifBlank { "1" }
+                if (targetPage <= 1) "https://anime.xifanacg.com/type/$id.html" else "https://anime.xifanacg.com/type/$id-$targetPage.html"
+            }
+            SourceKind.NG3 -> "ng3-api-home:$targetPage:${category.ifBlank { "home" }}"
         }
         val body = fetch(url)
         if (body.contains("/_guard/") || body.contains("slider_html") || body.contains("安全验证")) error("需要安全验证")
@@ -472,8 +510,12 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun fetch(url: String): String {
         if (url.startsWith("ng3-api-home:")) {
-            val pageNo = url.substringAfter(":").toIntOrNull() ?: 1
-            return ng3ApiPost("/Pc/Resource/IndexShow/ShowOnes", JSONObject().put("page", pageNo).put("pageSize", 12))
+            val parts = url.split(":")
+            val pageNo = parts.getOrNull(1)?.toIntOrNull() ?: 1
+            val category = parts.getOrNull(2).orEmpty()
+            val payload = JSONObject().put("page", pageNo).put("pageSize", 12)
+            if (category.isNotBlank() && category != "home") payload.put("type_id", category).put("t_id", category).put("cid", category)
+            return if (category.isBlank() || category == "home") ng3ApiPost("/Pc/Resource/IndexShow/ShowOnes", payload) else runCatching { ng3ApiPost("/Pc/Resource/ModuleInfo/ShowOnes", payload) }.getOrElse { ng3ApiPost("/Pc/Resource/IndexShow/ShowOnes", payload) }
         }
         val request = Request.Builder()
             .url(url)
@@ -712,12 +754,20 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun parseNg3Detail(item: AnimeItem, body: String): AnimeDetail {
+        val normalized = normalizeNg3Html(body)
+        val directUrls = Regex("""https?://[^"'\s]+?(?:\.m3u8|\.mp4)(?:[^"'\s]*)""", RegexOption.IGNORE_CASE)
+            .findAll(normalized)
+            .map { it.value }
+            .filterNot { it.contains("poster", true) || it.contains(".jpg", true) }
+            .distinct()
+            .toList()
         val eps = Regex("""<a[^>]+href=["']([^"']*(?:play|watch)[^"']*)["'][^>]*>([\s\S]{0,120}?)</a>""", RegexOption.IGNORE_CASE).findAll(body).mapIndexedNotNull { i, m ->
             val name = htmlText(m.groupValues[2]).ifBlank { "第${i + 1}集" }
             val href = absUrl(htmlAttr(m.groupValues[1]), sources.first { it.kind == SourceKind.NG3 })
             if (href.isNotBlank()) EpisodeItem(name.take(50), href, "瓜子影视", item.detailUrl) else null
-        }.distinctBy { it.playUrl }.toList()
-        return AnimeDetail(item, "瓜子影视 · 接口列表 + 页面播放解析", item.status.ifBlank { "瓜子影视" }, "", eps.ifEmpty { listOf(EpisodeItem("播放", item.detailUrl, "瓜子影视", item.detailUrl)) })
+        }.toMutableList()
+        directUrls.forEachIndexed { i, u -> eps.add(EpisodeItem(if (directUrls.size == 1) "播放" else "第${i + 1}集", u, "瓜子影视", item.detailUrl)) }
+        return AnimeDetail(item, "瓜子影视 · 接口列表 + 页面播放解析", item.status.ifBlank { "瓜子影视" }, "", eps.distinctBy { it.playUrl }.ifEmpty { listOf(EpisodeItem("播放", item.detailUrl, "瓜子影视", item.detailUrl)) })
     }
 
     private fun parseXifanDetail(item: AnimeItem, body: String): AnimeDetail {
@@ -887,7 +937,8 @@ class BangumiWatchActivity : AppCompatActivity() {
             box.addView(FrameLayout(context).apply {
                 setBackgroundColor(Color.BLACK)
                 addView(TextView(context).apply { text = "▶"; textSize = 42f; setTextColor(Color.parseColor("#66FFFFFF")); gravity = Gravity.CENTER }, FrameLayout.LayoutParams(-1, -1))
-                layoutParams = LinearLayout.LayoutParams(-1, dp(220))
+                setOnClickListener { detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) } ?: Toast.makeText(this@BangumiWatchActivity, "没有可播放剧集", Toast.LENGTH_SHORT).show() }
+                layoutParams = LinearLayout.LayoutParams(-1, if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(220))
             })
         } else {
             if (currentPlayLoading) box.addView(TextView(context).apply { text = "正在加载视频，请稍候…"; textSize = 12f; setTextColor(Color.parseColor("#8EA2FF")); setPadding(0, 0, 0, dp(6)) })
@@ -895,7 +946,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             if (currentPlayDirect) {
                 val preparedPlayer = runCatching { ensurePlayer() }.onFailure { e -> currentPlayLoading = false; currentPlayError = "播放器初始化失败：${e.message ?: "未知错误"}"; Log.e("BangumiWatch", currentPlayError, e) }.getOrNull()
                 if (preparedPlayer != null) {
-                    box.addView(PlayerView(context).apply { useController = true; player = preparedPlayer; setBackgroundColor(Color.BLACK); layoutParams = LinearLayout.LayoutParams(-1, dp(230)) })
+                    box.addView(PlayerView(context).apply { useController = true; player = preparedPlayer; setBackgroundColor(Color.BLACK); layoutParams = LinearLayout.LayoutParams(-1, if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(230)) })
                 } else {
                     box.addView(TextView(context).apply { text = currentPlayError.ifBlank { "播放器初始化失败，请换线路或稍后重试。" }; textSize = 13f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, dp(10), 0, dp(10)) })
                 }
@@ -904,6 +955,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                 box.addView(TextView(context).apply { text = "当前线路没有解析到可内置播放的 MP4/M3U8 地址，请尝试其他线路或播放源。"; textSize = 13f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, dp(10), 0, dp(10)) })
             }
             val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(10), 0, 0) }
+            actions.addView(primaryButton(if (isFullscreenPlayer) "退出放大" else "放大") { toggleFullscreenPlayer() })
             actions.addView(primaryButton("下载记录") { addDownload(detail.item, active) })
             box.addView(actions)
         }
@@ -926,7 +978,8 @@ class BangumiWatchActivity : AppCompatActivity() {
                 val cell = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(dp(8), dp(7), dp(8), dp(7))
-                    setBackgroundColor(Color.parseColor(if (currentEpisode?.playUrl == ep.playUrl) "#DCE4FF" else "#EEF1F6"))
+                    val isActive = normalizedEpisodeUrl(currentOriginalEpisode) == normalizedEpisodeUrl(ep) || normalizedEpisodeUrl(currentEpisode) == normalizedEpisodeUrl(ep)
+                    setBackgroundColor(Color.parseColor(if (isActive) "#4F6EF7" else "#EEF1F6"))
                     layoutParams = LinearLayout.LayoutParams(dp(104), LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), dp(8)) }
                     setOnClickListener { playEpisode(detail.item, ep) }
                 }
@@ -939,10 +992,11 @@ class BangumiWatchActivity : AppCompatActivity() {
                     maxLines = 1
                 })
                 cell.addView(TextView(this).apply {
-                    text = "播放"
+                    val isActive = normalizedEpisodeUrl(currentOriginalEpisode) == normalizedEpisodeUrl(ep) || normalizedEpisodeUrl(currentEpisode) == normalizedEpisodeUrl(ep)
+                    text = if (isActive) { if (currentPlayLoading) "解析中" else "播放中" } else "播放"
                     textSize = 11f
                     gravity = Gravity.CENTER
-                    setTextColor(Color.parseColor("#4F6EF7"))
+                    setTextColor(Color.parseColor(if (isActive) "#FFFFFF" else "#4F6EF7"))
                     setPadding(0, dp(5), 0, 0)
                     setOnClickListener { playEpisode(detail.item, ep) }
                 })
@@ -1198,6 +1252,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                         searchResults = emptyList()
                         searchPage = 1
                         searchHasMore = false
+                        selectedCategory = source.categories.firstOrNull()?.id.orEmpty()
                         player?.stop()
                         screen = Screen.LIST
                         render()
@@ -1207,6 +1262,31 @@ class BangumiWatchActivity : AppCompatActivity() {
             })
         }
         row.addView(chips)
+        if (selectedSource.categories.isNotEmpty()) {
+            val catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0) }
+            val activeCat = selectedCategory.ifBlank { selectedSource.categories.first().id }
+            selectedSource.categories.forEach { cat ->
+                catRow.addView(TextView(this).apply {
+                    text = cat.name
+                    textSize = 12f
+                    setTextColor(Color.parseColor(if (cat.id == activeCat) "#FFFFFF" else "#5F6673"))
+                    setBackgroundColor(Color.parseColor(if (cat.id == activeCat) "#202124" else "#F0F2F6"))
+                    setPadding(dp(10), dp(6), dp(10), dp(6))
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), 0) }
+                    setOnClickListener {
+                        if (selectedCategory != cat.id) {
+                            selectedCategory = cat.id
+                            allAnime = emptyList()
+                            page = 1
+                            hasMore = true
+                            render()
+                            loadLibrary(force = true)
+                        }
+                    }
+                })
+            }
+            row.addView(catRow)
+        }
         if (selectedSource.note.isNotBlank()) row.addView(TextView(this).apply { text = selectedSource.note; textSize = 11f; setTextColor(Color.parseColor("#7A7F89")); setPadding(0, dp(6), 0, 0) })
         scroll.addView(row)
         content.addView(scroll)
@@ -1243,6 +1323,31 @@ if (showBack) navigateBack()
             })
         }
         content.addView(row)
+    }
+
+    private fun updateBottomBarVisibility() {
+        val shouldShow = !isFullscreenPlayer && screen == Screen.LIST
+        val hasBar = root.childCount > 1
+        if (shouldShow && !hasBar) root.addView(bottomBar())
+        if (!shouldShow && hasBar) root.removeViewAt(1)
+    }
+
+    private fun normalizedEpisodeUrl(ep: EpisodeItem?): String = ep?.playUrl?.substringBefore("?").orEmpty()
+
+    private fun normalizeNg3Html(text: String): String = text
+        .replace("""\/""", "/")
+        .replace("\\u002F", "/")
+        .replace("\\u002f", "/")
+
+    private fun toggleFullscreenPlayer() {
+        isFullscreenPlayer = !isFullscreenPlayer
+        requestedOrientation = if (isFullscreenPlayer) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        window.decorView.systemUiVisibility = if (isFullscreenPlayer) {
+            View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        } else {
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        }
+        renderDetailOnly()
     }
 
     private fun bottomBar(): LinearLayout = LinearLayout(this).apply {

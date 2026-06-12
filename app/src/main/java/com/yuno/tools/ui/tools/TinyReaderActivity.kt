@@ -52,6 +52,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private lateinit var navLibrary: LinearLayout
     private lateinit var navHistory: LinearLayout
     private lateinit var navMore: LinearLayout
+    private lateinit var bottomNavShell: FrameLayout
     private var selectedTab = TAB_HOME
     private var screenMode = TAB_HOME
     private var previousScreen = TAB_HOME
@@ -109,6 +110,7 @@ class TinyReaderActivity : AppCompatActivity() {
         contentHost = FrameLayout(this)
         root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
         val navShell = FrameLayout(this).apply { setPadding(dp(18), dp(8), dp(18), dp(14)); setBackgroundColor(C_BG) }
+        bottomNavShell = navShell
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; background = round(Color.WHITE, dp(28)); elevation = dp(8).toFloat(); setPadding(dp(6), 0, dp(6), 0) }
         navHome = navItem("首页", "⌂") { showHome() }
         navLibrary = navItem("书架", "▦") { showLibrary() }
@@ -130,7 +132,9 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun setHeader(title: String, sub: String, tab: Int? = null) {
-        appBarTitle.text = title; appBarSub.text = sub; actionHost.removeAllViews(); tab?.let { selectedTab = it; screenMode = it }; updateNav()
+        appBarTitle.text = title; appBarSub.text = sub; actionHost.removeAllViews(); tab?.let { selectedTab = it; screenMode = it }
+        if (::bottomNavShell.isInitialized) bottomNavShell.visibility = if (tab == null) View.GONE else View.VISIBLE
+        updateNav()
     }
     private fun updateNav() { listOf(navHome to TAB_HOME, navLibrary to TAB_LIBRARY, navHistory to TAB_HISTORY, navMore to TAB_MORE).forEach { (v,t) -> v.background = if (selectedTab == t) round(C_PRIMARY_LIGHT, dp(22)) else null } }
     private fun actionButton(text: String, click: () -> Unit) { actionHost.addView(Button(this).apply { this.text = text; textSize = 16f; minWidth = dp(44); setTextColor(C_PRIMARY); background = round(Color.TRANSPARENT, dp(22)); setOnClickListener { click() } }, LinearLayout.LayoutParams(dp(48), dp(48))) }
@@ -226,7 +230,7 @@ class TinyReaderActivity : AppCompatActivity() {
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.08", "去掉包子漫画；右上角搜索；独立阅读页支持目录和横竖屏。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.09", "去掉包子漫画；主导航仅首页显示；增强章节解析。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -292,6 +296,9 @@ class TinyReaderActivity : AppCompatActivity() {
         return Manga(title.ifBlank { titleHint }, url, "包子漫画", desc.ifBlank { "包子漫画 · 本地解析详情、章节和阅读图片。" }, cover, chapters, emptyList(), updatedAt = System.currentTimeMillis())
     }
     private fun fetchMiaoquManga(titleHint: String, url: String, html: String): Manga {
+        if (html.contains("漫画不存在") || html.contains("章节已被删除")) {
+            return Manga(titleHint, url, "妙趣漫画", "该漫画在源站已删除或失效，换一本漫画试试。", chapters = emptyList(), updatedAt = System.currentTimeMillis())
+        }
         val rawTitle = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint })
         val title = rawTitle.substringBefore("全集").substringBefore("-").take(80).ifBlank { titleHint }
         val cover = Regex("""<img[^>]+src=["']([^"']*/cover/[^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1)?.replace("&amp;", "&")?.let { absUrl(it, url) } ?: extractImages(html, url).firstOrNull { it.contains("/cover/") }.orEmpty()
@@ -494,10 +501,12 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun extractMiaoquChapters(html: String, base: String): List<Chapter> {
-        return Regex("""<a[^>]+href=["'](/\d+/\d+\.html)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { m ->
-            val title = clean(m.groupValues[2]).replace(Regex("""\s+"""), " ").trim().ifBlank { "章节" }
-            if (title.contains("第") || title.contains("话") || title.contains("回") || title.contains("QNA", true)) Chapter(title.take(80), absUrl(m.groupValues[1], base)) else null
+        val all = Regex("""<a[^>]+href=["'](/\d+/\d+\.html)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE).findAll(html).mapIndexedNotNull { i, m ->
+            var title = clean(m.groupValues[2]).replace(Regex("""\s+"""), " ").trim()
+            if (title.isBlank() || title == "开始阅读" || title == "立即阅读") title = "第${i + 1}话"
+            Chapter(title.take(80), absUrl(m.groupValues[1], base))
         }.distinctBy { it.url }.toList()
+        return all.mapIndexed { i, ch -> if (ch.title == "第${i + 1}话") ch else ch }
     }
     private fun extractBzChapterImages(html: String, base: String): List<String> {
         // 包子漫画网页端部分章节会把“请在 APP 内阅读/二维码下载 APP”的宣传图伪装成 scomic 图片。
@@ -524,7 +533,7 @@ class TinyReaderActivity : AppCompatActivity() {
         val data = Regex("""var\s+DATA\s*=\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()
         if (data.isBlank()) return emptyList()
         val keys = arrayOf("8-bXd9iN", "8-RXyjry", "8-oYvwVy", "8-4ZY57U", "8-mbJpU7", "8-6MM2Ei", "8-54TiQr", "8-Ph5xx9", "8-bYgePR", "8-Z9A3bW")
-        return runCatching {
+        val decoded = runCatching {
             val key = keys[cid % 10].toByteArray(Charsets.UTF_8)
             val cipherBytes = Base64.decode(data, Base64.DEFAULT)
             val plainB64Bytes = ByteArray(cipherBytes.size) { i -> (cipherBytes[i].toInt() xor key[i % key.size].toInt()).toByte() }
@@ -535,6 +544,8 @@ class TinyReaderActivity : AppCompatActivity() {
                 if (u.isBlank()) null else absUrl(u, base)
             }.filter { isComicPageImage(it) }.distinct().take(260)
         }.getOrElse { emptyList() }
+        if (decoded.isNotEmpty()) return decoded
+        return Regex("""https?://s\d+\.bzcdn\.net/scomic/[^"'<>\s]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'<>\s]*)?""", RegexOption.IGNORE_CASE).findAll(html).map { it.value }.filter { isComicPageImage(it) }.distinct().take(260).toList()
     }
 
     private fun extractHaoduomanChapterImages(html: String, base: String): List<String> {

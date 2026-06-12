@@ -50,7 +50,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private enum class Tab { BANGUMI, MINE }
     private enum class Screen { LIST, DETAIL, SEARCH, HISTORY, DOWNLOADS }
 
-    private enum class SourceKind { AGE, XIFAN }
+    private enum class SourceKind { AGE, XIFAN, NG3 }
 
     private data class WatchSource(
         val name: String,
@@ -86,7 +86,8 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private val sources = listOf(
         WatchSource("AGE动漫", "https://m.agedm.io", "https://api.agedm.io/v2/home-list", SourceKind.AGE, note = "API: api.agedm.io/v2/home-list"),
-        WatchSource("稀饭动漫", "https://anime.xifanacg.com", "https://anime.xifanacg.com/", SourceKind.XIFAN)
+        WatchSource("稀饭动漫", "https://anime.xifanacg.com", "https://anime.xifanacg.com/", SourceKind.XIFAN),
+        WatchSource("瓜子影视", "https://ng3.app", "https://ng3.app/home", SourceKind.NG3, note = "ng3.app/home")
     )
     private var selectedSource = sources.first()
     private val prefs by lazy { getSharedPreferences("yuno_bangumi_watch", Context.MODE_PRIVATE) }
@@ -398,12 +399,14 @@ class BangumiWatchActivity : AppCompatActivity() {
         val url = when (selectedSource.kind) {
             SourceKind.AGE -> "https://api.agedm.io/v2/update?page=$targetPage&size=30"
             SourceKind.XIFAN -> if (targetPage <= 1) "https://anime.xifanacg.com/type/1.html" else "https://anime.xifanacg.com/type/1-$targetPage.html"
+            SourceKind.NG3 -> if (targetPage <= 1) "https://ng3.app/home" else "https://ng3.app/home?page=$targetPage"
         }
         val body = fetch(url)
         if (body.contains("/_guard/") || body.contains("slider_html") || body.contains("安全验证")) error("需要安全验证")
         return when (selectedSource.kind) {
             SourceKind.AGE -> parseAgePagedList(body)
             SourceKind.XIFAN -> parseXifanLibrary(body)
+            SourceKind.NG3 -> parseNg3Library(body)
         }
     }
 
@@ -435,6 +438,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         return when (selectedSource.kind) {
             SourceKind.AGE -> parseAgeSearch(fetch("https://api.agedm.io/v2/search?query=$q&page=$targetPage"))
             SourceKind.XIFAN -> parseXifanSuggest(fetch("https://anime.xifanacg.com/index.php/ajax/suggest?mid=1&wd=$q"))
+            SourceKind.NG3 -> parseNg3Library(fetch("https://ng3.app/home?keyword=$q")).filter { it.title.contains(keyword, true) }
         }
     }
 
@@ -447,6 +451,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                 val detailUrl = when (source.kind) {
                     SourceKind.AGE -> "https://api.agedm.io/v2/detail/" + item.detailUrl.substringAfterLast("/")
                     SourceKind.XIFAN -> absUrl(item.detailUrl, source)
+                    SourceKind.NG3 -> absUrl(item.detailUrl, source)
                 }
                 val body = fetch(detailUrl)
                 if (body.contains("/_guard/") || body.contains("slider_html") || body.contains("安全验证")) error("需要安全验证")
@@ -541,6 +546,17 @@ class BangumiWatchActivity : AppCompatActivity() {
         }.distinctBy { it.detailUrl }
     }
 
+    private fun parseNg3Library(html: String): List<AnimeItem> {
+        val linkRe = Regex("""<a[^>]+href=["']([^"']*(?:detail|video|play|vod|movie)[^"']*)["'][^>]*>([\s\S]{0,800}?)</a>""", RegexOption.IGNORE_CASE)
+        return linkRe.findAll(html).mapNotNull { m ->
+            val block = m.groupValues[2]
+            val title = htmlText(Regex("""(?:alt|title)=["']([^"']{2,80})["']""", RegexOption.IGNORE_CASE).find(m.value)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { htmlText(block).take(40) }
+            val cover = htmlAttr(Regex("""(?:data-src|src)=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']""", RegexOption.IGNORE_CASE).find(block)?.groupValues?.getOrNull(1).orEmpty())
+            val href = htmlAttr(m.groupValues[1])
+            if (title.length in 2..80 && href.isNotBlank()) AnimeItem(title, "瓜子影视", absUrl(cover, sources.first { it.kind == SourceKind.NG3 }), absUrl(href, sources.first { it.kind == SourceKind.NG3 }), selectedSource.name) else null
+        }.distinctBy { it.detailUrl }.take(60).toList()
+    }
+
     private fun parseXifanLibrary(html: String): List<AnimeItem> {
         val cardRegex = Regex("""<a[^>]+href="(/bangumi/[^"]+\.html)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
         val imgTagRegex = Regex("""<img[^>]*>""", RegexOption.DOT_MATCHES_ALL)
@@ -564,6 +580,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         return when (selectedSource.kind) {
             SourceKind.AGE -> parseAgeDetail(item, body)
             SourceKind.XIFAN -> parseXifanDetail(item, body)
+            SourceKind.NG3 -> parseNg3Detail(item, body)
         }
     }
 
@@ -601,6 +618,15 @@ class BangumiWatchActivity : AppCompatActivity() {
             }
         }
         return AnimeDetail(item.copy(title = video.optString("name").ifBlank { item.title }), intro, meta, "", sortEpisodes(episodes.distinctBy { it.playUrl }))
+    }
+
+    private fun parseNg3Detail(item: AnimeItem, body: String): AnimeDetail {
+        val eps = Regex("""<a[^>]+href=["']([^"']*(?:play|watch)[^"']*)["'][^>]*>([\s\S]{0,120}?)</a>""", RegexOption.IGNORE_CASE).findAll(body).mapIndexedNotNull { i, m ->
+            val name = htmlText(m.groupValues[2]).ifBlank { "第${i + 1}集" }
+            val href = absUrl(htmlAttr(m.groupValues[1]), sources.first { it.kind == SourceKind.NG3 })
+            if (href.isNotBlank()) EpisodeItem(name.take(50), href, "瓜子影视", item.detailUrl) else null
+        }.distinctBy { it.playUrl }.toList()
+        return AnimeDetail(item, "瓜子影视 · 页面解析", item.status.ifBlank { "瓜子影视" }, "", eps)
     }
 
     private fun parseXifanDetail(item: AnimeItem, body: String): AnimeDetail {
@@ -991,9 +1017,17 @@ class BangumiWatchActivity : AppCompatActivity() {
         }
         return when {
             url.contains("anime.xifanacg.com/watch/") -> resolveXifanWatch(url, ep)
-            url.contains("jx.wuzhoupai.com") -> resolveAgePlayerPage(url, ep.source)
+            url.contains("jx.wuzhoupai.com") || url.contains("agedm") -> resolveAgePlayerPage(url, ep.source)
+            url.contains("ng3.app") -> resolveNg3Watch(url, ep)
             else -> ResolvedPlay(url, false, ep.source)
         }
+    }
+
+    private fun resolveNg3Watch(url: String, ep: EpisodeItem): ResolvedPlay {
+        val html = fetch(url)
+        val direct = Regex("""https?://[^"']+?(?:\.m3u8|\.mp4)[^"']*""", RegexOption.IGNORE_CASE).findAll(html).map { it.value.replace("\\/", "/") }.firstOrNull()
+        val headers = mapOf("User-Agent" to "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36", "Referer" to url, "Origin" to "https://ng3.app")
+        return if (!direct.isNullOrBlank()) ResolvedPlay(direct, true, ep.source, headers) else ResolvedPlay(url, false, ep.source)
     }
 
     private fun resolveXifanWatch(url: String, ep: EpisodeItem): ResolvedPlay {

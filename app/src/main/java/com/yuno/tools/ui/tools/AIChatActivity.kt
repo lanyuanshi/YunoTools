@@ -256,7 +256,12 @@ class AIChatActivity : AppCompatActivity() {
         val aiView = addMessage("assistant", "正在思考…", persist = false)
         setSending(true)
         lifecycleScope.launch(Dispatchers.IO) {
-            val reply = requestAi(cfg.apiKey, normalizeEndpoint(cfg.endpointBase), model, text, attachment)
+            val reply = requestAi(cfg.apiKey, normalizeEndpoint(cfg.endpointBase), model, text, attachment) { partial ->
+                withContext(Dispatchers.Main) {
+                    aiView.text = partial
+                    scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
+                }
+            }
             withContext(Dispatchers.Main) {
                 aiView.text = reply
                 messages.add(ChatMessage("assistant", reply))
@@ -296,7 +301,7 @@ class AIChatActivity : AppCompatActivity() {
         return if (clean.endsWith("/chat/completions")) clean else "$clean/v1/chat/completions"
     }
 
-    private fun requestAi(apiKey: String, endpoint: String, model: String, latestText: String, attachment: PendingAttachment?): String {
+    private suspend fun requestAi(apiKey: String, endpoint: String, model: String, latestText: String, attachment: PendingAttachment?, onPartial: suspend (String) -> Unit): String {
         return try {
             val arr = JSONArray()
             arr.put(JSONObject().put("role", "system").put("content", "你是 YunoTools 内置AI助手，回答要简洁、可靠、中文优先。用户可能会附加图片或视频；如果当前模型无法理解视频，请说明限制并基于文件信息给出下一步建议。"))
@@ -313,7 +318,14 @@ class AIChatActivity : AppCompatActivity() {
             client.newCall(request).execute().use { resp ->
                 val raw = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) return "AI请求失败：${resp.code}\n${raw.take(300)}"
-                JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").optString("content", "AI没有返回内容").trim().ifEmpty { "AI没有返回内容" }
+                val reply = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").optString("content", "AI没有返回内容").trim().ifEmpty { "AI没有返回内容" }
+                val sb = StringBuilder()
+                reply.chunked(8).forEach { part ->
+                    sb.append(part)
+                    onPartial(sb.toString())
+                    Thread.sleep(18)
+                }
+                reply
             }
         } catch (e: Exception) { "网络或解析错误：${e.message ?: "未知错误"}" }
     }
@@ -336,7 +348,6 @@ class AIChatActivity : AppCompatActivity() {
             trimHistory()
             saveHistory()
         }
-        val actionText = buildDisplayText(content, attachment)
         val tv = TextView(this).apply {
             text = content
             textSize = 15f
@@ -344,12 +355,12 @@ class AIChatActivity : AppCompatActivity() {
             setPadding(dp(14), dp(10), dp(14), dp(10))
             setLineSpacing(dp(2).toFloat(), 1.0f)
             visibility = if (content.isBlank() && attachment != null) View.GONE else View.VISIBLE
-            setOnLongClickListener { showMessageActions(actionText); true }
+            setOnLongClickListener { showMessageActions(buildDisplayText(text?.toString().orEmpty(), attachment)); true }
         }
         val bubble = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(if (role == "user") R.drawable.bg_chat_user else R.drawable.bg_chat_ai)
-            setOnLongClickListener { showMessageActions(actionText); true }
+            setOnLongClickListener { showMessageActions(buildDisplayText(tv.text?.toString().orEmpty(), attachment)); true }
         }
         attachment?.let { bubble.addView(createAttachmentView(it, role)) }
         bubble.addView(tv)

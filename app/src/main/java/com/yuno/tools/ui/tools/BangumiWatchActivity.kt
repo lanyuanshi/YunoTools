@@ -199,7 +199,8 @@ class BangumiWatchActivity : AppCompatActivity() {
             isFillViewport = true
             setOnTouchListener { _, event ->
                 val child = getChildAt(0)
-                val atBottom = child != null && scrollY >= child.measuredHeight - height - dp(8)
+                val maxScroll = if (child == null) 0 else (child.measuredHeight - height).coerceAtLeast(0)
+                val atBottom = child != null && scrollY >= maxScroll - dp(4)
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         touchStartY = event.rawY
@@ -207,9 +208,13 @@ class BangumiWatchActivity : AppCompatActivity() {
                         bottomLoadTriggered = false
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        // 只在“已经滑到底部以后，继续向上滑/往下翻”的手势触发加载更多；不做下拉刷新，不到最底不自动加载。
-                        val continueUpAtBottom = bottomLoadArmed && atBottom && touchStartY - event.rawY > dp(42)
-                        if (!bottomLoadTriggered && continueUpAtBottom && screen == Screen.LIST && tab == Tab.BANGUMI && hasMore && !loading) {
+                        // 录屏里的效果：滑到最底时先停住，不立即加载；到底后继续往上拉一段，才加载下一页。
+                        if (atBottom && !bottomLoadArmed) {
+                            bottomLoadArmed = true
+                            touchStartY = event.rawY
+                        }
+                        val pulledPastBottom = bottomLoadArmed && atBottom && touchStartY - event.rawY > dp(36)
+                        if (!bottomLoadTriggered && pulledPastBottom && screen == Screen.LIST && tab == Tab.BANGUMI && hasMore && !loading) {
                             bottomLoadTriggered = true
                             loadMoreLibrary()
                         }
@@ -275,7 +280,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         animeGrid(allAnime)
         if (hasMore) {
             content.addView(TextView(this).apply {
-                text = if (loading) "正在加载更多…" else "已到底部，继续上滑加载更多"
+                text = if (loading) "正在加载更多…" else "继续上滑加载更多"
                 textSize = 12f
                 gravity = Gravity.CENTER
                 setTextColor(Color.parseColor("#8B9099"))

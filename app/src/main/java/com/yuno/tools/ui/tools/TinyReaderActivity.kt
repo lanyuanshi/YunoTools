@@ -140,7 +140,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun actionButton(text: String, click: () -> Unit) { actionHost.addView(Button(this).apply { this.text = text; textSize = 16f; minWidth = dp(44); setTextColor(C_PRIMARY); background = round(Color.TRANSPARENT, dp(22)); setOnClickListener { click() } }, LinearLayout.LayoutParams(dp(48), dp(48))) }
 
     private fun showHome() { if (currentHomeSources.isEmpty()) showHomeCategory("最新", defaultHomeSources()) else showHomeCategory(currentHomeTitle, currentHomeSources) }
-    private fun defaultHomeSources() = listOf(Source("妙趣漫画", "https://m.miaoqumh.org/"), Source("好多漫", "https://m.haoduoman.com/manhua"))
+    private fun defaultHomeSources() = listOf(Source("妙趣漫画", "https://m.miaoqumh.org/"), Source("卡拉漫画", "https://www.kalamanhua.com/"), Source("好多漫", "https://m.haoduoman.com/manhua"))
 
     private fun showHomeCategory(title: String, sources: List<Source>) {
         saveProgress(); currentManga = null; readerScroll = null
@@ -208,7 +208,7 @@ class TinyReaderActivity : AppCompatActivity() {
         actionButton("⇅") { showSortDialog() }; actionButton("＋") { showMore() }
         val box = scroll(); section(box, "我的漫画")
         val favs = sortedManga(loadManga().filter { it.favorite })
-        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“首页”从妙趣漫画 / 好多漫 搜索或加载漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
+        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“首页”从妙趣漫画 / 卡拉漫画 / 好多漫 搜索或加载漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
     }
 
     private fun showUpdates() { showMore() }
@@ -230,7 +230,7 @@ class TinyReaderActivity : AppCompatActivity() {
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.09", "去掉包子漫画；主导航仅首页显示；增强章节解析。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.10", "去掉包子漫画；新增卡拉漫画；修复好多漫列表解析。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -260,8 +260,8 @@ class TinyReaderActivity : AppCompatActivity() {
         empty(box, "右上角搜索", "首页只显示搜索图标；点击后进入这个搜索页。")
     }
 
-    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从妙趣漫画 / 好多漫 本地抓取漫画列表。") }
-    private fun fixedSources() = listOf(Source("妙趣漫画", "https://m.miaoqumh.org/custom/search?keyword=%s"), Source("好多漫", "https://m.haoduoman.com/search?keyword=%s"))
+    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从妙趣漫画 / 卡拉漫画 / 好多漫 本地抓取漫画列表。") }
+    private fun fixedSources() = listOf(Source("妙趣漫画", "https://m.miaoqumh.org/custom/search?keyword=%s"), Source("卡拉漫画", "https://www.kalamanhua.com/search/wd/%s.html"), Source("好多漫", "https://m.haoduoman.com/search?keyword=%s"))
     private fun searchAllSources(keyword: String) {
         showSearchLoading(keyword)
         Thread {
@@ -285,6 +285,7 @@ class TinyReaderActivity : AppCompatActivity() {
         return when (sourceName) {
             "包子漫画" -> fetchBzManga(titleHint, url, html)
             "妙趣漫画" -> fetchMiaoquManga(titleHint, url, html)
+            "卡拉漫画" -> fetchKalaManga(titleHint, url, html)
             else -> fetchHaoduomanManga(titleHint, url, html)
         }
     }
@@ -306,6 +307,16 @@ class TinyReaderActivity : AppCompatActivity() {
         val chapters = extractMiaoquChapters(html, url)
         return Manga(title, url, "妙趣漫画", desc, cover, chapters, emptyList(), updatedAt = System.currentTimeMillis())
     }
+    private fun fetchKalaManga(titleHint: String, url: String, html: String): Manga {
+        val rawTitle = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint })
+        val title = rawTitle.substringBefore("漫画_").substringBefore("_").substringBefore("-").take(80).ifBlank { titleHint }
+        val cover = Regex("""data-original=["']([^"']+/image/cover/[^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1)?.let { absUrl(it, url) }
+            ?: Regex("""<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1)?.let { absUrl(it, url) }.orEmpty()
+        val desc = clean(Regex("""<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { "卡拉漫画 · 本地解析详情和章节。" }.take(180)
+        val chapters = extractKalaChapters(html, url)
+        return Manga(title, url, "卡拉漫画", desc, cover, chapters, emptyList(), updatedAt = System.currentTimeMillis())
+    }
+
     private fun fetchHaoduomanManga(titleHint: String, url: String, html: String): Manga {
         val title = clean(textBetween(html, "<title", "</title>").ifBlank { titleHint }).substringBefore(" - ").take(80)
         val cover = extractImages(html, url).firstOrNull { it.contains("img.haoduoman.com/cover") }.orEmpty()
@@ -318,12 +329,14 @@ class TinyReaderActivity : AppCompatActivity() {
         val source = when {
             ch.url.contains("haoduoman") -> "好多漫"
             ch.url.contains("miaoqumh") -> "妙趣漫画"
+            ch.url.contains("kalamanhua") || ch.url.contains("kalaimg") -> "卡拉漫画"
             else -> "包子漫画"
         }
         val html=http(ch.url, source)
         val pages = when (source) {
             "好多漫" -> extractHaoduomanChapterImages(html, ch.url)
             "妙趣漫画" -> extractMiaoquChapterImages(html, ch.url)
+            "卡拉漫画" -> extractKalaChapterImages(html, ch.url)
             else -> if (ch.url.contains("baozimh") || ch.url.contains("bzmanga")) extractBzChapterImages(html, ch.url) else emptyList()
         }
         return ch.copy(pages=pages)
@@ -378,7 +391,7 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun glideUrl(url: String, sourceName: String): GlideUrl {
-        val referer = when (sourceName) { "包子漫画" -> "https://cn.bzmanga.com/"; "妙趣漫画" -> "https://m.miaoqumh.org/"; else -> "https://m.haoduoman.com/" }
+        val referer = when (sourceName) { "包子漫画" -> "https://cn.bzmanga.com/"; "妙趣漫画" -> "https://m.miaoqumh.org/"; "卡拉漫画" -> "https://www.kalamanhua.com/"; else -> "https://m.haoduoman.com/" }
         return GlideUrl(url, LazyHeaders.Builder()
             .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
             .addHeader("Referer", referer)
@@ -401,6 +414,7 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun parseSourceResults(html: String, source: String, base: String): List<SearchResult> {
         if (source == "包子漫画") return parseBzResults(html, base)
         if (source == "妙趣漫画") return parseMiaoquResults(html, base)
+        if (source == "卡拉漫画") return parseKalaResults(html, base)
         if (source == "好多漫") return parseHaoduomanResults(html, base)
         val re = Regex("""<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
         return re.findAll(html).mapNotNull { m ->
@@ -463,20 +477,39 @@ class TinyReaderActivity : AppCompatActivity() {
         }.distinctBy { it.url }.take(60).toList()
     }
 
+    private fun parseKalaResults(html: String, base: String): List<SearchResult> {
+        val re = Regex("""<a[^>]+class=["'][^"']*stui-vodlist__thumb[^"']*["'][^>]+href=["']([^"']+/comic/\d+\.html|/comic/\d+\.html)["'][^>]+title=["']([^"']+)["'][^>]+data-original=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        return re.findAll(html).mapNotNull { m ->
+            val title = clean(m.groupValues[2]).take(100)
+            val url = absUrl(m.groupValues[1], base)
+            val cover = absUrl(m.groupValues[3], base)
+            val near = html.substring(m.range.first, (m.range.last + 500).coerceAtMost(html.length))
+            val latest = clean(Regex("""<span[^>]+class=["'][^"']*pic-text[^"']*["'][^>]*>([\s\S]*?)</span>""", RegexOption.IGNORE_CASE).find(near)?.groupValues?.getOrNull(1).orEmpty())
+            if (title.isNotBlank()) SearchResult(title, url, "卡拉漫画", latest.ifBlank { "卡拉漫画" }, cover) else null
+        }.distinctBy { it.url }.take(60).toList()
+    }
+
     private fun parseHaoduomanResults(html: String, base: String): List<SearchResult> {
-        val itemRe = Regex("""<div[^>]+class=["'][^"']*comic-item[^"']*["'][^>]*>([\s\S]*?)</a>\s*</div>""", RegexOption.IGNORE_CASE)
+        val itemRe = Regex("""<div[^>]+class=["'][^"']*comic-item[^"']*["'][^>]*>([\s\S]*?)(?=<div[^>]+class=["'][^"']*comic-item|</div>\s*</div>\s*</div>|$)""", RegexOption.IGNORE_CASE)
         return itemRe.findAll(html).mapNotNull { m ->
             val item = m.groupValues[1]
             val href = Regex("""<a[^>]+href=["'](/manhua/\d+)["']""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
             val url = absUrl(href, base)
-            val title = clean(Regex("""<h3[^>]+class=["']title["'][^>]*>([\s\S]*?)</h3>""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1).orEmpty())
-            val latest = clean(Regex("""<div[^>]+class=["']txt["'][^>]*>([\s\S]*?)</div>""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1).orEmpty()).replace(Regex("""\s+"""), " ").trim()
-            val cover = extractImages(item, base).firstOrNull().orEmpty()
+            val title = clean(Regex("""<h3[^>]+class=["'][^"']*title[^"']*["'][^>]*>([\s\S]*?)</h3>""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1).orEmpty())
+            val latest = clean((Regex("""<div[^>]+class=["'][^"']*txt[^"']*["'][^>]*>([\s\S]*?)</div>""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1) ?: Regex("""<div[^>]+class=["'][^"']*mask[^"']*["'][^>]*>([\s\S]*?)</div>""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1)).orEmpty()).replace(Regex("""\s+"""), " ").trim()
+            val cover = Regex("""data-original=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(item)?.groupValues?.getOrNull(1)?.let { absUrl(it, base) }.orEmpty()
             if (title.length in 1..100) SearchResult(title, url, "好多漫", latest.ifBlank { url }, cover) else null
         }.distinctBy { it.url }.take(60).toList()
     }
 
     private fun ifBlank(v: String, fallback: String) = if (v.isBlank()) fallback else v
+
+    private fun extractKalaChapters(html: String, base: String): List<Chapter> {
+        return Regex("""<a[^>]+href=["'](/chapter/\d+-\d+-\d+\.html)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { m ->
+            val title = clean(m.groupValues[2]).replace(Regex("""\s+"""), " ").trim()
+            if (title.contains("第") || title.contains("话") || title.contains("集") || title.contains("卷")) Chapter(title.take(80), absUrl(m.groupValues[1], base)) else null
+        }.distinctBy { it.url }.toList()
+    }
 
     private fun extractHaoduomanChapters(html: String, base: String): List<Chapter> {
         val id = Regex("""/manhua/(\d+)""").find(base)?.groupValues?.getOrNull(1) ?: return emptyList()
@@ -526,6 +559,26 @@ class TinyReaderActivity : AppCompatActivity() {
         }.distinct().take(260).toList()
         // 如果页面明确是 APP 引导页，宁可返回空，让 UI 提示源站限制，也不显示错误二维码图。
         return if (appOnly && items.size <= 6) emptyList() else items
+    }
+
+    private fun extractKalaChapterImages(html: String, base: String): List<String> {
+        val block = Regex("""var\s+player_aaaa\s*=\s*(\{[\s\S]*?\});""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()
+        val playUrl = Regex("""["']url["']\s*:\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(block)?.groupValues?.getOrNull(1).orEmpty()
+        if (playUrl.isBlank()) return emptyList()
+        val frameUrl = "https://image.kalaimg.top/play/min/$playUrl"
+        val frame = runCatching { http(frameUrl, "卡拉漫画") }.getOrElse { "" }
+        val d = Regex("""var\s+d\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(frame)?.groupValues?.getOrNull(1).orEmpty()
+        val keyText = Regex("""k\s*=\s*\[([^\]]+)\]""", RegexOption.IGNORE_CASE).find(frame)?.groupValues?.getOrNull(1).orEmpty()
+        val realHtml = if (d.isNotBlank() && keyText.isNotBlank()) runCatching {
+            val keys = keyText.split(',').mapNotNull { it.trim().toIntOrNull() }.ifEmpty { listOf(198, 194, 121, 89) }
+            val bytes = Base64.decode(d, Base64.DEFAULT)
+            val out = ByteArray(bytes.size) { i -> (bytes[i].toInt() xor keys[i % keys.size]).toByte() }
+            String(out, Charsets.UTF_8)
+        }.getOrElse { frame } else frame
+        return Regex("""(?:data-src|src)=['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE).findAll(realHtml).mapNotNull { m ->
+            val u = m.groupValues[1]
+            if (u.startsWith("data:") || u.contains("fake_chapter")) null else absUrl(u, "https://image.kalaimg.top/play/min/")
+        }.filter { it.contains("/image/index/") || it.contains("kalaimg") }.distinct().take(260).toList()
     }
 
     private fun extractMiaoquChapterImages(html: String, base: String): List<String> {
@@ -610,7 +663,7 @@ class TinyReaderActivity : AppCompatActivity() {
             .header("User-Agent","Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
             .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language","zh-CN,zh;q=0.9,en;q=0.8")
-            .header("Referer", when(sourceName){"包子漫画"->"https://cn.bzmanga.com/";"妙趣漫画"->"https://m.miaoqumh.org/";else->"https://m.haoduoman.com/"})
+            .header("Referer", when(sourceName){"包子漫画"->"https://cn.bzmanga.com/";"妙趣漫画"->"https://m.miaoqumh.org/";"卡拉漫画"->"https://www.kalamanhua.com/";else->"https://m.haoduoman.com/"})
             .build()
         client.newCall(req).execute().use{ if(!it.isSuccessful) error("HTTP ${it.code}"); return it.body?.string().orEmpty() }
     }

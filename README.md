@@ -1,3 +1,9 @@
+## v1.1.10
+
+- 小小漫画新增卡拉漫画源（https://www.kalamanhua.com/），支持首页/搜索/详情/章节。
+- 逆向卡拉漫画阅读链路：player_aaaa.url -> image.kalaimg.top/play/min -> Base64 + XOR 解密真实 HTML -> 提取 data-src 图片。
+- 修复好多漫列表解析，适配当前 cell comic-item / lazy data-original 结构。
+
 ## v1.1.09
 
 - 小小漫画底部导航只在首页/书架/历史/更多主页面显示，详情页/搜索页/阅读页不再跟随。

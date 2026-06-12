@@ -225,7 +225,7 @@ class TinyReaderActivity : AppCompatActivity() {
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.04", "首页搜索和本地分类；漫画源为包子漫画 / 好多漫。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.05", "首页搜索和本地分类；漫画源为包子漫画 / 好多漫。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -233,7 +233,7 @@ class TinyReaderActivity : AppCompatActivity() {
         setHeader(manga.title, manga.sourceName)
         actionButton("↻") { refreshManga(manga) }; actionButton(if (manga.favorite) "★" else "☆") { toggleFavorite(manga) }; actionButton("⋮") { showMangaMenu(manga) }
         val box = scroll(); val top = baseCard(); val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(14), dp(14), dp(14)) }
-        val cover = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = round(C_PRIMARY_LIGHT, dp(14)); if (manga.cover.isNotBlank()) Glide.with(this@TinyReaderActivity).load(manga.cover).into(this) }
+        val cover = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = round(C_PRIMARY_LIGHT, dp(14)); if (manga.cover.isNotBlank()) Glide.with(this@TinyReaderActivity).load(glideUrl(manga.cover, manga.sourceName)).into(this) }
         row.addView(cover, LinearLayout.LayoutParams(dp(92), dp(132)))
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, 0, 0) }
         info.addView(TextView(this).apply { text = manga.title; textSize = 20f; setTextColor(C_TEXT); setTypeface(typeface, Typeface.BOLD) })
@@ -358,17 +358,22 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun parseBzResults(html: String, base: String): List<SearchResult> {
-        val aRe = Regex("""<a[^>]+href=["'](/comic/[^"']+)["'][^>]*(?:aria-label=["']([^"']+)["'])?[^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
-        return aRe.findAll(html).mapNotNull { m ->
-            val href = m.groupValues[1]
-            if (href.contains("sitemap") || href.contains("chapter")) return@mapNotNull null
-            val body = m.groupValues[3]
-            val url = absUrl(href, base).replace("https://www.baozimh.com", "https://cn.bzmanga.com")
-            val title = clean(m.groupValues.getOrNull(2).orEmpty()).ifBlank { clean(Regex("""<h3[^>]*>([\s\S]*?)</h3>""", RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1).orEmpty()) }
-            val author = clean(Regex("""<small[^>]*class=["'][^"']*tags[^"']*["'][^>]*>([\s\S]*?)</small>""", RegexOption.IGNORE_CASE).find(body)?.groupValues?.getOrNull(1).orEmpty())
-            val latest = clean(Regex("""最新[^<]{0,20}|第\s*\d+\s*[话話卷]""", RegexOption.IGNORE_CASE).find(body)?.value.orEmpty())
-            val cover = extractImages(body, base).firstOrNull { it.contains("/cover/") }.orEmpty()
-            if (title.length in 1..100) SearchResult(title, url, "包子漫画", latest.ifBlank { author.ifBlank { "包子漫画" } }, cover) else null
+        // 包子漫画列表中封面和标题在同一个 comics-card 的两个 <a> 内，不能按单个 <a> 解析。
+        // 这里以 /cover/{slug}.jpg 为锚点反推漫画详情，保证首页一定有封面。
+        val coverRe = Regex("""<amp-img[^>]+alt=["']([^"']+)["'][^>]+src=["'](https?://[^"']*/cover/([^"'/]+)\.(?:jpg|jpeg|png|webp)[^"']*)["']""", RegexOption.IGNORE_CASE)
+        return coverRe.findAll(html).mapNotNull { m ->
+            val title = clean(m.groupValues[1]).take(100)
+            val slug = m.groupValues[3]
+            if (title.isBlank() || slug == "default_cover") return@mapNotNull null
+            val cover = m.groupValues[2].replace("&amp;", "&")
+            val url = "https://cn.bzmanga.com/comic/$slug"
+            val pos = m.range.first
+            val nearStart = (pos - 1600).coerceAtLeast(0)
+            val nearEnd = (pos + 2200).coerceAtMost(html.length)
+            val near = html.substring(nearStart, nearEnd)
+            val author = clean(Regex("""<small[^>]*class=["'][^"']*tags[^"']*["'][^>]*>([\s\S]*?)</small>""", RegexOption.IGNORE_CASE).find(near)?.groupValues?.getOrNull(1).orEmpty())
+            val tag = clean(Regex("""<span[^>]*class=["'][^"']*tab[^"']*["'][^>]*>([\s\S]*?)</span>""", RegexOption.IGNORE_CASE).find(near)?.groupValues?.getOrNull(1).orEmpty())
+            SearchResult(title, url, "包子漫画", tag.ifBlank { author.ifBlank { "包子漫画" } }, cover)
         }.distinctBy { it.url }.take(60).toList()
     }
 
@@ -501,12 +506,12 @@ class TinyReaderActivity : AppCompatActivity() {
     }
     private fun resultTile(r: SearchResult)=LinearLayout(this).apply{
         orientation=LinearLayout.VERTICAL; setPadding(dp(4),dp(4),dp(4),dp(4)); setOnClickListener{ if (selectedTab == TAB_HOME || screenMode == SCREEN_SEARCH) homeScrollY = readerScroll?.scrollY ?: homeScrollY; loadMangaFromUrl(r.title, r.url, r.sourceName) }
-        val img=ImageView(context).apply{ scaleType=ImageView.ScaleType.CENTER_CROP; background=round(C_PRIMARY_LIGHT,dp(8)); if(r.cover.isNotBlank()) Glide.with(this@TinyReaderActivity).load(r.cover).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }
+        val img=ImageView(context).apply{ scaleType=ImageView.ScaleType.CENTER_CROP; background=round(C_PRIMARY_LIGHT,dp(8)); if(r.cover.isNotBlank()) Glide.with(this@TinyReaderActivity).load(glideUrl(r.cover, r.sourceName)).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }
         addView(img, LinearLayout.LayoutParams(-1, dp(150)))
         addView(TextView(context).apply{text=r.title; textSize=15f; setTextColor(C_TEXT); setTypeface(typeface,Typeface.BOLD); maxLines=1; setPadding(0,dp(6),0,0)})
         addView(TextView(context).apply{text=r.snippet.ifBlank{r.sourceName}; textSize=13f; setTextColor(C_SUB); maxLines=1; setPadding(0,dp(2),0,0)})
     }
-    private fun mangaCard(m:Manga,showProgress:Boolean,click:()->Unit)=baseCard().apply{ val row=LinearLayout(context).apply{orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(12),dp(12),dp(12))}; val img=ImageView(context).apply{scaleType=ImageView.ScaleType.CENTER_CROP; background=round(C_PRIMARY_LIGHT,dp(12)); if(m.cover.isNotBlank()) Glide.with(this@TinyReaderActivity).load(m.cover).into(this)}; row.addView(img,LinearLayout.LayoutParams(dp(64),dp(88))); val col=LinearLayout(context).apply{orientation=LinearLayout.VERTICAL; setPadding(dp(12),0,0,0)}; col.addView(TextView(context).apply{text=m.title;textSize=17f;setTextColor(C_TEXT);setTypeface(typeface,Typeface.BOLD)}); col.addView(TextView(context).apply{text="${m.sourceName} · ${m.chapters.size} 章" + if(showProgress&&m.lastReadAt>0) " · 读到 ${m.chapterIndex+1}" else "";textSize=13f;setTextColor(C_SUB);setPadding(0,dp(5),0,0)}); col.addView(TextView(context).apply{text=m.description.ifBlank{m.url}.take(90);textSize=13f;setTextColor(C_SUB);maxLines=2;setPadding(0,dp(6),0,0)}); row.addView(col,LinearLayout.LayoutParams(0,-2,1f)); addView(row); setOnClickListener{click()} }
+    private fun mangaCard(m:Manga,showProgress:Boolean,click:()->Unit)=baseCard().apply{ val row=LinearLayout(context).apply{orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(12),dp(12),dp(12))}; val img=ImageView(context).apply{scaleType=ImageView.ScaleType.CENTER_CROP; background=round(C_PRIMARY_LIGHT,dp(12)); if(m.cover.isNotBlank()) Glide.with(this@TinyReaderActivity).load(glideUrl(m.cover, m.sourceName)).into(this)}; row.addView(img,LinearLayout.LayoutParams(dp(64),dp(88))); val col=LinearLayout(context).apply{orientation=LinearLayout.VERTICAL; setPadding(dp(12),0,0,0)}; col.addView(TextView(context).apply{text=m.title;textSize=17f;setTextColor(C_TEXT);setTypeface(typeface,Typeface.BOLD)}); col.addView(TextView(context).apply{text="${m.sourceName} · ${m.chapters.size} 章" + if(showProgress&&m.lastReadAt>0) " · 读到 ${m.chapterIndex+1}" else "";textSize=13f;setTextColor(C_SUB);setPadding(0,dp(5),0,0)}); col.addView(TextView(context).apply{text=m.description.ifBlank{m.url}.take(90);textSize=13f;setTextColor(C_SUB);maxLines=2;setPadding(0,dp(6),0,0)}); row.addView(col,LinearLayout.LayoutParams(0,-2,1f)); addView(row); setOnClickListener{click()} }
     private fun chapterCard(i:Int,ch:Chapter,active:Boolean,click:()->Unit)=baseCard().apply{ val t=TextView(context).apply{text="${i+1}. ${ch.title}";textSize=15f;setTextColor(if(active)C_PRIMARY else C_TEXT);setPadding(dp(16),dp(14),dp(16),dp(14));setTypeface(typeface,if(active)Typeface.BOLD else Typeface.NORMAL)}; addView(t); setOnClickListener{click()} }
     private fun menuCard(title:String,sub:String,click:()->Unit)=baseCard().apply{ val l=LinearLayout(context).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(14),dp(16),dp(14))}; l.addView(TextView(context).apply{text=title;textSize=16f;setTextColor(C_TEXT);setTypeface(typeface,Typeface.BOLD)}); l.addView(TextView(context).apply{text=sub;textSize=13f;setTextColor(C_SUB);setPadding(0,dp(4),0,0)}); addView(l); setOnClickListener{click()} }
     private fun navItem(label:String,icon:String,click:()->Unit)=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER; val i=TextView(context).apply{text=icon;textSize=20f;setTextColor(C_PRIMARY);gravity=Gravity.CENTER}; val t=TextView(context).apply{text=label;textSize=11f;setTextColor(C_SUB);gravity=Gravity.CENTER}; addView(i); addView(t); setOnClickListener{click()} }

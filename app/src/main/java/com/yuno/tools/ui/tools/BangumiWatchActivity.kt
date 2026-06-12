@@ -37,10 +37,15 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.yuno.tools.util.ThemeApplier
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -278,10 +283,9 @@ class BangumiWatchActivity : AppCompatActivity() {
             if (!loading) loadDetail(item)
             return
         }
-        section("播放")
         content.addView(playerBox(detail))
         content.addView(detailHeader(detail.item, detail.meta, detail.intro))
-        section("剧集（共 ${detail.episodes.size} 集）")
+        section("选集 · 共 ${detail.episodes.size} 集")
         if (detail.episodes.isEmpty()) {
             emptyCard("暂无剧集", "没有解析到剧集列表。")
         } else {
@@ -399,7 +403,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         val url = when (selectedSource.kind) {
             SourceKind.AGE -> "https://api.agedm.io/v2/update?page=$targetPage&size=30"
             SourceKind.XIFAN -> if (targetPage <= 1) "https://anime.xifanacg.com/type/1.html" else "https://anime.xifanacg.com/type/1-$targetPage.html"
-            SourceKind.NG3 -> if (targetPage <= 1) "https://ng3.app/home" else "https://ng3.app/home?page=$targetPage"
+            SourceKind.NG3 -> "ng3-api-home:$targetPage"
         }
         val body = fetch(url)
         if (body.contains("/_guard/") || body.contains("slider_html") || body.contains("安全验证")) error("需要安全验证")
@@ -438,7 +442,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         return when (selectedSource.kind) {
             SourceKind.AGE -> parseAgeSearch(fetch("https://api.agedm.io/v2/search?query=$q&page=$targetPage"))
             SourceKind.XIFAN -> parseXifanSuggest(fetch("https://anime.xifanacg.com/index.php/ajax/suggest?mid=1&wd=$q"))
-            SourceKind.NG3 -> parseNg3Library(fetch("https://ng3.app/home?keyword=$q")).filter { it.title.contains(keyword, true) }
+            SourceKind.NG3 -> searchNg3(keyword)
         }
     }
 
@@ -467,6 +471,10 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun fetch(url: String): String {
+        if (url.startsWith("ng3-api-home:")) {
+            val pageNo = url.substringAfter(":").toIntOrNull() ?: 1
+            return ng3ApiPost("/Pc/Resource/IndexShow/ShowOnes", JSONObject().put("page", pageNo).put("pageSize", 12))
+        }
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
@@ -546,15 +554,98 @@ class BangumiWatchActivity : AppCompatActivity() {
         }.distinctBy { it.detailUrl }
     }
 
-    private fun parseNg3Library(html: String): List<AnimeItem> {
-        val linkRe = Regex("""<a[^>]+href=["']([^"']*(?:detail|video|play|vod|movie)[^"']*)["'][^>]*>([\s\S]{0,800}?)</a>""", RegexOption.IGNORE_CASE)
-        return linkRe.findAll(html).mapNotNull { m ->
+    private fun parseNg3Library(text: String): List<AnimeItem> {
+        if (text.trimStart().startsWith("{")) return parseNg3ApiItems(text)
+        val linkRe = Regex("""<a[^>]+href=["']([^"']*(?:videoDetail|detail|video|play|vod|movie)[^"']*)["'][^>]*>([\s\S]{0,800}?)</a>""", RegexOption.IGNORE_CASE)
+        return linkRe.findAll(text).mapNotNull { m ->
             val block = m.groupValues[2]
             val title = htmlText(Regex("""(?:alt|title)=["']([^"']{2,80})["']""", RegexOption.IGNORE_CASE).find(m.value)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { htmlText(block).take(40) }
             val cover = htmlAttr(Regex("""(?:data-src|src)=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']""", RegexOption.IGNORE_CASE).find(block)?.groupValues?.getOrNull(1).orEmpty())
             val href = htmlAttr(m.groupValues[1])
             if (title.length in 2..80 && href.isNotBlank()) AnimeItem(title, "瓜子影视", absUrl(cover, sources.first { it.kind == SourceKind.NG3 }), absUrl(href, sources.first { it.kind == SourceKind.NG3 }), selectedSource.name) else null
         }.distinctBy { it.detailUrl }.take(60).toList()
+    }
+
+    private fun parseNg3ApiItems(jsonText: String): List<AnimeItem> {
+        val root = JSONObject(jsonText)
+        val data = root.optJSONObject("data") ?: root
+        val arr = data.optJSONArray("list") ?: data.optJSONArray("rows") ?: root.optJSONArray("list") ?: JSONArray()
+        val out = mutableListOf<AnimeItem>()
+        for (i in 0 until arr.length()) {
+            val section = arr.optJSONObject(i) ?: continue
+            val nested = section.optJSONArray("list") ?: section.optJSONArray("vod_list") ?: section.optJSONArray("data")
+            if (nested != null) {
+                for (j in 0 until nested.length()) ng3ItemFromJson(nested.optJSONObject(j), section.optString("nav_name")).let { if (it != null) out.add(it) }
+            } else {
+                ng3ItemFromJson(section, section.optString("nav_name")).let { if (it != null) out.add(it) }
+            }
+        }
+        return out.distinctBy { it.detailUrl }.take(80)
+    }
+
+    private fun ng3ItemFromJson(o: JSONObject?, fallbackStatus: String): AnimeItem? {
+        if (o == null) return null
+        val id = o.optString("vod_id").ifBlank { o.optString("id") }
+        val title = o.optString("vod_name").ifBlank { o.optString("title") }.ifBlank { o.optString("name") }
+        val cover = o.optString("vod_picthumb").ifBlank { o.optString("vod_pic") }.ifBlank { o.optString("slide_pic") }.ifBlank { o.optString("c_pic") }
+        val status = o.optString("vod_remarks").ifBlank { o.optString("vod_total") }.ifBlank { o.optString("vod_type_name") }.ifBlank { fallbackStatus }.ifBlank { "瓜子影视" }
+        if (id.isBlank() || title.isBlank()) return null
+        return AnimeItem(title.take(100), status.take(40), cover, "https://ng3.app/videoDetail/$id", selectedSource.name)
+    }
+
+    private fun searchNg3(keyword: String): List<AnimeItem> {
+        val q = keyword.trim()
+        if (q.isBlank()) return emptyList()
+        val candidates = listOf(
+            "/Pc/Resource/VodSearch/ShowOnes" to JSONObject().put("wd", q).put("page", 1).put("pageSize", 30),
+            "/Pc/Resource/VodSearch/ShowOnes" to JSONObject().put("keyword", q).put("page", 1).put("pageSize", 30),
+            "/Pc/Resource/IndexShow/ShowOnes" to JSONObject().put("page", 1).put("pageSize", 30).put("keyword", q)
+        )
+        return candidates.firstNotNullOfOrNull { (path, payload) ->
+            runCatching { parseNg3ApiItems(ng3ApiPost(path, payload)).filter { it.title.contains(q, true) || it.status.contains(q, true) }.takeIf { it.isNotEmpty() } }.getOrNull()
+        }.orEmpty()
+    }
+
+    private fun ng3ApiPost(path: String, payload: JSONObject): String {
+        val bodyJson = JSONObject().put("params", aesNg3(payload.toString())).toString()
+        val hosts = listOf("https://haiwaiapi.1fc8ab0.com", "https://hyperf.718fd9f.com")
+        var lastError: Throwable? = null
+        for (host in hosts) {
+            runCatching {
+                val req = Request.Builder()
+                    .url(host + path)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+                    .header("Referer", "https://ng3.app/home")
+                    .header("Origin", "https://ng3.app")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .post(bodyJson.toRequestBody("application/json;charset=UTF-8".toMediaType()))
+                    .build()
+                http.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) error("HTTP ${resp.code}")
+                    val raw = resp.body?.string().orEmpty().ifBlank { error("empty body") }
+                    val root = JSONObject(raw)
+                    val enc = root.optString("data")
+                    if (enc.isNotBlank()) return aesNg3Decrypt(enc)
+                    if (root.optInt("code") == 400) error(root.optString("msg", "请求格式有误"))
+                    return raw
+                }
+            }.onFailure { lastError = it }
+        }
+        error(lastError?.message ?: "瓜子影视接口失败")
+    }
+
+    private fun aesNg3(plain: String): String {
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec("181cc88340ae5b2b".toByteArray(), "AES"), IvParameterSpec("4423d1e2773476ce".toByteArray()))
+        return cipher.doFinal(plain.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    private fun aesNg3Decrypt(hex: String): String {
+        val clean = hex.trim().lowercase(Locale.US)
+        val bytes = ByteArray(clean.length / 2) { i -> clean.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec("181cc88340ae5b2b".toByteArray(), "AES"), IvParameterSpec("4423d1e2773476ce".toByteArray()))
+        return String(cipher.doFinal(bytes))
     }
 
     private fun parseXifanLibrary(html: String): List<AnimeItem> {
@@ -626,7 +717,7 @@ class BangumiWatchActivity : AppCompatActivity() {
             val href = absUrl(htmlAttr(m.groupValues[1]), sources.first { it.kind == SourceKind.NG3 })
             if (href.isNotBlank()) EpisodeItem(name.take(50), href, "瓜子影视", item.detailUrl) else null
         }.distinctBy { it.playUrl }.toList()
-        return AnimeDetail(item, "瓜子影视 · 页面解析", item.status.ifBlank { "瓜子影视" }, "", eps)
+        return AnimeDetail(item, "瓜子影视 · 接口列表 + 页面播放解析", item.status.ifBlank { "瓜子影视" }, "", eps.ifEmpty { listOf(EpisodeItem("播放", item.detailUrl, "瓜子影视", item.detailUrl)) })
     }
 
     private fun parseXifanDetail(item: AnimeItem, body: String): AnimeDetail {
@@ -782,59 +873,35 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun playerBox(detail: AnimeDetail) = card().apply {
+        setCardBackgroundColor(Color.parseColor("#111318"))
+        strokeColor = Color.parseColor("#20242C")
+        radius = dp(14).toFloat()
         val box = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(14), dp(14), dp(14))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
         }
-        box.addView(TextView(context).apply { text = "内置播放器"; textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")) })
         val active = currentEpisode
+        box.addView(TextView(context).apply { text = detail.item.title; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); maxLines = 2 })
+        box.addView(TextView(context).apply { text = active?.let { "${it.source} · ${it.name}" } ?: "选择下方剧集后在这里播放"; textSize = 12f; setTextColor(Color.parseColor("#A8B0BF")); setPadding(0, dp(5), 0, dp(10)) })
         if (active == null) {
-            box.addView(TextView(context).apply { text = "选择下方剧集后在这里播放。"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(10)) })
+            box.addView(FrameLayout(context).apply {
+                setBackgroundColor(Color.BLACK)
+                addView(TextView(context).apply { text = "▶"; textSize = 42f; setTextColor(Color.parseColor("#66FFFFFF")); gravity = Gravity.CENTER }, FrameLayout.LayoutParams(-1, -1))
+                layoutParams = LinearLayout.LayoutParams(-1, dp(220))
+            })
         } else {
-            box.addView(TextView(context).apply { text = "${active.source} · ${active.name}"; textSize = 12f; setTextColor(Color.parseColor("#707782")); setPadding(0, dp(6), 0, dp(6)) })
-            if (currentPlayLoading) box.addView(TextView(context).apply {
-                text = "正在加载视频，请稍候…"
-                textSize = 12f
-                setTextColor(Color.parseColor("#4F6EF7"))
-                setPadding(0, 0, 0, dp(6))
-            })
-            if (currentPlayError.isNotBlank()) box.addView(TextView(context).apply {
-                text = currentPlayError
-                textSize = 12f
-                setTextColor(Color.parseColor("#D32F2F"))
-                setPadding(0, 0, 0, dp(6))
-            })
+            if (currentPlayLoading) box.addView(TextView(context).apply { text = "正在加载视频，请稍候…"; textSize = 12f; setTextColor(Color.parseColor("#8EA2FF")); setPadding(0, 0, 0, dp(6)) })
+            if (currentPlayError.isNotBlank()) box.addView(TextView(context).apply { text = currentPlayError; textSize = 12f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, 0, 0, dp(6)) })
             if (currentPlayDirect) {
-                val preparedPlayer = runCatching { ensurePlayer() }
-                    .onFailure { e ->
-                        currentPlayLoading = false
-                        currentPlayError = "播放器初始化失败：${e.message ?: "未知错误"}"
-                        Log.e("BangumiWatch", currentPlayError, e)
-                    }
-                    .getOrNull()
+                val preparedPlayer = runCatching { ensurePlayer() }.onFailure { e -> currentPlayLoading = false; currentPlayError = "播放器初始化失败：${e.message ?: "未知错误"}"; Log.e("BangumiWatch", currentPlayError, e) }.getOrNull()
                 if (preparedPlayer != null) {
-                    val playerView = PlayerView(context).apply {
-                        useController = true
-                        player = preparedPlayer
-                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
-                    }
-                    box.addView(playerView)
+                    box.addView(PlayerView(context).apply { useController = true; player = preparedPlayer; setBackgroundColor(Color.BLACK); layoutParams = LinearLayout.LayoutParams(-1, dp(230)) })
                 } else {
-                    box.addView(TextView(context).apply {
-                        text = currentPlayError.ifBlank { "播放器初始化失败，请换线路或稍后重试。" }
-                        textSize = 13f
-                        setTextColor(Color.parseColor("#D93025"))
-                        setPadding(0, dp(10), 0, dp(10))
-                    })
+                    box.addView(TextView(context).apply { text = currentPlayError.ifBlank { "播放器初始化失败，请换线路或稍后重试。" }; textSize = 13f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, dp(10), 0, dp(10)) })
                 }
             } else {
                 player?.pause()
-                box.addView(TextView(context).apply {
-                    text = "当前线路没有解析到可内置播放的 MP4/M3U8 地址，请尝试其他线路或播放源。"
-                    textSize = 13f
-                    setTextColor(Color.parseColor("#D93025"))
-                    setPadding(0, dp(10), 0, dp(10))
-                })
+                box.addView(TextView(context).apply { text = "当前线路没有解析到可内置播放的 MP4/M3U8 地址，请尝试其他线路或播放源。"; textSize = 13f; setTextColor(Color.parseColor("#FF8A80")); setPadding(0, dp(10), 0, dp(10)) })
             }
             val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(10), 0, 0) }
             actions.addView(primaryButton("下载记录") { addDownload(detail.item, active) })
@@ -1377,6 +1444,7 @@ if (showBack) navigateBack()
     }
 
     private fun absUrl(url: String, source: WatchSource = selectedSource): String = when {
+        url.startsWith("//") -> "https:$url"
         url.startsWith("http") -> url
         url.startsWith("/") -> source.baseUrl + url
         else -> "${source.baseUrl}/$url"

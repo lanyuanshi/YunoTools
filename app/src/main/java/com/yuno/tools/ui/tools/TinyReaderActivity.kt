@@ -230,7 +230,7 @@ class TinyReaderActivity : AppCompatActivity() {
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.10", "去掉包子漫画；新增卡拉漫画；修复好多漫列表解析。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.12", "修复看漫漫画解析、卡拉漫画封面加载，并清理旧源残留。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -283,18 +283,12 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun fetchManga(titleHint: String, url: String, sourceName: String): Manga {
         val html = http(url, sourceName)
         return when (sourceName) {
-            "包子漫画" -> fetchBzManga(titleHint, url, html)
             "妙趣漫画" -> fetchMiaoquManga(titleHint, url, html)
             "卡拉漫画" -> fetchKalaManga(titleHint, url, html)
-            else -> fetchHaoduomanManga(titleHint, url, html)
+            "看漫漫画" -> fetchKanmanManga(titleHint, url, html)
+            "好多漫" -> fetchHaoduomanManga(titleHint, url, html)
+            else -> Manga(titleHint, url, sourceName, "该旧漫画源已移除，请重新搜索其它来源。", chapters = emptyList(), updatedAt = System.currentTimeMillis())
         }
-    }
-    private fun fetchBzManga(titleHint: String, url: String, html: String): Manga {
-        val title = clean(Regex("""name=["']og:novel:book_name["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { clean(textBetween(html, "<title", "</title>").ifBlank { titleHint }).substringBefore(" - ").removePrefix("🍲").take(80) }
-        val cover = Regex("""name=["']og:image["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1)?.let { absUrl(it.replace("&amp;", "&"), url) } ?: extractImages(html, url).firstOrNull { it.contains("/cover/") }.orEmpty()
-        val desc = clean(Regex("""name=["']og:description["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).take(180)
-        val chapters = extractBzChapters(html, url)
-        return Manga(title.ifBlank { titleHint }, url, "包子漫画", desc.ifBlank { "包子漫画 · 本地解析详情、章节和阅读图片。" }, cover, chapters, emptyList(), updatedAt = System.currentTimeMillis())
     }
     private fun fetchMiaoquManga(titleHint: String, url: String, html: String): Manga {
         if (html.contains("漫画不存在") || html.contains("章节已被删除")) {
@@ -342,7 +336,7 @@ class TinyReaderActivity : AppCompatActivity() {
             ch.url.contains("miaoqumh") -> "妙趣漫画"
             ch.url.contains("kalamanhua") || ch.url.contains("kalaimg") -> "卡拉漫画"
             ch.url.contains("kanman.com") || ch.url.contains("kaimanhua.com") -> "看漫漫画"
-            else -> "包子漫画"
+            else -> ""
         }
         val html=http(ch.url, source)
         val pages = when (source) {
@@ -350,7 +344,7 @@ class TinyReaderActivity : AppCompatActivity() {
             "妙趣漫画" -> extractMiaoquChapterImages(html, ch.url)
             "卡拉漫画" -> extractKalaChapterImages(html, ch.url)
             "看漫漫画" -> extractKanmanChapterImages(html, ch.url)
-            else -> if (ch.url.contains("baozimh") || ch.url.contains("bzmanga")) extractBzChapterImages(html, ch.url) else emptyList()
+            else -> emptyList()
         }
         return ch.copy(pages=pages)
     }
@@ -373,7 +367,7 @@ class TinyReaderActivity : AppCompatActivity() {
         actionButton("☰") { showReaderMenu(manga, idx) }
         actionButton("◁") { if (idx > 0) openReader(manga, idx - 1, 0) }
         actionButton("▷") { if (idx + 1 < manga.chapters.size) openReader(manga, idx + 1, 0) }
-        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已去掉包子漫画源；妙趣漫画使用 DATA 解密，好多漫使用 AES 解密。") else pages.forEachIndexed { i, u ->
+        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "旧源已清理；妙趣漫画使用 DATA 解密，好多漫使用 AES 解密。") else pages.forEachIndexed { i, u ->
             val card=baseCard(); val lay=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL; setPadding(dp(6),dp(6),dp(6),dp(6))}
             lay.addView(TextView(this).apply{text="${i+1} / ${pages.size}"; textSize=12f; setTextColor(C_SUB); gravity=Gravity.CENTER; setPadding(0,dp(4),0,dp(4))})
             val img = ImageView(this).apply{ adjustViewBounds=true; scaleType=ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE); setOnClickListener { showReaderMenu(manga, idx) }; Glide.with(this@TinyReaderActivity).load(glideUrl(u, manga.sourceName)).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }
@@ -404,7 +398,7 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun glideUrl(url: String, sourceName: String): GlideUrl {
-        val referer = when (sourceName) { "包子漫画" -> "https://cn.bzmanga.com/"; "妙趣漫画" -> "https://m.miaoqumh.org/"; "卡拉漫画" -> ""; "看漫漫画" -> "https://m.kanman.com/"; else -> "https://m.haoduoman.com/" }
+        val referer = when (sourceName) { "妙趣漫画" -> "https://m.miaoqumh.org/"; "卡拉漫画" -> "https://image.kalaimg.top/"; "看漫漫画" -> "https://m.kanman.com/"; else -> "https://m.haoduoman.com/" }
         return GlideUrl(url, LazyHeaders.Builder()
             .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
             .apply { if (referer.isNotBlank()) addHeader("Referer", referer) }
@@ -425,7 +419,6 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun restoreData(json: String) { runCatching{ val o=JSONObject(json); prefs().edit().putString(KEY_MANGA,o.optJSONArray("manga")?.toString()?:"[]").putInt(KEY_SORT,o.optInt("sort",0)).apply(); showLibrary(); toast("恢复完成") }.onFailure{toast("恢复失败：${it.message}")} }
 
     private fun parseSourceResults(html: String, source: String, base: String): List<SearchResult> {
-        if (source == "包子漫画") return parseBzResults(html, base)
         if (source == "妙趣漫画") return parseMiaoquResults(html, base)
         if (source == "卡拉漫画") return parseKalaResults(html, base)
         if (source == "看漫漫画") return parseKanmanResults(html, base)
@@ -444,26 +437,6 @@ class TinyReaderActivity : AppCompatActivity() {
             val badUrl = url.contains("/area/") || url.contains("/category") || url.contains("/rank") || url.contains("page=")
             val cover = extractImages(body, base).firstOrNull().orEmpty()
             if (isManga && !badTitle && !badUrl && title.length in 2..100) SearchResult(title, url, source, ifBlank(cover, url), cover) else null
-        }.distinctBy { it.url }.take(60).toList()
-    }
-
-    private fun parseBzResults(html: String, base: String): List<SearchResult> {
-        // 包子漫画列表中封面和标题在同一个 comics-card 的两个 <a> 内，不能按单个 <a> 解析。
-        // 这里以 /cover/{slug}.jpg 为锚点反推漫画详情，保证首页一定有封面。
-        val coverRe = Regex("""<amp-img[^>]+alt=["']([^"']+)["'][^>]+src=["'](https?://[^"']*/cover/([^"'/]+)\.(?:jpg|jpeg|png|webp)[^"']*)["']""", RegexOption.IGNORE_CASE)
-        return coverRe.findAll(html).mapNotNull { m ->
-            val title = clean(m.groupValues[1]).take(100)
-            val slug = m.groupValues[3]
-            if (title.isBlank() || slug == "default_cover") return@mapNotNull null
-            val cover = m.groupValues[2].replace("&amp;", "&")
-            val url = "https://cn.bzmanga.com/comic/$slug"
-            val pos = m.range.first
-            val nearStart = (pos - 1600).coerceAtLeast(0)
-            val nearEnd = (pos + 2200).coerceAtMost(html.length)
-            val near = html.substring(nearStart, nearEnd)
-            val author = clean(Regex("""<small[^>]*class=["'][^"']*tags[^"']*["'][^>]*>([\s\S]*?)</small>""", RegexOption.IGNORE_CASE).find(near)?.groupValues?.getOrNull(1).orEmpty())
-            val tag = clean(Regex("""<span[^>]*class=["'][^"']*tab[^"']*["'][^>]*>([\s\S]*?)</span>""", RegexOption.IGNORE_CASE).find(near)?.groupValues?.getOrNull(1).orEmpty())
-            SearchResult(title, url, "包子漫画", tag.ifBlank { author.ifBlank { "包子漫画" } }, cover)
         }.distinctBy { it.url }.take(60).toList()
     }
 
@@ -492,14 +465,16 @@ class TinyReaderActivity : AppCompatActivity() {
     }
 
     private fun parseKalaResults(html: String, base: String): List<SearchResult> {
-        val re = Regex("""<a[^>]+class=["'][^"']*stui-vodlist__thumb[^"']*["'][^>]+href=["']([^"']+/comic/\d+\.html|/comic/\d+\.html)["'][^>]+title=["']([^"']+)["'][^>]+data-original=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        val re = Regex("""<a[^>]+class=["'][^"']*stui-vodlist__thumb[^"']*["'][^>]*>""", RegexOption.IGNORE_CASE)
         return re.findAll(html).mapNotNull { m ->
-            val title = clean(m.groupValues[2]).take(100)
-            val url = absUrl(m.groupValues[1], base)
-            val cover = absUrl(m.groupValues[3], base)
+            val tag = m.value
+            val href = Regex("""href=["']([^"']*/comic/\d+\.html|/comic/\d+\.html)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
+            val title = clean(Regex("""title=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.getOrNull(1).orEmpty()).take(100)
+            val coverRaw = Regex("""(?:data-original|data-src|src)=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.getOrNull(1).orEmpty()
+            val cover = absUrl(coverRaw.replace("&amp;", "&"), base)
             val near = html.substring(m.range.first, (m.range.last + 500).coerceAtMost(html.length))
             val latest = clean(Regex("""<span[^>]+class=["'][^"']*pic-text[^"']*["'][^>]*>([\s\S]*?)</span>""", RegexOption.IGNORE_CASE).find(near)?.groupValues?.getOrNull(1).orEmpty())
-            if (title.isNotBlank()) SearchResult(title, url, "卡拉漫画", latest.ifBlank { "卡拉漫画" }, cover) else null
+            if (title.isNotBlank()) SearchResult(title, absUrl(href, base), "卡拉漫画", latest.ifBlank { "卡拉漫画" }, cover) else null
         }.distinctBy { it.url }.take(60).toList()
     }
 
@@ -555,7 +530,7 @@ class TinyReaderActivity : AppCompatActivity() {
 
 
     private fun extractKanmanChapters(html: String, base: String): List<Chapter> {
-        return Regex("""<a[^>]+href=["'](/\d+/[^"'#/]+\.html)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { m ->
+        return Regex("""<a[^>]+href=["']((?:https?://m\.kanman\.com)?/\d+/[^"'#/]+\.html)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE).findAll(html).mapNotNull { m ->
             val href = m.groupValues[1]
             val title = clean(m.groupValues[2]).replace(Regex("""\s+"""), " ").trim()
             if (href.contains("juese/")) null else Chapter(title.ifBlank { href.substringAfterLast('/').substringBefore(".html") }.take(80), absUrl(href, base))
@@ -578,19 +553,6 @@ class TinyReaderActivity : AppCompatActivity() {
             if (t.contains("第") || t.contains("话") || t.contains("卷")) Chapter(t.take(80), u) else null
         }.distinctBy { it.url }.toList()
     }
-    private fun extractBzChapters(html: String, base: String): List<Chapter> {
-        val metaUrl = Regex("""name=["']og:novel:latest_chapter_url["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty().replace("&amp;", "&")
-        val metaTitle = clean(Regex("""name=["']og:novel:latest_chapter_name["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()).ifBlank { "第1话" }
-        val list = mutableListOf<Chapter>()
-        if (metaUrl.isNotBlank()) list.add(Chapter(metaTitle, metaUrl.replace("https://cn.bzmanga.com", "https://www.baozimh.com")))
-        Regex("""href=["'](/user/page_direct\?comic_id=([^"'&]+)&amp;section_slot=(\d+)&amp;chapter_slot=(\d+))['"][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE).findAll(html).forEach { m ->
-            val comic = m.groupValues[2]; val sec = m.groupValues[3]; val ch = m.groupValues[4]
-            val title = clean(m.groupValues[5]).ifBlank { "第${ch.toIntOrNull()?.plus(1) ?: 1}话" }
-            list.add(Chapter(title.take(80), "https://www.baozimh.com/comic/chapter/$comic/${sec}_${ch}.html"))
-        }
-        return list.distinctBy { it.url }.take(300)
-    }
-
     private fun extractMiaoquChapters(html: String, base: String): List<Chapter> {
         val all = Regex("""<a[^>]+href=["'](/\d+/\d+\.html)["'][^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE).findAll(html).mapIndexedNotNull { i, m ->
             var title = clean(m.groupValues[2]).replace(Regex("""\s+"""), " ").trim()
@@ -599,27 +561,6 @@ class TinyReaderActivity : AppCompatActivity() {
         }.distinctBy { it.url }.toList()
         return all.mapIndexed { i, ch -> if (ch.title == "第${i + 1}话") ch else ch }
     }
-    private fun extractBzChapterImages(html: String, base: String): List<String> {
-        // 包子漫画网页端部分章节会把“请在 APP 内阅读/二维码下载 APP”的宣传图伪装成 scomic 图片。
-        // 这类图不是漫画页，必须过滤，不能再当成第 1 页显示。
-        val pageText = clean(html).lowercase()
-        val appOnly = pageText.contains("app内") || pageText.contains("app內") || pageText.contains("下载app") || pageText.contains("下載app") || pageText.contains("二维码") || pageText.contains("二維碼") || pageText.contains("扫码") || pageText.contains("掃描") || pageText.contains("請在包子") || pageText.contains("请在包子")
-        val re = Regex("""<amp-img[^>]+(?:src|data-src)=["'](https?://s\d+\.bzcdn\.net/scomic/[^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["'][^>]*>""", RegexOption.IGNORE_CASE)
-        val items = re.findAll(html).mapNotNull { m ->
-            val tag = m.value
-            val around = html.substring((m.range.first - 500).coerceAtLeast(0), (m.range.last + 500).coerceAtMost(html.length)).lowercase()
-            val alt = Regex("""alt=["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.getOrNull(1).orEmpty().lowercase()
-            val url = m.groupValues[1].replace("&amp;", "&")
-            val bad = listOf("app", "baozimh.com", "qrcode", "qr", "二维码", "二維碼", "下载", "下載", "扫码", "掃描", "請在", "请在", "android-icon", "ios").any { k ->
-                around.contains(k) || alt.contains(k) || url.lowercase().contains(k)
-            }
-            if (!bad && isComicPageImage(url)) url else null
-        }.distinct().take(260).toList()
-        // 如果页面明确是 APP 引导页，宁可返回空，让 UI 提示源站限制，也不显示错误二维码图。
-        return if (appOnly && items.size <= 6) emptyList() else items
-    }
-
-
     private fun extractKanmanChapterImages(html: String, base: String): List<String> {
         val listText = Regex("""chapter_img_list\s*:\s*\[([\s\S]*?)\]""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1).orEmpty()
         val fromList = Regex("""["'](https?://[^"']+?\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']""", RegexOption.IGNORE_CASE).findAll(listText)
@@ -735,7 +676,7 @@ class TinyReaderActivity : AppCompatActivity() {
             .header("User-Agent","Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
             .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language","zh-CN,zh;q=0.9,en;q=0.8")
-            .header("Referer", when(sourceName){"包子漫画"->"https://cn.bzmanga.com/";"妙趣漫画"->"https://m.miaoqumh.org/";"卡拉漫画"->"https://www.kalamanhua.com/";"看漫漫画"->"https://m.kanman.com/";else->"https://m.haoduoman.com/"})
+            .header("Referer", when(sourceName){"妙趣漫画"->"https://m.miaoqumh.org/";"卡拉漫画"->"https://www.kalamanhua.com/";"看漫漫画"->"https://m.kanman.com/";else->"https://m.haoduoman.com/"})
             .build()
         client.newCall(req).execute().use{ if(!it.isSuccessful) error("HTTP ${it.code}"); return it.body?.string().orEmpty() }
     }

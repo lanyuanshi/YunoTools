@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -135,15 +136,15 @@ class TinyReaderActivity : AppCompatActivity() {
     private fun actionButton(text: String, click: () -> Unit) { actionHost.addView(Button(this).apply { this.text = text; textSize = 16f; minWidth = dp(44); setTextColor(C_PRIMARY); background = round(Color.TRANSPARENT, dp(22)); setOnClickListener { click() } }, LinearLayout.LayoutParams(dp(48), dp(48))) }
 
     private fun showHome() { if (currentHomeSources.isEmpty()) showHomeCategory("最新", defaultHomeSources()) else showHomeCategory(currentHomeTitle, currentHomeSources) }
-    private fun defaultHomeSources() = listOf(Source("包子漫画", "https://cn.bzmanga.com/list/new"), Source("妙趣漫画", "https://m.miaoqumh.org/"), Source("好多漫", "https://m.haoduoman.com/manhua"))
+    private fun defaultHomeSources() = listOf(Source("妙趣漫画", "https://m.miaoqumh.org/"), Source("好多漫", "https://m.haoduoman.com/manhua"))
 
     private fun showHomeCategory(title: String, sources: List<Source>) {
         saveProgress(); currentManga = null; readerScroll = null
         currentHomeTitle = title; currentHomeSources = sources
-        setHeader("首页", "$title · 搜索 / 分类 / 封面宫格", TAB_HOME)
+        setHeader("首页", "$title · 分类 / 封面宫格", TAB_HOME)
+        actionButton("⌕") { showSearchPage() }
         actionButton("↻") { showHomeCategory(title, sources) }
         val box = scroll()
-        homeSearchBar(box)
         homeCategoryBar(box)
         empty(box, "正在获取漫画列表…", "按本地分类映射真实网站分类，解析标题、封面、最新集数后展示。")
         Thread {
@@ -173,22 +174,22 @@ class TinyReaderActivity : AppCompatActivity() {
             parent.addView(Button(this).apply { text = label; textSize = 12f; setTextColor(C_PRIMARY); background = round(Color.WHITE, dp(18)); setOnClickListener { go(label, sources) } }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
         }
         chip(row, "最新", defaultHomeSources())
-        chip(row, "国漫", listOf(Source("包子漫画", "https://cn.bzmanga.com/classify?type=all&region=cn&state=all&filter=%2a"), Source("好多漫", "https://m.haoduoman.com/manhua/area/guonei")))
-        chip(row, "日漫", listOf(Source("包子漫画", "https://cn.bzmanga.com/classify?type=all&region=jp&state=all&filter=%2a"), Source("好多漫", "https://m.haoduoman.com/manhua/area/riben")))
+        chip(row, "国漫", listOf(Source("好多漫", "https://m.haoduoman.com/manhua/area/guonei")))
+        chip(row, "日漫", listOf(Source("好多漫", "https://m.haoduoman.com/manhua/area/riben")))
         box.addView(row)
         val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 0, 0, dp(8)) }
-        chip(row2, "韩漫", listOf(Source("包子漫画", "https://cn.bzmanga.com/classify?type=all&region=kr&state=all&filter=%2a"), Source("好多漫", "https://m.haoduoman.com/manhua/area/hanguo")))
-        chip(row2, "完结", listOf(Source("包子漫画", "https://cn.bzmanga.com/classify?type=all&region=all&state=pub&filter=%2a")))
-        chip(row2, "热血", listOf(Source("包子漫画", "https://cn.bzmanga.com/classify?type=rexie&region=all&state=all&filter=%2a"), Source("好多漫", "https://m.haoduoman.com/manhua/theme/rexue")))
+        chip(row2, "韩漫", listOf(Source("好多漫", "https://m.haoduoman.com/manhua/area/hanguo")))
+        chip(row2, "完结", listOf(Source("妙趣漫画", "https://m.miaoqumh.org/custom/end")))
+        chip(row2, "热血", listOf(Source("妙趣漫画", "https://m.miaoqumh.org/custom/hot"), Source("好多漫", "https://m.haoduoman.com/manhua/theme/rexue")))
         box.addView(row2)
     }
 
     private fun renderHome(title: String, groups: List<Pair<String, List<SearchResult>>>) {
         previousScreen = TAB_HOME
         setHeader("首页", "$title · 三列封面列表", TAB_HOME)
+        actionButton("⌕") { showSearchPage() }
         actionButton("↻") { showHome() }
         val box = scroll()
-        homeSearchBar(box)
         homeCategoryBar(box)
         groups.forEach { (name, results) ->
             section(box, "$name · ${results.size} 条")
@@ -203,7 +204,7 @@ class TinyReaderActivity : AppCompatActivity() {
         actionButton("⇅") { showSortDialog() }; actionButton("＋") { showMore() }
         val box = scroll(); section(box, "我的漫画")
         val favs = sortedManga(loadManga().filter { it.favorite })
-        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“首页”从包子漫画 / 妙趣漫画 / 好多漫 搜索或加载漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
+        if (favs.isEmpty()) empty(box, "书架还没有漫画", "去“首页”从妙趣漫画 / 好多漫 搜索或加载漫画，点星标加入书架。") else favs.forEach { box.addView(mangaCard(it, true) { showDetail(it) }) }
     }
 
     private fun showUpdates() { showMore() }
@@ -225,7 +226,7 @@ class TinyReaderActivity : AppCompatActivity() {
         box.addView(menuCard("备份漫画数据", "复制书架、历史、阅读进度 JSON。") { backupData() })
         box.addView(menuCard("恢复备份", "粘贴备份 JSON 恢复本地数据。") { showRestoreDialog() })
         box.addView(menuCard("清空漫画数据", "删除书架和历史") { AlertDialog.Builder(this).setTitle("确认清空？").setMessage("会删除小小漫画的本地书架和历史。").setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> prefs().edit().remove(KEY_MANGA).apply(); showLibrary() }.show() })
-        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.07", "新增妙趣漫画 DATA 解密阅读；包子漫画继续过滤 APP 引导假图。") {})
+        section(box, "关于"); box.addView(menuCard("小小漫画 v1.1.08", "去掉包子漫画；右上角搜索；独立阅读页支持目录和横竖屏。") {})
     }
 
     private fun showDetail(manga: Manga) {
@@ -246,8 +247,17 @@ class TinyReaderActivity : AppCompatActivity() {
         if (manga.chapters.isEmpty()) empty(box, "没有解析到章节", "可以直接查看页面图片，或换一个漫画详情页。") else manga.chapters.forEachIndexed { i, ch -> box.addView(chapterCard(i, ch, i == manga.chapterIndex) { openReader(manga, i, 0) }) }
     }
 
-    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从包子漫画 / 妙趣漫画 / 好多漫 本地抓取漫画列表。") }
-    private fun fixedSources() = listOf(Source("包子漫画", "https://cn.bzmanga.com/search?q=%s"), Source("妙趣漫画", "https://m.miaoqumh.org/custom/search?keyword=%s"), Source("好多漫", "https://m.haoduoman.com/search?keyword=%s"))
+    private fun showSearchPage() {
+        previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", "输入关键词后搜索")
+        val box = scroll(); section(box, "搜索")
+        val input = EditText(this).apply { hint = "输入漫画名"; setSingleLine(true); background = round(Color.WHITE, dp(18)); setPadding(dp(14), 0, dp(14), 0) }
+        box.addView(input, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(10) })
+        box.addView(Button(this).apply { text = "搜索"; textSize = 16f; setTextColor(Color.WHITE); background = round(C_PRIMARY, dp(18)); setOnClickListener { val q=input.text.toString().trim(); if(q.isNotEmpty()) searchAllSources(q) else toast("请输入漫画名") } }, LinearLayout.LayoutParams(-1, dp(50)))
+        empty(box, "右上角搜索", "首页只显示搜索图标；点击后进入这个搜索页。")
+    }
+
+    private fun showSearchLoading(keyword: String) { previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索漫画", keyword); val box=scroll(); empty(box,"正在搜索…","正在从妙趣漫画 / 好多漫 本地抓取漫画列表。") }
+    private fun fixedSources() = listOf(Source("妙趣漫画", "https://m.miaoqumh.org/custom/search?keyword=%s"), Source("好多漫", "https://m.haoduoman.com/search?keyword=%s"))
     private fun searchAllSources(keyword: String) {
         showSearchLoading(keyword)
         Thread {
@@ -255,7 +265,7 @@ class TinyReaderActivity : AppCompatActivity() {
             runOnUiThread { showSearchResults(keyword, results) }
         }.start()
     }
-    private fun loadSourceList(src: Source) { previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader(src.name, "正在加载漫画列表"); val box=scroll(); empty(box,"正在加载…",src.searchUrl.substringBefore('?')); Thread { val rs=runCatching { val url=when(src.name){"包子漫画"->"https://cn.bzmanga.com/list/new";else->"https://m.haoduoman.com/manhua"}; parseSourceResults(http(url, src.name), src.name, url) }.getOrElse { listOf(SearchResult("加载失败", src.searchUrl.substringBefore('?'), src.name, it.message ?: "源站拒绝或网络失败")) }; runOnUiThread { showSearchResults(src.name, rs) } }.start() }
+    private fun loadSourceList(src: Source) { previousScreen = TAB_MORE; screenMode = SCREEN_SEARCH; setHeader(src.name, "正在加载漫画列表"); val box=scroll(); empty(box,"正在加载…",src.searchUrl.substringBefore('?')); Thread { val rs=runCatching { val url=when(src.name){"妙趣漫画"->"https://m.miaoqumh.org/";"好多漫"->"https://m.haoduoman.com/manhua";else->src.searchUrl}; parseSourceResults(http(url, src.name), src.name, url) }.getOrElse { listOf(SearchResult("加载失败", src.searchUrl.substringBefore('?'), src.name, it.message ?: "源站拒绝或网络失败")) }; runOnUiThread { showSearchResults(src.name, rs) } }.start() }
     private fun showSearchResults(keyword: String, results: List<SearchResult>) {
         previousScreen = selectedTab; screenMode = SCREEN_SEARCH; setHeader("搜索结果", keyword)
         val box = scroll(); section(box, "共 ${results.size} 条")
@@ -326,15 +336,38 @@ class TinyReaderActivity : AppCompatActivity() {
         }.start()
     }
     private fun renderPages(manga: Manga, idx: Int, pages: List<String>, y: Int) {
-        val box=scroll(); setHeader(manga.title, manga.chapters.getOrNull(idx)?.title ?: "图片阅读")
-        actionButton("◁") { if (idx > 0) openReader(manga, idx - 1, 0) }; actionButton("▷") { if (idx + 1 < manga.chapters.size) openReader(manga, idx + 1, 0) }
-        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已阻止显示站点图标、推荐封面和包子漫画 APP 二维码宣传图；若源站只返回 APP 引导页则不显示错图。") else pages.forEachIndexed { i, u ->
+        val box=scroll(); setHeader("阅读", manga.chapters.getOrNull(idx)?.title ?: manga.title)
+        actionButton("☰") { showReaderMenu(manga, idx) }
+        actionButton("◁") { if (idx > 0) openReader(manga, idx - 1, 0) }
+        actionButton("▷") { if (idx + 1 < manga.chapters.size) openReader(manga, idx + 1, 0) }
+        if (pages.isEmpty()) empty(box, "没有解析到真实漫画图片", "已去掉包子漫画源；妙趣漫画使用 DATA 解密，好多漫使用 AES 解密。") else pages.forEachIndexed { i, u ->
             val card=baseCard(); val lay=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL; setPadding(dp(6),dp(6),dp(6),dp(6))}
             lay.addView(TextView(this).apply{text="${i+1} / ${pages.size}"; textSize=12f; setTextColor(C_SUB); gravity=Gravity.CENTER; setPadding(0,dp(4),0,dp(4))})
-            lay.addView(ImageView(this).apply{ adjustViewBounds=true; scaleType=ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE); Glide.with(this@TinyReaderActivity).load(glideUrl(u, manga.sourceName)).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }, LinearLayout.LayoutParams(-1, -2))
+            val img = ImageView(this).apply{ adjustViewBounds=true; scaleType=ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.WHITE); setOnClickListener { showReaderMenu(manga, idx) }; Glide.with(this@TinyReaderActivity).load(glideUrl(u, manga.sourceName)).placeholder(android.R.color.darker_gray).error(android.R.color.darker_gray).into(this) }
+            lay.addView(img, LinearLayout.LayoutParams(-1, -2))
+            card.setOnClickListener { showReaderMenu(manga, idx) }
             card.addView(lay); box.addView(card)
         }
         readerScroll?.post { readerScroll?.smoothScrollTo(0, y) }
+    }
+
+    private fun showReaderMenu(manga: Manga, idx: Int) {
+        val labels = mutableListOf("竖屏", "横屏")
+        val actions = mutableListOf<() -> Unit>(
+            { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT; toast("已切换竖屏") },
+            { requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE; toast("已切换横屏") }
+        )
+        if (manga.chapters.isNotEmpty()) {
+            labels.add("目录")
+            actions.add { showChapterMenu(manga, idx) }
+            manga.chapters.forEachIndexed { i, ch -> labels.add((if (i == idx) "✓ " else "") + "${i + 1}. ${ch.title}"); actions.add { openReader(manga, i, 0) } }
+        }
+        AlertDialog.Builder(this).setTitle("阅读菜单").setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }.show()
+    }
+
+    private fun showChapterMenu(manga: Manga, idx: Int) {
+        val items = manga.chapters.mapIndexed { i, ch -> (if (i == idx) "✓ " else "") + "${i + 1}. ${ch.title}" }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("目录").setItems(items) { _, which -> openReader(manga, which, 0) }.show()
     }
 
     private fun glideUrl(url: String, sourceName: String): GlideUrl {

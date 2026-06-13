@@ -1,5 +1,6 @@
 package com.yuno.tools.ui.tools
 
+import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.Intent
@@ -956,55 +957,170 @@ class BangumiWatchActivity : AppCompatActivity() {
             maxLines = 2
         })
     }
-
     private fun playerBox(detail: AnimeDetail) = FrameLayout(this).apply {
         setBackgroundColor(Color.BLACK)
         val h = if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(260)
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { if (!isFullscreenPlayer) setMargins(-dp(10), -dp(8), -dp(10), dp(12)) }
         val active = currentEpisode
-        if (active != null && currentPlayDirect) {
-            val preparedPlayer = runCatching { ensurePlayer() }
+        val preparedPlayer = if (active != null && currentPlayDirect) {
+            runCatching { ensurePlayer() }
                 .onFailure { e -> currentPlayLoading = false; currentPlayError = "播放器初始化失败：${e.message ?: "未知错误"}"; Log.e("BangumiWatch", currentPlayError, e) }
                 .getOrNull()
-            if (preparedPlayer != null) {
-                addView(PlayerView(context).apply {
-                    useController = true
-                    player = preparedPlayer
-                    setBackgroundColor(Color.BLACK)
-                }, FrameLayout.LayoutParams(-1, -1))
-            }
+        } else null
+        if (preparedPlayer != null) {
+            addView(PlayerView(context).apply {
+                useController = false
+                player = preparedPlayer
+                setBackgroundColor(Color.BLACK)
+            }, FrameLayout.LayoutParams(-1, -1))
         } else {
             val poster = ImageView(context).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(Color.BLACK)
-                alpha = 0.72f
+                alpha = 0.74f
             }
             Glide.with(this@BangumiWatchActivity).load(detail.item.cover).centerCrop().into(poster)
             addView(poster, FrameLayout.LayoutParams(-1, -1))
-            addView(TextView(context).apply {
-                text = "▶"
-                textSize = 48f
-                setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER
-                setBackgroundColor(Color.parseColor("#33000000"))
-            }, FrameLayout.LayoutParams(dp(88), dp(88), Gravity.CENTER))
+        }
+        addView(embyPlayerOverlay(detail, active, preparedPlayer), FrameLayout.LayoutParams(-1, -1))
+        if (active == null || !currentPlayDirect) {
             setOnClickListener { detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) } ?: Toast.makeText(this@BangumiWatchActivity, "没有可播放剧集", Toast.LENGTH_SHORT).show() }
         }
-        addView(TextView(context).apply {
-            text = "‹"
-            textSize = 42f
+    }
+
+
+    private fun embyPlayerOverlay(detail: AnimeDetail, active: EpisodeItem?, preparedPlayer: ExoPlayer?) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(14), dp(10), dp(14), dp(12))
+        setBackgroundColor(Color.parseColor("#66000000"))
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(playerIconButton("‹", 34f) { if (isFullscreenPlayer) exitFullscreenPlayer() else navigateBack() }, LinearLayout.LayoutParams(dp(46), dp(46)))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(context).apply {
+                    text = detail.item.title
+                    textSize = if (isFullscreenPlayer) 19f else 16f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.WHITE)
+                    maxLines = 1
+                })
+                addView(TextView(context).apply {
+                    text = active?.name ?: "点击播放第一集"
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#D7DBE3"))
+                    maxLines = 1
+                })
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(playerPill(if (isFullscreenPlayer) "关闭" else "全屏") { toggleFullscreenPlayer() })
+        })
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setOnClickListener { navigateBack() }
-        }, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.START or Gravity.TOP).apply { topMargin = dp(8); leftMargin = dp(6) })
-        addView(TextView(context).apply {
-            text = if (isFullscreenPlayer) "×" else "⛶"
-            textSize = if (isFullscreenPlayer) 34f else 28f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#33000000"))
-            setOnClickListener { toggleFullscreenPlayer() }
-        }, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.END or Gravity.TOP).apply { rightMargin = dp(8); topMargin = dp(8) })
+            addView(playerIconButton("⟲ 10", if (isFullscreenPlayer) 20f else 17f) { seekBy(-10_000) }, LinearLayout.LayoutParams(dp(86), dp(70)))
+            addView(playerIconButton(if (preparedPlayer?.isPlaying == true) "Ⅱ" else "▶", if (isFullscreenPlayer) 42f else 34f) {
+                if (active == null || preparedPlayer == null) detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) }
+                else if (preparedPlayer.isPlaying) preparedPlayer.pause() else preparedPlayer.play()
+                renderDetailOnly()
+            }, LinearLayout.LayoutParams(dp(96), dp(82)).apply { setMargins(dp(8), 0, dp(8), 0) })
+            addView(playerIconButton("10 ⟳", if (isFullscreenPlayer) 20f else 17f) { seekBy(10_000) }, LinearLayout.LayoutParams(dp(86), dp(70)))
+        }, LinearLayout.LayoutParams(-1, 0, 1f))
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(context).apply {
+                text = playbackTimeText(preparedPlayer)
+                textSize = 12f
+                setTextColor(Color.parseColor("#E8EAED"))
+                gravity = Gravity.END
+            }, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(6), 0, 0)
+                addView(playerPill("选集") { showEpisodeChooser(detail) })
+                addView(playerPill("${playbackSpeedText(preparedPlayer)}x") { cyclePlaybackSpeed() })
+                addView(TextView(context).apply {
+                    text = if (currentPlayLoading) "缓冲中…" else active?.source?.ifBlank { "播放中" } ?: "未开始"
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#D7DBE3"))
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(playerPill(if (isFullscreenPlayer) "退出全屏" else "⛶") { toggleFullscreenPlayer() })
+            })
+        })
+    }
+
+    private fun playerIconButton(label: String, size: Float, action: () -> Unit) = TextView(this).apply {
+        text = label
+        textSize = size
+        typeface = Typeface.DEFAULT_BOLD
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        setBackgroundColor(Color.parseColor("#33000000"))
+        setOnClickListener { action() }
+    }
+
+    private fun playerPill(label: String, action: () -> Unit) = TextView(this).apply {
+        text = label
+        textSize = 13f
+        typeface = Typeface.DEFAULT_BOLD
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        setPadding(dp(12), dp(8), dp(12), dp(8))
+        setBackgroundColor(Color.parseColor("#4D000000"))
+        setOnClickListener { action() }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, dp(8), 0) }
+    }
+
+    private fun seekBy(deltaMs: Long) {
+        val exo = player ?: return
+        val duration = exo.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        exo.seekTo((exo.currentPosition + deltaMs).coerceIn(0L, duration))
+        renderDetailOnly()
+    }
+
+    private fun cyclePlaybackSpeed() {
+        val exo = player ?: return
+        val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
+        val current = exo.playbackParameters.speed
+        val next = speeds.firstOrNull { it > current + 0.01f } ?: speeds.first()
+        exo.setPlaybackSpeed(next)
+        Toast.makeText(this, "倍速 ${playbackSpeedText(exo)}x", Toast.LENGTH_SHORT).show()
+        renderDetailOnly()
+    }
+
+    private fun showEpisodeChooser(detail: AnimeDetail) {
+        if (detail.episodes.isEmpty()) {
+            Toast.makeText(this, "没有可播放剧集", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val names = detail.episodes.map { ep -> if (isCurrentEpisode(ep)) "✓ ${ep.name}" else ep.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("选择剧集")
+            .setItems(names) { _, which -> playEpisode(detail.item, detail.episodes[which]) }
+            .show()
+    }
+
+    private fun playbackSpeedText(exo: ExoPlayer?): String {
+        val speed = exo?.playbackParameters?.speed ?: 1f
+        return if (speed % 1f == 0f) speed.toInt().toString() else String.format(Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.')
+    }
+
+    private fun playbackTimeText(exo: ExoPlayer?): String {
+        if (exo == null) return "00:00 / 00:00"
+        val position = exo.currentPosition.coerceAtLeast(0L)
+        val duration = exo.duration.takeIf { it > 0 } ?: 0L
+        return "${formatPlayerTime(position)} / ${formatPlayerTime(duration)}"
+    }
+
+    private fun formatPlayerTime(ms: Long): String {
+        val total = (ms / 1000).coerceAtLeast(0)
+        val hours = total / 3600
+        val minutes = (total % 3600) / 60
+        val seconds = total % 60
+        return if (hours > 0) String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds) else String.format(Locale.US, "%02d:%02d", minutes, seconds)
     }
 
     private fun videoTabs() = LinearLayout(this).apply {

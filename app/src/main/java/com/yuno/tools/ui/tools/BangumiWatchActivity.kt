@@ -957,7 +957,20 @@ class BangumiWatchActivity : AppCompatActivity() {
             maxLines = 2
         })
     }
+    private var playerHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var playerHideRunnable: Runnable? = null
+
+    private fun resetControlHideTimer(contentFrame: FrameLayout) {
+        playerHideRunnable?.let { playerHideHandler.removeCallbacks(it) }
+        contentFrame.findViewWithTag<android.view.View>("overlayContainer")?.visibility = android.view.View.VISIBLE
+        playerHideRunnable = Runnable {
+            contentFrame.findViewWithTag<android.view.View>("overlayContainer")?.visibility = android.view.View.GONE
+        }
+        playerHideHandler.postDelayed(playerHideRunnable!!, 3000L)
+    }
+
     private fun playerBox(detail: AnimeDetail) = FrameLayout(this).apply {
+        tag = "playerRoot"
         setBackgroundColor(Color.BLACK)
         val h = if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(260)
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h).apply { if (!isFullscreenPlayer) setMargins(-dp(10), -dp(8), -dp(10), dp(12)) }
@@ -982,10 +995,17 @@ class BangumiWatchActivity : AppCompatActivity() {
             Glide.with(this@BangumiWatchActivity).load(detail.item.cover).centerCrop().into(poster)
             addView(poster, FrameLayout.LayoutParams(-1, -1))
         }
-        addView(embyPlayerOverlay(detail, active, preparedPlayer), FrameLayout.LayoutParams(-1, -1))
-        if (active == null || !currentPlayDirect) {
-            setOnClickListener { detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) } ?: Toast.makeText(this@BangumiWatchActivity, "没有可播放剧集", Toast.LENGTH_SHORT).show() }
+        setOnClickListener {
+            if (preparedPlayer?.isPlaying == true) {
+                resetControlHideTimer(this)
+            } else {
+                detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) }
+                    ?: Toast.makeText(this@BangumiWatchActivity, "没有可播放剧集", Toast.LENGTH_SHORT).show()
+            }
         }
+        val overlayContainer = FrameLayout(context).apply { tag = "overlayContainer" }
+        overlayContainer.addView(embyPlayerOverlay(detail, active, preparedPlayer), FrameLayout.LayoutParams(-1, -1))
+        addView(overlayContainer, FrameLayout.LayoutParams(-1, -1))
     }
 
 
@@ -1013,7 +1033,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                     maxLines = 1
                 })
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(playerPill(if (isFullscreenPlayer) "关闭" else "全屏") { toggleFullscreenPlayer() })
+            addView(playerPill("全屏") { toggleFullscreenPlayer() })
         })
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1047,7 +1067,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                     gravity = Gravity.CENTER
                     maxLines = 1
                 }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                addView(playerPill(if (isFullscreenPlayer) "退出全屏" else "⛶") { toggleFullscreenPlayer() })
+                addView(playerPill("⛶") { toggleFullscreenPlayer() })
             })
         })
     }
@@ -1545,14 +1565,19 @@ if (showBack) navigateBack()
         }
         isFullscreenPlayer = true
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        val insetsController = window.insetsController
+        if (insetsController != null) {
+            insetsController.hide(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
+            insetsController.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
         renderDetailOnly()
     }
 
     private fun exitFullscreenPlayer() {
         isFullscreenPlayer = false
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        val insetsController = window.insetsController
+        insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
         renderDetailOnly()
     }
 

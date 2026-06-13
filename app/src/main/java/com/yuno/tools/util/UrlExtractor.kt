@@ -5,6 +5,8 @@ import java.util.regex.Pattern
 object UrlExtractor {
 
     private val URL_PATTERNS = listOf(
+        // 豆包分享线程 / AI 生成图
+        Pattern.compile("https?://(?:www\\.)?doubao\\.com/thread/[a-zA-Z0-9]+"),
         // 抖音
         Pattern.compile("https?://v\\.douyin\\.com/[a-zA-Z0-9]+"),
         Pattern.compile("https?://www\\.iesdouyin\\.com/share/video/\\d+"),

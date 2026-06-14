@@ -1010,6 +1010,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                 setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                 setFullscreenButtonClickListener { toggleFullscreenPlayer() }
                 setBackgroundColor(Color.BLACK)
+                if (isFullscreenPlayer) setOnTouchListener { _, event -> handleFullscreenTouch(event) }
             }, FrameLayout.LayoutParams(-1, -1))
             if (isFullscreenPlayer) {
                 addView(fullscreenPlayerOverlay(detail, active, preparedPlayer), FrameLayout.LayoutParams(-1, -1))
@@ -1047,7 +1048,9 @@ class BangumiWatchActivity : AppCompatActivity() {
             tag = "fullscreen_overlay_controls"
             alpha = if (fullscreenControlsVisible) 1f else 0f
             translationY = if (fullscreenControlsVisible) 0f else dp(14).toFloat()
-            isClickable = fullscreenControlsVisible
+            // 关键：满屏控件容器不能吃掉播放器手势，只让真实按钮/SeekBar 自己响应。
+            isClickable = false
+            isFocusable = false
         }
         addView(controls, FrameLayout.LayoutParams(-1, -1))
 
@@ -1170,7 +1173,10 @@ class BangumiWatchActivity : AppCompatActivity() {
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - fullscreenTouchDownX
                 val dy = event.y - fullscreenTouchDownY
-                if (!fullscreenDragSeeking && kotlin.math.abs(dx) > dp(18) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.15f) {
+                val held = System.currentTimeMillis() - fullscreenTouchDownTime
+                val horizontal = kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
+                // 短促轻滑留给 10 秒快进/后退；按住拖动一小段后才进入“进度跟手”。
+                if (!fullscreenDragSeeking && horizontal && held > 180L && kotlin.math.abs(dx) > dp(24)) {
                     fullscreenDragSeeking = true
                     showFullscreenControlsTemporarily()
                 }
@@ -1183,15 +1189,16 @@ class BangumiWatchActivity : AppCompatActivity() {
                 val dx = event.x - fullscreenTouchDownX
                 val dy = event.y - fullscreenTouchDownY
                 val held = System.currentTimeMillis() - fullscreenTouchDownTime
+                val horizontal = kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.2f
                 if (fullscreenDragSeeking) {
-                    // 松手即完成本次进度拖动，不再额外进入任何模式
+                    // 长滑拖进度：松手即完成，不进入额外模式。
                     seekFullscreenByDrag(dx)
                     fullscreenDragSeeking = false
                     showFullscreenControlsTemporarily()
                     return true
                 }
-                if (kotlin.math.abs(dx) > dp(28) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
-                    // 极短轻扫：没有形成连续拖动时，按 10 秒快进/后退处理
+                if (horizontal && kotlin.math.abs(dx) > dp(26)) {
+                    // 轻滑/短滑：只跳 10 秒。
                     seekFullscreenBy(if (dx > 0) 10_000L else -10_000L)
                 } else if (kotlin.math.abs(dx) < dp(18) && kotlin.math.abs(dy) < dp(18) && held < 360L) {
                     val now = System.currentTimeMillis()
@@ -1218,10 +1225,10 @@ class BangumiWatchActivity : AppCompatActivity() {
         val exo = player ?: return
         val duration = exo.duration.takeIf { it > 0 } ?: return
         val width = window.decorView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-        // 从按下点开始，横向拖完整屏约等于拖完整个进度；拖动过程中进度条实时跟手
+        // 横向拖动按整条进度比例实时映射，进度条和时间同步跟手。
         val delta = (dx / width.toFloat() * duration).toLong()
         val target = (fullscreenDragBasePosition + delta).coerceIn(0L, duration)
-        if (kotlin.math.abs(target - fullscreenLastDragSeekPosition) > 250L) {
+        if (kotlin.math.abs(target - fullscreenLastDragSeekPosition) > 120L) {
             fullscreenLastDragSeekPosition = target
             exo.seekTo(target)
             updateFullscreenSeekViews()
@@ -1244,7 +1251,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenControlsVisible = true
         val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls") ?: return
-        controls.isClickable = true
+        controls.isClickable = false
         controls.animate().cancel()
         controls.animate().alpha(1f).translationY(0f).setDuration(180L).start()
         scheduleFullscreenControlsHide()

@@ -122,6 +122,12 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var fullscreenHideRunnable: Runnable? = null
     private var fullscreenTouchDownX = 0f
     private var fullscreenTouchDownY = 0f
+    private var fullscreenTouchDownTime = 0L
+    private var fullscreenLastTapTime = 0L
+    private var fullscreenLongPressRunnable: Runnable? = null
+    private var fullscreenLongPressActive = false
+    private var fullscreenLongPressBasePosition = 0L
+    private var fullscreenLastDragSeekPosition = -1L
     private var tab = Tab.BANGUMI
     private var screen = Screen.LIST
     private var loading = false
@@ -1037,12 +1043,12 @@ class BangumiWatchActivity : AppCompatActivity() {
         setBackgroundColor(Color.TRANSPARENT)
         isClickable = true
         setOnTouchListener { _, event -> handleFullscreenTouch(event) }
-        if (!fullscreenControlsVisible) return@apply
 
         val controls = FrameLayout(context).apply {
             tag = "fullscreen_overlay_controls"
-            alpha = 0f
-            translationY = dp(14).toFloat()
+            alpha = if (fullscreenControlsVisible) 1f else 0f
+            translationY = if (fullscreenControlsVisible) 0f else dp(14).toFloat()
+            isClickable = fullscreenControlsVisible
         }
         addView(controls, FrameLayout.LayoutParams(-1, -1))
 
@@ -1127,33 +1133,25 @@ class BangumiWatchActivity : AppCompatActivity() {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(fullscreenIcon("|‹", 19f) { seekFullscreenBy(-10_000) }, LinearLayout.LayoutParams(dp(46), dp(40)))
-                addView(fullscreenIcon(if (preparedPlayer?.isPlaying == true) "Ⅱ" else "▶", 26f) {
-                    if (preparedPlayer == null) detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) }
-                    else if (preparedPlayer.isPlaying) preparedPlayer.pause() else preparedPlayer.play()
-                    showFullscreenControlsTemporarily()
-                    renderFullscreenPlayerOnly()
-                }, LinearLayout.LayoutParams(dp(52), dp(42)).apply { leftMargin = dp(6); rightMargin = dp(6) })
-                addView(fullscreenIcon("›|", 19f) { seekFullscreenBy(10_000) }, LinearLayout.LayoutParams(dp(46), dp(40)))
+                addView(fullscreenIcon("|‹", 19f) { playAdjacentEpisode(detail, -1) }, LinearLayout.LayoutParams(dp(46), dp(40)))
+                val playButton = fullscreenIcon(if (preparedPlayer?.isPlaying == true) "Ⅱ" else "▶", 26f) { toggleFullscreenPlayPause(it as TextView) }
+                addView(playButton, LinearLayout.LayoutParams(dp(52), dp(42)).apply { leftMargin = dp(6); rightMargin = dp(6) })
+                addView(fullscreenIcon("›|", 19f) { playAdjacentEpisode(detail, 1) }, LinearLayout.LayoutParams(dp(46), dp(40)))
                 addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-                addView(fullscreenIcon("☷", 20f) { showEpisodeChooser(detail) }, LinearLayout.LayoutParams(dp(42), dp(40)))
-                addView(fullscreenIcon("♪", 19f) { Toast.makeText(this@BangumiWatchActivity, "音轨", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(40)))
-                addView(fullscreenIcon("CC", 13f) { Toast.makeText(this@BangumiWatchActivity, "字幕", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(40)))
-                addView(fullscreenIcon("☰", 20f) { showEpisodeChooser(detail) }, LinearLayout.LayoutParams(dp(42), dp(40)))
+                addView(fullscreenIcon("☷", 20f) { showEpisodeChooser(detail) }, LinearLayout.LayoutParams(dp(46), dp(40)))
             }, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         }, FrameLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
 
-        controls.animate().alpha(1f).translationY(0f).setDuration(180L).start()
-        scheduleFullscreenControlsHide()
+        if (fullscreenControlsVisible) scheduleFullscreenControlsHide()
     }
 
-    private fun fullscreenIcon(label: String, size: Float, action: () -> Unit) = TextView(this).apply {
+    private fun fullscreenIcon(label: String, size: Float, action: (View) -> Unit) = TextView(this).apply {
         text = label
         textSize = size
         typeface = Typeface.DEFAULT_BOLD
         gravity = Gravity.CENTER
         setTextColor(Color.WHITE)
-        setOnClickListener { action() }
+        setOnClickListener { action(it) }
     }
 
     private fun handleFullscreenTouch(event: MotionEvent): Boolean {
@@ -1161,15 +1159,58 @@ class BangumiWatchActivity : AppCompatActivity() {
             MotionEvent.ACTION_DOWN -> {
                 fullscreenTouchDownX = event.x
                 fullscreenTouchDownY = event.y
+                fullscreenTouchDownTime = System.currentTimeMillis()
+                fullscreenLongPressActive = false
+                fullscreenLastDragSeekPosition = -1L
+                fullscreenLongPressRunnable?.let { fullscreenHandler.removeCallbacks(it) }
+                fullscreenLongPressRunnable = Runnable {
+                    fullscreenLongPressActive = true
+                    fullscreenLongPressBasePosition = player?.currentPosition ?: 0L
+                    showFullscreenControlsTemporarily()
+                }
+                fullscreenHandler.postDelayed(fullscreenLongPressRunnable!!, 420L)
                 return true
             }
-            MotionEvent.ACTION_UP -> {
+            MotionEvent.ACTION_MOVE -> {
+                if (fullscreenLongPressActive) {
+                    val exo = player ?: return true
+                    val duration = exo.duration.takeIf { it > 0 } ?: return true
+                    val width = window.decorView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+                    val delta = ((event.x - fullscreenTouchDownX) / width.toFloat() * duration).toLong()
+                    val target = (fullscreenLongPressBasePosition + delta).coerceIn(0L, duration)
+                    if (kotlin.math.abs(target - fullscreenLastDragSeekPosition) > 350L) {
+                        fullscreenLastDragSeekPosition = target
+                        exo.seekTo(target)
+                    }
+                    return true
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                fullscreenLongPressRunnable?.let { fullscreenHandler.removeCallbacks(it) }
                 val dx = event.x - fullscreenTouchDownX
                 val dy = event.y - fullscreenTouchDownY
-                if (kotlin.math.abs(dx) > dp(58) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f) {
+                val held = System.currentTimeMillis() - fullscreenTouchDownTime
+                if (fullscreenLongPressActive) {
+                    fullscreenLongPressActive = false
+                    showFullscreenControlsTemporarily()
+                    return true
+                }
+                if (kotlin.math.abs(dx) > dp(36) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
                     seekFullscreenBy(if (dx > 0) 10_000L else -10_000L)
-                } else if (kotlin.math.abs(dx) < dp(18) && kotlin.math.abs(dy) < dp(18)) {
-                    toggleFullscreenControls()
+                } else if (kotlin.math.abs(dx) < dp(18) && kotlin.math.abs(dy) < dp(18) && held < 360L) {
+                    val now = System.currentTimeMillis()
+                    if (now - fullscreenLastTapTime < 320L) {
+                        fullscreenLastTapTime = 0L
+                        toggleFullscreenPlayPause(null)
+                    } else {
+                        fullscreenLastTapTime = now
+                        fullscreenHandler.postDelayed({
+                            if (fullscreenLastTapTime == now) {
+                                fullscreenLastTapTime = 0L
+                                toggleFullscreenControls()
+                            }
+                        }, 330L)
+                    }
                 }
                 return true
             }
@@ -1178,29 +1219,31 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun toggleFullscreenControls() {
-        if (fullscreenControlsVisible) hideFullscreenControlsAnimated() else {
-            fullscreenControlsVisible = true
-            renderFullscreenPlayerOnly()
-        }
+        if (fullscreenControlsVisible) hideFullscreenControlsAnimated() else showFullscreenControlsAnimated()
+    }
+
+    private fun showFullscreenControlsAnimated() {
+        fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
+        fullscreenControlsVisible = true
+        val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls") ?: return
+        controls.isClickable = true
+        controls.animate().cancel()
+        controls.animate().alpha(1f).translationY(0f).setDuration(180L).start()
+        scheduleFullscreenControlsHide()
     }
 
     private fun hideFullscreenControlsAnimated() {
         fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
-        val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls")
-        if (controls == null) {
-            fullscreenControlsVisible = false
-            renderFullscreenPlayerOnly()
-            return
-        }
+        val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls") ?: return
+        controls.isClickable = false
+        controls.animate().cancel()
         controls.animate().alpha(0f).translationY(dp(14).toFloat()).setDuration(220L).withEndAction {
             fullscreenControlsVisible = false
-            renderFullscreenPlayerOnly()
         }.start()
     }
 
     private fun showFullscreenControlsTemporarily() {
-        fullscreenControlsVisible = true
-        scheduleFullscreenControlsHide()
+        if (!fullscreenControlsVisible) showFullscreenControlsAnimated() else scheduleFullscreenControlsHide()
     }
 
     private fun scheduleFullscreenControlsHide() {
@@ -1211,12 +1254,30 @@ class BangumiWatchActivity : AppCompatActivity() {
         fullscreenHandler.postDelayed(fullscreenHideRunnable!!, 3000L)
     }
 
+    private fun toggleFullscreenPlayPause(button: TextView?) {
+        val exo = player ?: return
+        if (exo.isPlaying) exo.pause() else exo.play()
+        button?.text = if (exo.isPlaying) "Ⅱ" else "▶"
+        showFullscreenControlsTemporarily()
+    }
+
+    private fun playAdjacentEpisode(detail: AnimeDetail, direction: Int) {
+        val episodes = detail.episodes
+        if (episodes.isEmpty()) return
+        val current = episodes.indexOfFirst { isCurrentEpisode(it) }.let { if (it >= 0) it else 0 }
+        val next = (current + direction).coerceIn(0, episodes.lastIndex)
+        if (next == current) {
+            Toast.makeText(this, if (direction < 0) "已经是上一集" else "已经是下一集", Toast.LENGTH_SHORT).show()
+            return
+        }
+        playEpisode(detail.item, episodes[next])
+    }
+
     private fun seekFullscreenBy(deltaMs: Long) {
         val exo = player ?: return
         val duration = exo.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
         exo.seekTo((exo.currentPosition + deltaMs).coerceIn(0L, duration))
         showFullscreenControlsTemporarily()
-        renderFullscreenPlayerOnly()
     }
 
     private fun cycleFullscreenSpeedUp() { adjustFullscreenSpeed(1) }
@@ -1262,7 +1323,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         fullscreenTimeTicker?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenTimeTicker = object : Runnable {
             override fun run() {
-                if (!isFullscreenPlayer || !fullscreenControlsVisible) return
+                if (!isFullscreenPlayer) return
                 timeText.text = fullscreenTimeText(exo)
                 seekBar.progress = fullscreenProgress(exo)
                 fullscreenHandler.postDelayed(this, 500L)
@@ -1736,9 +1797,12 @@ if (showBack) navigateBack()
         isFullscreenPlayer = false
         fullscreenTimeTicker?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
+        fullscreenLongPressRunnable?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenTimeTicker = null
         fullscreenHideRunnable = null
+        fullscreenLongPressRunnable = null
         fullscreenControlsVisible = true
+        fullscreenLongPressActive = false
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         val insetsController = window.insetsController
         insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())

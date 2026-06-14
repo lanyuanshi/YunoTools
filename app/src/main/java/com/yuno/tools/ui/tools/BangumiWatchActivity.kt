@@ -127,6 +127,9 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var fullscreenDragSeeking = false
     private var fullscreenDragBasePosition = 0L
     private var fullscreenLastDragSeekPosition = -1L
+    private var fullscreenControlsLocked = false
+    private var fullscreenEnhanceEnabled = false
+    private var fullscreenScaleModeIndex = 0
     private var tab = Tab.BANGUMI
     private var screen = Screen.LIST
     private var loading = false
@@ -1054,47 +1057,44 @@ class BangumiWatchActivity : AppCompatActivity() {
         }
         addView(controls, FrameLayout.LayoutParams(-1, -1))
 
-        controls.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(8), dp(16), 0)
-            addView(fullscreenIcon("‹", 30f) { exitFullscreenPlayer() }, LinearLayout.LayoutParams(dp(44), dp(44)))
-            addView(TextView(context).apply {
-                text = detail.item.title.take(10).ifBlank { "YunoTV" }
-                textSize = 20f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                maxLines = 1
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(fullscreenIcon("HW+", 13f) { Toast.makeText(this@BangumiWatchActivity, "画质增强", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(48), dp(38)))
-            addView(fullscreenIcon("▣", 20f) { Toast.makeText(this@BangumiWatchActivity, "投屏/窗口", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(38)))
-            addView(fullscreenIcon("□", 21f) { Toast.makeText(this@BangumiWatchActivity, "画面比例", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(38)))
-            addView(fullscreenIcon("⋮", 24f) { Toast.makeText(this@BangumiWatchActivity, "更多", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(34), dp(38)))
-        }, FrameLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        if (!fullscreenControlsLocked) {
+            controls.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(8), dp(16), 0)
+                addView(fullscreenIcon("‹", 30f) { exitFullscreenPlayer() }, LinearLayout.LayoutParams(dp(44), dp(44)))
+                addView(TextView(context).apply {
+                    text = detail.item.title.take(10).ifBlank { "YunoTV" }
+                    textSize = 20f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.WHITE)
+                    maxLines = 1
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(fullscreenIcon(if (fullscreenEnhanceEnabled) "HW✓" else "HW+", 13f) { toggleFullscreenEnhance() }, LinearLayout.LayoutParams(dp(50), dp(38)))
+                addView(fullscreenIcon(fullscreenScaleLabel(), 15f) { cycleFullscreenScaleMode() }, LinearLayout.LayoutParams(dp(54), dp(38)))
+                addView(fullscreenIcon("⋮", 24f) { Toast.makeText(this@BangumiWatchActivity, "更多", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(34), dp(38)))
+            }, FrameLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
 
-        controls.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            addView(fullscreenIcon("▣", 18f) { Toast.makeText(this@BangumiWatchActivity, "截图", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(42)))
-            addView(fullscreenIcon("▣", 17f) { Toast.makeText(this@BangumiWatchActivity, "锁定", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { topMargin = dp(10) })
-        }, FrameLayout.LayoutParams(dp(58), dp(100), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
-
-        controls.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(4))
-            setBackgroundColor(Color.parseColor("#5A0F1118"))
-            addView(fullscreenIcon("+", 24f) { cycleFullscreenSpeedUp() }, LinearLayout.LayoutParams(dp(42), dp(40)))
-            addView(TextView(context).apply {
-                text = "${fullscreenSpeedText(preparedPlayer)}x"
-                textSize = 13f
+            controls.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-            }, LinearLayout.LayoutParams(dp(42), dp(30)))
-            addView(fullscreenIcon("−", 24f) { cycleFullscreenSpeedDown() }, LinearLayout.LayoutParams(dp(42), dp(40)))
-        }, FrameLayout.LayoutParams(dp(48), dp(118), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(16) })
+                setPadding(0, dp(4), 0, dp(4))
+                setBackgroundColor(Color.parseColor("#5A0F1118"))
+                addView(fullscreenIcon("+", 24f) { cycleFullscreenSpeedUp() }, LinearLayout.LayoutParams(dp(42), dp(40)))
+                addView(TextView(context).apply {
+                    text = "${fullscreenSpeedText(preparedPlayer)}x"
+                    textSize = 13f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.WHITE)
+                }, LinearLayout.LayoutParams(dp(42), dp(30)))
+                addView(fullscreenIcon("−", 24f) { cycleFullscreenSpeedDown() }, LinearLayout.LayoutParams(dp(42), dp(40)))
+            }, FrameLayout.LayoutParams(dp(48), dp(118), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(16) })
+        }
 
-        controls.addView(LinearLayout(context).apply {
+        // 左侧只保留锁控件；锁住后也显示它，用于解锁。
+        controls.addView(fullscreenIcon(if (fullscreenControlsLocked) "🔒" else "🔓", 22f) { toggleFullscreenLock() }, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
+
+        if (!fullscreenControlsLocked) controls.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), 0, dp(18), dp(12))
             addView(TextView(context).apply {
@@ -1159,6 +1159,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun handleFullscreenTouch(event: MotionEvent): Boolean {
+        if (fullscreenControlsLocked) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 fullscreenTouchDownX = event.x
@@ -1243,11 +1244,39 @@ class BangumiWatchActivity : AppCompatActivity() {
         seekBar?.progress = fullscreenProgress(player)
     }
 
+    private fun toggleFullscreenLock() {
+        fullscreenControlsLocked = !fullscreenControlsLocked
+        fullscreenControlsVisible = true
+        fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
+        Toast.makeText(this, if (fullscreenControlsLocked) "已锁定控件" else "已解锁控件", Toast.LENGTH_SHORT).show()
+        renderFullscreenPlayerOnly()
+    }
+
+    private fun toggleFullscreenEnhance() {
+        fullscreenEnhanceEnabled = !fullscreenEnhanceEnabled
+        window.decorView.alpha = if (fullscreenEnhanceEnabled) 0.98f else 1f
+        Toast.makeText(this, if (fullscreenEnhanceEnabled) "画质增强已开启" else "画质增强已关闭", Toast.LENGTH_SHORT).show()
+        renderFullscreenPlayerOnly()
+    }
+
+    private fun fullscreenScaleLabel(): String = when (fullscreenScaleModeIndex % 3) {
+        0 -> "适应"
+        1 -> "填充"
+        else -> "原始"
+    }
+
+    private fun cycleFullscreenScaleMode() {
+        fullscreenScaleModeIndex = (fullscreenScaleModeIndex + 1) % 3
+        Toast.makeText(this, "画面大小：${fullscreenScaleLabel()}", Toast.LENGTH_SHORT).show()
+        renderFullscreenPlayerOnly()
+    }
+
     private fun toggleFullscreenControls() {
         if (fullscreenControlsVisible) hideFullscreenControlsAnimated() else showFullscreenControlsAnimated()
     }
 
     private fun showFullscreenControlsAnimated() {
+        if (fullscreenControlsLocked) return
         fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenControlsVisible = true
         val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls") ?: return
@@ -1268,6 +1297,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun showFullscreenControlsTemporarily() {
+        if (fullscreenControlsLocked) return
         if (!fullscreenControlsVisible) showFullscreenControlsAnimated() else scheduleFullscreenControlsHide()
     }
 
@@ -1826,6 +1856,8 @@ if (showBack) navigateBack()
         fullscreenHideRunnable = null
         fullscreenControlsVisible = true
         fullscreenDragSeeking = false
+        fullscreenControlsLocked = false
+        window.decorView.alpha = 1f
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         val insetsController = window.insetsController
         insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())

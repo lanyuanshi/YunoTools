@@ -149,6 +149,7 @@
 
             <!-- 图像处理功能区 -->
             <GridLayout
+                android:id="@+id/gridImageTools"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:columnCount="3">
@@ -291,6 +292,7 @@
 
             <!-- 媒体处理功能区 -->
             <GridLayout
+                android:id="@+id/gridMediaTools"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:columnCount="3">

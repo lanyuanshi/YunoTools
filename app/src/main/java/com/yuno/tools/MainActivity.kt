@@ -8,6 +8,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -21,6 +22,7 @@ import android.provider.MediaStore
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.DragEvent
 import android.view.View
 import android.view.animation.OvershootInterpolator
 import android.view.animation.LinearInterpolator
@@ -88,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         private const val MUSIC_PREFS = "yuno_music_records"
         private const val MUSIC_FAVORITES_KEY = "online_favorites"
         private const val MUSIC_DOWNLOADS_KEY = "online_downloads"
+        private const val GRID_ORDER_PREFS = "yuno_grid_order"
     }
     private enum class MainTab { HOME, PROFILE }
     private enum class MusicPanelTab { LOCAL, FAVORITE, ONLINE }
@@ -136,6 +139,7 @@ class MainActivity : AppCompatActivity() {
 
         bindHomeCards()
         setupMoreToolsCollapse()
+        setupHomeGridPersonalization()
         bindProfilePage()
         bindBottomNav()
         showHome(animate = false)
@@ -211,6 +215,93 @@ class MainActivity : AppCompatActivity() {
                 }.start()
             }
         }
+    }
+
+
+    private fun setupHomeGridPersonalization() {
+        setupGridDragSort("image", findViewById(R.id.gridImageTools))
+        setupGridDragSort("media", findViewById(R.id.gridMediaTools))
+        setupGridDragSort("more", findViewById(R.id.gridMoreTools))
+    }
+
+    private fun setupGridDragSort(key: String, grid: GridLayout) {
+        restoreGridOrder(key, grid)
+        for (i in 0 until grid.childCount) {
+            val child = grid.getChildAt(i)
+            child.tag = child.id
+            child.setOnLongClickListener {
+                it.animate().scaleX(1.08f).scaleY(1.08f).alpha(0.82f).setDuration(120L).start()
+                val label = resources.getResourceEntryName(it.id)
+                val data = ClipData.newPlainText("grid_card", label)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    it.startDragAndDrop(data, View.DragShadowBuilder(it), it, 0)
+                } else {
+                    @Suppress("DEPRECATION")
+                    it.startDrag(data, View.DragShadowBuilder(it), it, 0)
+                }
+                Toast.makeText(this, "拖动到目标位置即可交换", Toast.LENGTH_SHORT).show()
+                true
+            }
+            child.setOnDragListener { target, event ->
+                val dragged = event.localState as? View ?: return@setOnDragListener true
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_ENTERED -> {
+                        if (target !== dragged) target.animate().scaleX(0.96f).scaleY(0.96f).setDuration(90L).start()
+                    }
+                    DragEvent.ACTION_DRAG_EXITED -> {
+                        target.animate().scaleX(1f).scaleY(1f).setDuration(90L).start()
+                    }
+                    DragEvent.ACTION_DROP -> {
+                        if (target !== dragged && target.parent === grid && dragged.parent === grid) {
+                            swapGridChildren(grid, dragged, target)
+                            saveGridOrder(key, grid)
+                        }
+                    }
+                    DragEvent.ACTION_DRAG_ENDED -> {
+                        dragged.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120L).start()
+                        for (j in 0 until grid.childCount) grid.getChildAt(j).animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120L).start()
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    private fun swapGridChildren(grid: GridLayout, first: View, second: View) {
+        val firstIndex = grid.indexOfChild(first)
+        val secondIndex = grid.indexOfChild(second)
+        if (firstIndex < 0 || secondIndex < 0 || firstIndex == secondIndex) return
+        grid.removeView(first)
+        grid.removeView(second)
+        if (firstIndex < secondIndex) {
+            grid.addView(second, firstIndex)
+            grid.addView(first, secondIndex)
+        } else {
+            grid.addView(first, secondIndex)
+            grid.addView(second, firstIndex)
+        }
+    }
+
+    private fun saveGridOrder(key: String, grid: GridLayout) {
+        val order = (0 until grid.childCount).joinToString(",") { resources.getResourceEntryName(grid.getChildAt(it).id) }
+        getSharedPreferences(GRID_ORDER_PREFS, Context.MODE_PRIVATE).edit().putString(key, order).apply()
+        Toast.makeText(this, "排序已保存", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun restoreGridOrder(key: String, grid: GridLayout) {
+        val order = getSharedPreferences(GRID_ORDER_PREFS, Context.MODE_PRIVATE).getString(key, "").orEmpty()
+        if (order.isBlank()) return
+        val wanted = order.split(",").filter { it.isNotBlank() }
+        val views = mutableMapOf<String, View>()
+        for (i in 0 until grid.childCount) {
+            val child = grid.getChildAt(i)
+            views[resources.getResourceEntryName(child.id)] = child
+        }
+        val sorted = mutableListOf<View>()
+        wanted.forEach { views.remove(it)?.let(sorted::add) }
+        sorted.addAll(views.values)
+        grid.removeAllViews()
+        sorted.forEach { grid.addView(it) }
     }
 
     private fun bindProfilePage() {

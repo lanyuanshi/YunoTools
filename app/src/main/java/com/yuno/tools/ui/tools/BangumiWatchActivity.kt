@@ -408,19 +408,9 @@ class BangumiWatchActivity : AppCompatActivity() {
             emptyCard("暂无$title", if (key == "history") "播放过的剧集会显示在这里。" else "加入下载记录的剧集会显示在这里。")
             return
         }
-        records.forEachIndexed { index, record ->
-            val actionText = if (key == "history") "播放" else "打开"
-            content.addView(recordCard(record, actionText) {
-                if (key == "history") openRecordInApp(record) else openUrl(record.optString("url"))
-            }.also { card ->
-                (card as? MaterialCardView)?.setOnLongClickListener {
-                    removeRecordAt(key, index)
-                    true
-                }
-            })
-        }
+        recordGrid(records, key)
         content.addView(TextView(this).apply {
-            text = "长按记录可删除单条"
+            text = "点击卡片${if (key == "history") "继续播放" else "打开记录"} · 长按删除单条"
             textSize = 12f
             setTextColor(Color.parseColor("#7A7F89"))
             setPadding(dp(4), dp(8), 0, 0)
@@ -1920,30 +1910,63 @@ if (showBack) navigateBack()
         }
     }
 
-    private fun settingCard(title: String, sub: String, action: () -> Unit) = card().apply {
-        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)) }
-        row.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(context).apply { text = title; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")) })
-            addView(TextView(context).apply { text = sub; textSize = 12f; setTextColor(Color.parseColor("#7A7F89")) })
+    private fun settingCard(title: String, sub: String, action: () -> Unit) = MaterialCardView(this).apply {
+        radius = dp(18).toFloat()
+        cardElevation = 0f
+        strokeWidth = 1
+        strokeColor = Color.parseColor("#E8EAF0")
+        setCardBackgroundColor(Color.WHITE)
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, dp(10)) }
+        setOnClickListener { action() }
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(14), dp(14), dp(14))
+            addView(TextView(context).apply {
+                text = when {
+                    title.contains("历史") -> "🕘"
+                    title.contains("下载") -> "⬇️"
+                    else -> "⚙️"
+                }
+                textSize = 22f
+                gravity = Gravity.CENTER
+                setBackgroundColor(Color.parseColor("#F2F4F8"))
+            }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { rightMargin = dp(12) })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(context).apply { text = title; textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#111827")) })
+                addView(TextView(context).apply { text = sub; textSize = 12f; setTextColor(Color.parseColor("#8A8F98")); maxLines = 1 })
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(context).apply { text = "›"; textSize = 28f; setTextColor(Color.parseColor("#C3C7D0")); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(28), dp(42)))
         })
-        row.addView(primaryButton("执行", action))
-        addView(row)
     }
 
-    private fun recordCard(obj: JSONObject, actionText: String, action: () -> Unit) = card().apply {
-        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)) }
-        row.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            addView(TextView(context).apply { text = obj.optString("title"); textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#202124")); maxLines = 1 })
-            addView(TextView(context).apply { text = listOf(obj.optString("source"), obj.optString("episodeSource"), obj.optString("episode"), obj.optString("time")).filter { it.isNotBlank() }.joinToString(" · "); textSize = 12f; setTextColor(Color.parseColor("#7A7F89")); maxLines = 2 })
-            val sub = obj.optString("sub")
-            if (sub.isNotBlank()) addView(TextView(context).apply { text = sub; textSize = 12f; setTextColor(Color.parseColor("#4D5562")); maxLines = 2 })
-        })
-        row.addView(primaryButton(actionText, action))
-        addView(row)
+    private fun recordGrid(records: List<JSONObject>, key: String) {
+        val grid = GridLayout(this).apply { columnCount = 3 }
+        records.forEachIndexed { index, record ->
+            grid.addView(recordAnimeCard(record, key).apply {
+                setOnLongClickListener {
+                    removeRecordAt(key, index)
+                    true
+                }
+            })
+        }
+        content.addView(grid)
+    }
+
+    private fun recordAnimeCard(obj: JSONObject, key: String): View {
+        val item = AnimeItem(
+            obj.optString("title"),
+            obj.optString("episode").ifBlank { obj.optString("status") },
+            obj.optString("cover"),
+            obj.optString("detailUrl"),
+            obj.optString("source")
+        )
+        return animeCard(item).apply {
+            setOnClickListener {
+                if (key == "history") openRecordInApp(obj) else openUrl(obj.optString("url"))
+            }
+        }
     }
 
     private fun addHistory(item: AnimeItem, ep: EpisodeItem?) {

@@ -124,9 +124,8 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var fullscreenTouchDownY = 0f
     private var fullscreenTouchDownTime = 0L
     private var fullscreenLastTapTime = 0L
-    private var fullscreenLongPressRunnable: Runnable? = null
-    private var fullscreenLongPressActive = false
-    private var fullscreenLongPressBasePosition = 0L
+    private var fullscreenDragSeeking = false
+    private var fullscreenDragBasePosition = 0L
     private var fullscreenLastDragSeekPosition = -1L
     private var tab = Tab.BANGUMI
     private var screen = Screen.LIST
@@ -1106,11 +1105,13 @@ class BangumiWatchActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 val timeText = TextView(context).apply {
+                    tag = "fullscreen_time_text"
                     text = fullscreenTimeText(preparedPlayer)
                     textSize = 12f
                     setTextColor(Color.WHITE)
                 }
                 val seek = SeekBar(context).apply {
+                    tag = "fullscreen_seek_bar"
                     max = 1000
                     progress = fullscreenProgress(preparedPlayer)
                     setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -1160,42 +1161,37 @@ class BangumiWatchActivity : AppCompatActivity() {
                 fullscreenTouchDownX = event.x
                 fullscreenTouchDownY = event.y
                 fullscreenTouchDownTime = System.currentTimeMillis()
-                fullscreenLongPressActive = false
+                fullscreenDragSeeking = false
+                fullscreenDragBasePosition = player?.currentPosition ?: 0L
                 fullscreenLastDragSeekPosition = -1L
-                fullscreenLongPressRunnable?.let { fullscreenHandler.removeCallbacks(it) }
-                fullscreenLongPressRunnable = Runnable {
-                    fullscreenLongPressActive = true
-                    fullscreenLongPressBasePosition = player?.currentPosition ?: 0L
-                    showFullscreenControlsTemporarily()
-                }
-                fullscreenHandler.postDelayed(fullscreenLongPressRunnable!!, 420L)
+                fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                if (fullscreenLongPressActive) {
-                    val exo = player ?: return true
-                    val duration = exo.duration.takeIf { it > 0 } ?: return true
-                    val width = window.decorView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-                    val delta = ((event.x - fullscreenTouchDownX) / width.toFloat() * duration).toLong()
-                    val target = (fullscreenLongPressBasePosition + delta).coerceIn(0L, duration)
-                    if (kotlin.math.abs(target - fullscreenLastDragSeekPosition) > 350L) {
-                        fullscreenLastDragSeekPosition = target
-                        exo.seekTo(target)
-                    }
+                val dx = event.x - fullscreenTouchDownX
+                val dy = event.y - fullscreenTouchDownY
+                if (!fullscreenDragSeeking && kotlin.math.abs(dx) > dp(18) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.15f) {
+                    fullscreenDragSeeking = true
+                    showFullscreenControlsTemporarily()
+                }
+                if (fullscreenDragSeeking) {
+                    seekFullscreenByDrag(dx)
                     return true
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                fullscreenLongPressRunnable?.let { fullscreenHandler.removeCallbacks(it) }
                 val dx = event.x - fullscreenTouchDownX
                 val dy = event.y - fullscreenTouchDownY
                 val held = System.currentTimeMillis() - fullscreenTouchDownTime
-                if (fullscreenLongPressActive) {
-                    fullscreenLongPressActive = false
+                if (fullscreenDragSeeking) {
+                    // 松手即完成本次进度拖动，不再额外进入任何模式
+                    seekFullscreenByDrag(dx)
+                    fullscreenDragSeeking = false
                     showFullscreenControlsTemporarily()
                     return true
                 }
-                if (kotlin.math.abs(dx) > dp(36) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
+                if (kotlin.math.abs(dx) > dp(28) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
+                    // 极短轻扫：没有形成连续拖动时，按 10 秒快进/后退处理
                     seekFullscreenBy(if (dx > 0) 10_000L else -10_000L)
                 } else if (kotlin.math.abs(dx) < dp(18) && kotlin.math.abs(dy) < dp(18) && held < 360L) {
                     val now = System.currentTimeMillis()
@@ -1216,6 +1212,28 @@ class BangumiWatchActivity : AppCompatActivity() {
             }
         }
         return true
+    }
+
+    private fun seekFullscreenByDrag(dx: Float) {
+        val exo = player ?: return
+        val duration = exo.duration.takeIf { it > 0 } ?: return
+        val width = window.decorView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        // 从按下点开始，横向拖完整屏约等于拖完整个进度；拖动过程中进度条实时跟手
+        val delta = (dx / width.toFloat() * duration).toLong()
+        val target = (fullscreenDragBasePosition + delta).coerceIn(0L, duration)
+        if (kotlin.math.abs(target - fullscreenLastDragSeekPosition) > 250L) {
+            fullscreenLastDragSeekPosition = target
+            exo.seekTo(target)
+            updateFullscreenSeekViews()
+        }
+    }
+
+    private fun updateFullscreenSeekViews() {
+        val rootView = window.decorView
+        val timeText = rootView.findViewWithTag<TextView>("fullscreen_time_text")
+        val seekBar = rootView.findViewWithTag<SeekBar>("fullscreen_seek_bar")
+        timeText?.text = fullscreenTimeText(player)
+        seekBar?.progress = fullscreenProgress(player)
     }
 
     private fun toggleFullscreenControls() {
@@ -1797,12 +1815,10 @@ if (showBack) navigateBack()
         isFullscreenPlayer = false
         fullscreenTimeTicker?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
-        fullscreenLongPressRunnable?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenTimeTicker = null
         fullscreenHideRunnable = null
-        fullscreenLongPressRunnable = null
         fullscreenControlsVisible = true
-        fullscreenLongPressActive = false
+        fullscreenDragSeeking = false
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         val insetsController = window.insetsController
         insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())

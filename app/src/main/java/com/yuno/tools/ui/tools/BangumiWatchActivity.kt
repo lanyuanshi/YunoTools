@@ -24,6 +24,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import android.webkit.WebChromeClient
@@ -119,6 +120,8 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var fullscreenTimeTicker: Runnable? = null
     private var fullscreenControlsVisible = true
     private var fullscreenHideRunnable: Runnable? = null
+    private var fullscreenTouchDownX = 0f
+    private var fullscreenTouchDownY = 0f
     private var tab = Tab.BANGUMI
     private var screen = Screen.LIST
     private var loading = false
@@ -1032,55 +1035,63 @@ class BangumiWatchActivity : AppCompatActivity() {
     private fun fullscreenPlayerOverlay(detail: AnimeDetail, active: EpisodeItem?, preparedPlayer: ExoPlayer?) = FrameLayout(this).apply {
         tag = "fullscreen_overlay"
         setBackgroundColor(Color.TRANSPARENT)
-        setOnClickListener { toggleFullscreenControls() }
+        isClickable = true
+        setOnTouchListener { _, event -> handleFullscreenTouch(event) }
         if (!fullscreenControlsVisible) return@apply
 
-        addView(LinearLayout(context).apply {
+        val controls = FrameLayout(context).apply {
+            tag = "fullscreen_overlay_controls"
+            alpha = 0f
+            translationY = dp(14).toFloat()
+        }
+        addView(controls, FrameLayout.LayoutParams(-1, -1))
+
+        controls.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(22), dp(14), dp(22), 0)
-            addView(fullscreenIcon("‹", 40f) { exitFullscreenPlayer() }, LinearLayout.LayoutParams(dp(58), dp(58)))
+            setPadding(dp(16), dp(8), dp(16), 0)
+            addView(fullscreenIcon("‹", 30f) { exitFullscreenPlayer() }, LinearLayout.LayoutParams(dp(44), dp(44)))
             addView(TextView(context).apply {
-                text = detail.item.title.take(8).ifBlank { "YunoTV" }
-                textSize = 28f
+                text = detail.item.title.take(10).ifBlank { "YunoTV" }
+                textSize = 20f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
                 maxLines = 1
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(fullscreenIcon("HW+", 18f) { Toast.makeText(this@BangumiWatchActivity, "画质增强", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(70), dp(52)))
-            addView(fullscreenIcon("▣", 28f) { Toast.makeText(this@BangumiWatchActivity, "投屏/窗口", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(58), dp(52)))
-            addView(fullscreenIcon("□", 30f) { Toast.makeText(this@BangumiWatchActivity, "画面比例", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(58), dp(52)))
-            addView(fullscreenIcon("⋮", 32f) { Toast.makeText(this@BangumiWatchActivity, "更多", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(44), dp(52)))
+            addView(fullscreenIcon("HW+", 13f) { Toast.makeText(this@BangumiWatchActivity, "画质增强", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(48), dp(38)))
+            addView(fullscreenIcon("▣", 20f) { Toast.makeText(this@BangumiWatchActivity, "投屏/窗口", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(38)))
+            addView(fullscreenIcon("□", 21f) { Toast.makeText(this@BangumiWatchActivity, "画面比例", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(38)))
+            addView(fullscreenIcon("⋮", 24f) { Toast.makeText(this@BangumiWatchActivity, "更多", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(34), dp(38)))
         }, FrameLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
 
-        addView(LinearLayout(context).apply {
+        controls.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            addView(fullscreenIcon("▣", 26f) { Toast.makeText(this@BangumiWatchActivity, "截图", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(56), dp(56)))
-            addView(fullscreenIcon("▣", 24f) { Toast.makeText(this@BangumiWatchActivity, "锁定", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(56), dp(56)).apply { topMargin = dp(18) })
-        }, FrameLayout.LayoutParams(dp(90), dp(180), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(20) })
+            addView(fullscreenIcon("▣", 18f) { Toast.makeText(this@BangumiWatchActivity, "截图", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(42)))
+            addView(fullscreenIcon("▣", 17f) { Toast.makeText(this@BangumiWatchActivity, "锁定", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { topMargin = dp(10) })
+        }, FrameLayout.LayoutParams(dp(58), dp(100), Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = dp(16) })
 
-        addView(LinearLayout(context).apply {
+        controls.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, dp(8))
-            setBackgroundColor(Color.parseColor("#660F1118"))
-            addView(fullscreenIcon("+", 32f) { cycleFullscreenSpeedUp() }, LinearLayout.LayoutParams(dp(58), dp(58)))
+            setPadding(0, dp(4), 0, dp(4))
+            setBackgroundColor(Color.parseColor("#5A0F1118"))
+            addView(fullscreenIcon("+", 24f) { cycleFullscreenSpeedUp() }, LinearLayout.LayoutParams(dp(42), dp(40)))
             addView(TextView(context).apply {
                 text = "${fullscreenSpeedText(preparedPlayer)}x"
-                textSize = 18f
+                textSize = 13f
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
-            }, LinearLayout.LayoutParams(dp(58), dp(44)))
-            addView(fullscreenIcon("−", 32f) { cycleFullscreenSpeedDown() }, LinearLayout.LayoutParams(dp(58), dp(58)))
-        }, FrameLayout.LayoutParams(dp(64), dp(170), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(24) })
+            }, LinearLayout.LayoutParams(dp(42), dp(30)))
+            addView(fullscreenIcon("−", 24f) { cycleFullscreenSpeedDown() }, LinearLayout.LayoutParams(dp(42), dp(40)))
+        }, FrameLayout.LayoutParams(dp(48), dp(118), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dp(16) })
 
-        addView(LinearLayout(context).apply {
+        controls.addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), 0, dp(24), dp(22))
+            setPadding(dp(18), 0, dp(18), dp(12))
             addView(TextView(context).apply {
                 text = active?.name ?: "正在播放"
-                textSize = 28f
+                textSize = 19f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
                 maxLines = 1
@@ -1090,33 +1101,49 @@ class BangumiWatchActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 val timeText = TextView(context).apply {
                     text = fullscreenTimeText(preparedPlayer)
-                    textSize = 14f
+                    textSize = 12f
                     setTextColor(Color.WHITE)
                 }
-                addView(timeText, LinearLayout.LayoutParams(dp(145), LinearLayout.LayoutParams.WRAP_CONTENT))
-                addView(View(context).apply { setBackgroundColor(Color.parseColor("#DDE6EBF2")) }, LinearLayout.LayoutParams(0, dp(4), 1f).apply { leftMargin = dp(10); rightMargin = dp(10) })
-                startFullscreenTicker(timeText, preparedPlayer)
-            }, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
+                val seek = SeekBar(context).apply {
+                    max = 1000
+                    progress = fullscreenProgress(preparedPlayer)
+                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                            val duration = preparedPlayer?.duration?.takeIf { it > 0 } ?: return
+                            if (fromUser) {
+                                preparedPlayer.seekTo(duration * progress / 1000L)
+                                timeText.text = fullscreenTimeText(preparedPlayer)
+                                showFullscreenControlsTemporarily()
+                            }
+                        }
+                        override fun onStartTrackingTouch(bar: SeekBar?) { fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) } }
+                        override fun onStopTrackingTouch(bar: SeekBar?) { showFullscreenControlsTemporarily() }
+                    })
+                }
+                addView(timeText, LinearLayout.LayoutParams(dp(122), LinearLayout.LayoutParams.WRAP_CONTENT))
+                addView(seek, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(6); rightMargin = dp(6) })
+                startFullscreenTicker(timeText, seek, preparedPlayer)
+            }, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(14), 0, 0)
-                addView(fullscreenIcon("|‹", 26f) { seekFullscreenBy(-10_000) }, LinearLayout.LayoutParams(dp(64), dp(54)))
-                addView(fullscreenIcon(if (preparedPlayer?.isPlaying == true) "Ⅱ" else "▶", 34f) {
+                addView(fullscreenIcon("|‹", 19f) { seekFullscreenBy(-10_000) }, LinearLayout.LayoutParams(dp(46), dp(40)))
+                addView(fullscreenIcon(if (preparedPlayer?.isPlaying == true) "Ⅱ" else "▶", 26f) {
                     if (preparedPlayer == null) detail.episodes.firstOrNull()?.let { playEpisode(detail.item, it) }
                     else if (preparedPlayer.isPlaying) preparedPlayer.pause() else preparedPlayer.play()
                     showFullscreenControlsTemporarily()
                     renderFullscreenPlayerOnly()
-                }, LinearLayout.LayoutParams(dp(70), dp(58)).apply { leftMargin = dp(10); rightMargin = dp(10) })
-                addView(fullscreenIcon("›|", 26f) { seekFullscreenBy(10_000) }, LinearLayout.LayoutParams(dp(64), dp(54)))
+                }, LinearLayout.LayoutParams(dp(52), dp(42)).apply { leftMargin = dp(6); rightMargin = dp(6) })
+                addView(fullscreenIcon("›|", 19f) { seekFullscreenBy(10_000) }, LinearLayout.LayoutParams(dp(46), dp(40)))
                 addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-                addView(fullscreenIcon("☷", 26f) { showEpisodeChooser(detail) }, LinearLayout.LayoutParams(dp(58), dp(54)))
-                addView(fullscreenIcon("♪", 26f) { Toast.makeText(this@BangumiWatchActivity, "音轨", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(58), dp(54)))
-                addView(fullscreenIcon("CC", 16f) { Toast.makeText(this@BangumiWatchActivity, "字幕", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(58), dp(54)))
-                addView(fullscreenIcon("☰▶", 22f) { showEpisodeChooser(detail) }, LinearLayout.LayoutParams(dp(64), dp(54)))
-            })
+                addView(fullscreenIcon("☷", 20f) { showEpisodeChooser(detail) }, LinearLayout.LayoutParams(dp(42), dp(40)))
+                addView(fullscreenIcon("♪", 19f) { Toast.makeText(this@BangumiWatchActivity, "音轨", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(40)))
+                addView(fullscreenIcon("CC", 13f) { Toast.makeText(this@BangumiWatchActivity, "字幕", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(40)))
+                addView(fullscreenIcon("☰", 20f) { showEpisodeChooser(detail) }, LinearLayout.LayoutParams(dp(42), dp(40)))
+            }, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         }, FrameLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
 
+        controls.animate().alpha(1f).translationY(0f).setDuration(180L).start()
         scheduleFullscreenControlsHide()
     }
 
@@ -1129,9 +1156,46 @@ class BangumiWatchActivity : AppCompatActivity() {
         setOnClickListener { action() }
     }
 
+    private fun handleFullscreenTouch(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                fullscreenTouchDownX = event.x
+                fullscreenTouchDownY = event.y
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                val dx = event.x - fullscreenTouchDownX
+                val dy = event.y - fullscreenTouchDownY
+                if (kotlin.math.abs(dx) > dp(58) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.35f) {
+                    seekFullscreenBy(if (dx > 0) 10_000L else -10_000L)
+                } else if (kotlin.math.abs(dx) < dp(18) && kotlin.math.abs(dy) < dp(18)) {
+                    toggleFullscreenControls()
+                }
+                return true
+            }
+        }
+        return true
+    }
+
     private fun toggleFullscreenControls() {
-        fullscreenControlsVisible = !fullscreenControlsVisible
-        renderFullscreenPlayerOnly()
+        if (fullscreenControlsVisible) hideFullscreenControlsAnimated() else {
+            fullscreenControlsVisible = true
+            renderFullscreenPlayerOnly()
+        }
+    }
+
+    private fun hideFullscreenControlsAnimated() {
+        fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
+        val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls")
+        if (controls == null) {
+            fullscreenControlsVisible = false
+            renderFullscreenPlayerOnly()
+            return
+        }
+        controls.animate().alpha(0f).translationY(dp(14).toFloat()).setDuration(220L).withEndAction {
+            fullscreenControlsVisible = false
+            renderFullscreenPlayerOnly()
+        }.start()
     }
 
     private fun showFullscreenControlsTemporarily() {
@@ -1142,10 +1206,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private fun scheduleFullscreenControlsHide() {
         fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenHideRunnable = Runnable {
-            if (isFullscreenPlayer && fullscreenControlsVisible && player?.isPlaying == true) {
-                fullscreenControlsVisible = false
-                renderFullscreenPlayerOnly()
-            }
+            if (isFullscreenPlayer && fullscreenControlsVisible && player?.isPlaying == true) hideFullscreenControlsAnimated()
         }
         fullscreenHandler.postDelayed(fullscreenHideRunnable!!, 3000L)
     }
@@ -1184,6 +1245,11 @@ class BangumiWatchActivity : AppCompatActivity() {
         return "${formatFullscreenTime(position)} / ${formatFullscreenTime(duration)}"
     }
 
+    private fun fullscreenProgress(exo: ExoPlayer?): Int {
+        val duration = exo?.duration?.takeIf { it > 0 } ?: return 0
+        return ((exo.currentPosition.coerceAtLeast(0L) * 1000L) / duration).toInt().coerceIn(0, 1000)
+    }
+
     private fun formatFullscreenTime(ms: Long): String {
         val total = (ms / 1000).coerceAtLeast(0)
         val hours = total / 3600
@@ -1192,13 +1258,14 @@ class BangumiWatchActivity : AppCompatActivity() {
         return if (hours > 0) String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds) else String.format(Locale.US, "%02d:%02d", minutes, seconds)
     }
 
-    private fun startFullscreenTicker(timeText: TextView, exo: ExoPlayer?) {
+    private fun startFullscreenTicker(timeText: TextView, seekBar: SeekBar, exo: ExoPlayer?) {
         fullscreenTimeTicker?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenTimeTicker = object : Runnable {
             override fun run() {
                 if (!isFullscreenPlayer || !fullscreenControlsVisible) return
                 timeText.text = fullscreenTimeText(exo)
-                fullscreenHandler.postDelayed(this, 1000L)
+                seekBar.progress = fullscreenProgress(exo)
+                fullscreenHandler.postDelayed(this, 500L)
             }
         }
         fullscreenHandler.post(fullscreenTimeTicker!!)

@@ -116,7 +116,7 @@
         <activity
             android:name=".ui.tools.PokiGamesActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="fullSensor" />
         <activity
             android:name=".ui.tools.AnimeSearchActivity"
             android:screenOrientation="portrait" />
@@ -147,7 +147,7 @@
         <activity
             android:name=".ui.video.PlayerActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize"
-            android:screenOrientation="unspecified" />
+            android:screenOrientation="fullSensor" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

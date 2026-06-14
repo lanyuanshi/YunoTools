@@ -39,7 +39,7 @@ class PokiGamesActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enterImmersive()
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         setContentView(root)
 
@@ -64,8 +64,15 @@ class PokiGamesActivity : AppCompatActivity() {
                 }
                 override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                     if (view == null) return
-                    showWebFullScreen(view, callback)
+                    showWebFullScreen(view, callback, ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR)
                 }
+
+                @Suppress("DEPRECATION")
+                override fun onShowCustomView(view: View?, requestedOrientation: Int, callback: CustomViewCallback?) {
+                    if (view == null) return
+                    showWebFullScreen(view, callback, requestedOrientation)
+                }
+
                 override fun onHideCustomView() { hideWebFullScreen() }
             }
             webViewClient = object : WebViewClient() {
@@ -139,7 +146,7 @@ class PokiGamesActivity : AppCompatActivity() {
         menuButton.text = if (show) "×" else "⋮"
     }
 
-    private fun showWebFullScreen(view: View, callback: WebChromeClient.CustomViewCallback?) {
+    private fun showWebFullScreen(view: View, callback: WebChromeClient.CustomViewCallback?, requested: Int) {
         if (customView != null) { callback?.onCustomViewHidden(); return }
         customView = view
         customViewCallback = callback
@@ -147,7 +154,17 @@ class PokiGamesActivity : AppCompatActivity() {
         webView.visibility = View.GONE
         menuButton.visibility = View.GONE
         menuPanel.visibility = View.GONE
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        requestedOrientation = when (requested) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT,
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT,
+            ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT -> requested
+            else -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        }
         enterImmersive()
     }
 
@@ -158,7 +175,7 @@ class PokiGamesActivity : AppCompatActivity() {
         customViewCallback = null
         webView.visibility = View.VISIBLE
         menuButton.visibility = View.VISIBLE
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         enterImmersive()
     }
 

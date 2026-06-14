@@ -3,6 +3,11 @@ package com.yuno.tools.ui.tools
 import android.app.WallpaperManager
 import android.content.ContentValues
 import android.graphics.Bitmap
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.Color
+import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.os.Bundle
@@ -24,11 +29,11 @@ class WallpaperToolActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(18), dp(16), dp(18)); setBackgroundColor(0xFFF2F2F7.toInt()) }
-        root.addView(TextView(this).apply { text = "获取当前壁纸"; textSize = 22f; setTextColor(0xFF111827.toInt()) })
-        root.addView(TextView(this).apply { text = "可读取桌面壁纸；锁屏壁纸受系统权限限制，支持的设备会显示。"; textSize = 13f; setTextColor(0xFF8A8F98.toInt()); setPadding(0, dp(4), 0, dp(12)) })
-        preview = ImageView(this).apply { setBackgroundColor(0xFFE5E7EB.toInt()); scaleType = ImageView.ScaleType.CENTER_CROP; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(360)) }
-        info = TextView(this).apply { textSize = 14f; setTextColor(0xFF374151.toInt()); setPadding(0, dp(12), 0, dp(8)) }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(18), dp(16), dp(18)); setBackgroundColor(Color.parseColor("#F2F2F7")) }
+        root.addView(TextView(this).apply { text = "获取当前壁纸"; textSize = 24f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#111827")); setPadding(0, 0, 0, dp(4)) })
+        root.addView(TextView(this).apply { text = "可读取桌面壁纸；锁屏壁纸受系统权限限制，支持的设备会显示。"; textSize = 13f; setTextColor(Color.parseColor("#8A8F98")); setPadding(0, dp(4), 0, dp(12)) })
+        preview = ImageView(this).apply { background = roundedBg("#E5E7EB", 18); scaleType = ImageView.ScaleType.CENTER_CROP; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(360)) }
+        info = TextView(this).apply { textSize = 14f; setTextColor(Color.parseColor("#374151")); setPadding(0, dp(12), 0, dp(8)) }
         root.addView(row(button("桌面壁纸") { loadWallpaper(false) }, button("锁屏壁纸") { loadWallpaper(true) }, button("保存") { saveCurrent() }))
         root.addView(preview)
         root.addView(info)
@@ -63,6 +68,25 @@ class WallpaperToolActivity : AppCompatActivity() {
         val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return toast("创建图片失败")
         contentResolver.openOutputStream(uri)?.use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         toast("已保存到相册/YunoTools")
+    }
+
+
+    private fun Drawable.toBitmapSafe(): Bitmap? {
+        if (this is BitmapDrawable && bitmap != null) return bitmap
+        val w = if (intrinsicWidth > 0) intrinsicWidth else resources.displayMetrics.widthPixels
+        val h = if (intrinsicHeight > 0) intrinsicHeight else resources.displayMetrics.heightPixels
+        return runCatching {
+            Bitmap.createBitmap(w.coerceAtLeast(1), h.coerceAtLeast(1), Bitmap.Config.ARGB_8888).also { bmp ->
+                val canvas = Canvas(bmp)
+                setBounds(0, 0, canvas.width, canvas.height)
+                draw(canvas)
+            }
+        }.getOrNull()
+    }
+
+    private fun roundedBg(color: String, radius: Int) = GradientDrawable().apply {
+        setColor(Color.parseColor(color))
+        cornerRadius = dp(radius).toFloat()
     }
 
     private fun row(vararg views: Button) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; views.forEach { addView(it, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) }) } }

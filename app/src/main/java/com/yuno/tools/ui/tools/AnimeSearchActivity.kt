@@ -25,10 +25,15 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 class AnimeSearchActivity : AppCompatActivity() {
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(25, TimeUnit.SECONDS)
+        .writeTimeout(25, TimeUnit.SECONDS)
+        .build()
     private var selectedUri: Uri? = null
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -75,10 +80,16 @@ class AnimeSearchActivity : AppCompatActivity() {
                 if (results.isEmpty()) throw IOException("没有找到匹配番剧，请换一张更清晰截图")
 
                 runOnUiThread {
-                    status.text = "搜索完成，共展示 ${results.size} 个可能结果（包含低概率匹配）"
-                    renderResults(results)
+                    runCatching {
+                        status.text = "搜索完成，共展示 ${results.size} 个可能结果（包含低概率匹配）"
+                        renderResults(results)
+                    }.onFailure { err ->
+                        status.text = "结果渲染失败"
+                        container.removeAllViews()
+                        addTextOnlyCard(err.message ?: "结果渲染异常，请换图重试")
+                    }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 runOnUiThread {
                     status.text = "搜索失败"
                     container.removeAllViews()
@@ -106,7 +117,7 @@ class AnimeSearchActivity : AppCompatActivity() {
         val request = Request.Builder()
             .url(url)
             .post(body)
-            .addHeader("User-Agent", "YunoTools/1.0.43")
+            .addHeader("User-Agent", "YunoTools/1.1.36")
             .build()
 
         client.newCall(request).execute().use { response ->
@@ -168,7 +179,7 @@ class AnimeSearchActivity : AppCompatActivity() {
                     setBackgroundColor(0xFFF2F2F7.toInt())
                 }
                 card.addView(image)
-                Glide.with(this).load(match.imageUrl).centerCrop().into(image)
+                runCatching { Glide.with(this).load(match.imageUrl).centerCrop().into(image) }
             }
             val resultText = match.copyText()
             val text = TextView(this).apply {

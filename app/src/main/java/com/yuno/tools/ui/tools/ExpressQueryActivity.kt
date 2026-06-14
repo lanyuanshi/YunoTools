@@ -48,13 +48,15 @@ class ExpressQueryActivity : AppCompatActivity() {
         if (no.isBlank()) return toast("请输入快递单号")
         resultBox.removeAllViews(); resultBox.addView(line("正在查询...", "#6B7280", false))
         Thread {
-            val result = runCatching { requestExpress(no) }.getOrElse { ExpressResult(no, "未知", "查询失败：${it.message ?: "网络异常"}", emptyList()) }
+            val result = runCatching { requestExpress(no) }.getOrElse { ExpressResult(no, "未知", "未知快递", "查询失败：${it.message ?: "网络异常"}", emptyList()) }
             runOnUiThread { render(result) }
         }.start()
     }
 
     private fun requestExpress(no: String): ExpressResult {
-        val companyCode = detectCompany(no)
+        val company = detectCompany(no)
+        val companyCode = company.first
+        val companyName = company.second
         val url = "https://www.kuaidi100.com/query?type=${URLEncoder.encode(companyCode, "UTF-8")}&postid=${URLEncoder.encode(no, "UTF-8")}&temp=${System.currentTimeMillis()}"
         val req = Request.Builder().url(url).addHeader("User-Agent", UA).addHeader("Referer", "https://www.kuaidi100.com/").build()
         client.newCall(req).execute().use { resp ->
@@ -64,33 +66,36 @@ class ExpressQueryActivity : AppCompatActivity() {
             val items = mutableListOf<Pair<String, String>>()
             if (arr != null) for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { items += it.optString("time") to it.optString("context") }
             val message = json.optString("message").ifBlank { if (items.isEmpty()) json.optString("nu").ifBlank { "未查到轨迹" } else "已返回轨迹" }
-            return ExpressResult(no, companyCode, message, items)
+            return ExpressResult(no, companyCode, companyName, message, items)
         }
     }
 
-    private fun detectCompany(no: String): String {
+    private fun detectCompany(no: String): Pair<String, String> {
         val url = "https://www.kuaidi100.com/autonumber/autoComNum?text=${URLEncoder.encode(no, "UTF-8")}&resultv2=1"
         val req = Request.Builder().url(url).addHeader("User-Agent", UA).addHeader("Referer", "https://www.kuaidi100.com/").build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("识别快递公司失败：HTTP ${resp.code}")
-            val arr = JSONObject(resp.body?.string().orEmpty()).optJSONArray("auto")
-            val code = arr?.optJSONObject(0)?.optString("comCode").orEmpty()
+            val json = JSONObject(resp.body?.string().orEmpty())
+            val arr = json.optJSONArray("auto") ?: json.optJSONArray("autoDest")
+            val obj = arr?.optJSONObject(0)
+            val code = obj?.optString("comCode").orEmpty()
+            val name = obj?.optString("name").orEmpty().ifBlank { code }
             if (code.isBlank()) error("无法自动识别快递公司")
-            return code
+            return code to name
         }
     }
 
     private fun render(r: ExpressResult) {
         resultBox.removeAllViews()
         resultBox.addView(line("单号：${r.no}", "#111827", true))
-        resultBox.addView(line("快递：${r.company}", "#374151", false))
+        resultBox.addView(line("快递：${r.companyName}（${r.company}）", "#374151", false))
         resultBox.addView(line("状态：${r.message}", "#007AFF", true))
-        if (r.items.isEmpty()) resultBox.addView(line("暂无物流轨迹，请检查单号或稍后再试。", "#6B7280", false))
+        if (r.items.isEmpty()) resultBox.addView(line("暂无物流轨迹：接口已识别快递公司，但未返回有效轨迹；可稍后再试或核对单号。", "#6B7280", false))
         r.items.forEachIndexed { index, item ->
             resultBox.addView(line("${index + 1}. ${item.first}", "#8A8F98", false))
             resultBox.addView(line(item.second, "#111827", index == 0))
         }
-        lastResult = buildString { append("单号：${r.no}\n快递：${r.company}\n状态：${r.message}\n\n"); r.items.forEach { append(it.first).append('\n').append(it.second).append("\n\n") } }.trim()
+        lastResult = buildString { append("单号：${r.no}\n快递：${r.companyName}（${r.company}）\n状态：${r.message}\n\n"); r.items.forEach { append(it.first).append('\n').append(it.second).append("\n\n") } }.trim()
     }
 
     private fun clear() { numberInput.setText(""); lastResult = ""; showPlaceholder() }
@@ -103,5 +108,5 @@ class ExpressQueryActivity : AppCompatActivity() {
     private fun copy(text: String) { if (text.isBlank()) toast("没有可复制内容") else { (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("快递查询结果", text)); toast("已复制") } }
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt()
-    private data class ExpressResult(val no: String, val company: String, val message: String, val items: List<Pair<String, String>>)
+    private data class ExpressResult(val no: String, val company: String, val companyName: String, val message: String, val items: List<Pair<String, String>>)
 }

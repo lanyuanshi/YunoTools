@@ -1,7 +1,10 @@
 package com.yuno.tools.ui.tools
 
 import android.app.WallpaperManager
+import android.Manifest
 import android.content.ContentValues
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
@@ -13,6 +16,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.Settings
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -20,6 +24,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 
 class WallpaperToolActivity : AppCompatActivity() {
@@ -27,6 +33,10 @@ class WallpaperToolActivity : AppCompatActivity() {
     private lateinit var info: TextView
     private var currentBitmap: Bitmap? = null
     private var currentName = "wallpaper"
+    private var pendingLockRead = false
+    private val requestImagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) loadWallpaperInternal(pendingLockRead) else info.text = "未授予图片读取权限，无法读取当前壁纸。"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,12 +46,23 @@ class WallpaperToolActivity : AppCompatActivity() {
         preview = ImageView(this).apply { background = roundedBg("#E5E7EB", 18); scaleType = ImageView.ScaleType.CENTER_CROP; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(360)) }
         info = TextView(this).apply { textSize = 14f; setTextColor(Color.parseColor("#374151")); setPadding(0, dp(12), 0, dp(8)) }
         root.addView(row(button("桌面壁纸") { loadWallpaper(false) }, button("锁屏壁纸") { loadWallpaper(true) }, button("保存") { saveCurrent() }))
+        root.addView(row(button("壁纸设置") { openWallpaperSettings() }))
         root.addView(preview)
         root.addView(info)
         setContentView(ScrollView(this).apply { addView(root) })
     }
 
     private fun loadWallpaper(lock: Boolean) {
+        pendingLockRead = lock
+        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+            requestImagePermission.launch(permission)
+            return
+        }
+        loadWallpaperInternal(lock)
+    }
+
+    private fun loadWallpaperInternal(lock: Boolean) {
         val wm = WallpaperManager.getInstance(this)
         val bmp = readWallpaperBitmap(wm, lock)
         if (bmp == null) {
@@ -99,6 +120,11 @@ class WallpaperToolActivity : AppCompatActivity() {
     private fun roundedBg(color: String, radius: Int) = GradientDrawable().apply {
         setColor(Color.parseColor(color))
         cornerRadius = dp(radius).toFloat()
+    }
+
+    private fun openWallpaperSettings() {
+        runCatching { startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
+            .recoverCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
     }
 
     private fun row(vararg views: Button) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; views.forEach { addView(it, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) }) } }

@@ -69,9 +69,11 @@ import com.yuno.tools.ui.media.AudioSeparateActivity
 import com.yuno.tools.ui.media.VideoTrimActivity
 import com.yuno.tools.ui.tools.AnimeSearchActivity
 import com.yuno.tools.ui.tools.BangumiWatchActivity
+import com.yuno.tools.ui.tools.ExpressQueryActivity
+import com.yuno.tools.ui.tools.WallpaperToolActivity
+import com.yuno.tools.ui.tools.Base64ToolActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
-import com.yuno.tools.ui.tools.FlashPhotoActivity
 import com.yuno.tools.ui.tools.SubscriptionActivity
 import com.yuno.tools.ui.tools.TinyReaderActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
@@ -133,6 +135,7 @@ class MainActivity : AppCompatActivity() {
         ThemeApplier.apply(this)
 
         bindHomeCards()
+        setupMoreToolsCollapse()
         bindProfilePage()
         bindBottomNav()
         showHome(animate = false)
@@ -178,8 +181,35 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardTinyReader).setOnClickListener {
             startActivity(Intent(this, TinyReaderActivity::class.java))
         }
-        findViewById<MaterialCardView>(R.id.cardFlashPhoto).setOnClickListener {
-            startActivity(Intent(this, FlashPhotoActivity::class.java))
+        findViewById<MaterialCardView>(R.id.cardBase64Tool).setOnClickListener {
+            startActivity(Intent(this, Base64ToolActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardWallpaperTool).setOnClickListener {
+            startActivity(Intent(this, WallpaperToolActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardExpressQuery).setOnClickListener {
+            startActivity(Intent(this, ExpressQueryActivity::class.java))
+        }
+    }
+
+    private fun setupMoreToolsCollapse() {
+        val header = findViewById<LinearLayout>(R.id.moreToolsHeader)
+        val grid = findViewById<GridLayout>(R.id.gridMoreTools)
+        val arrow = findViewById<TextView>(R.id.tvMoreToolsArrow)
+        var expanded = true
+        header.setOnClickListener {
+            expanded = !expanded
+            arrow.text = if (expanded) "⌄" else "›"
+            if (expanded) {
+                grid.visibility = View.VISIBLE
+                grid.alpha = 0f
+                grid.translationY = -8f * resources.displayMetrics.density
+                grid.animate().alpha(1f).translationY(0f).setDuration(180L).start()
+            } else {
+                grid.animate().alpha(0f).translationY(-8f * resources.displayMetrics.density).setDuration(140L).withEndAction {
+                    if (!expanded) grid.visibility = View.GONE
+                }.start()
+            }
         }
     }
 

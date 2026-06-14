@@ -1,6 +1,9 @@
 package com.yuno.tools.ui.tools
 
 import android.content.Intent
+import android.content.Context
+import android.content.ClipboardManager
+import android.content.ClipData
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
@@ -167,15 +170,9 @@ class AnimeSearchActivity : AppCompatActivity() {
                 card.addView(image)
                 Glide.with(this).load(match.imageUrl).centerCrop().into(image)
             }
+            val resultText = match.copyText()
             val text = TextView(this).apply {
-                text = buildString {
-                    append("#${match.rank}  ${match.title}\n")
-                    append("类型：${match.type}\n")
-                    append("大概集数：${match.episodeInfo}\n")
-                    append("片段时间：${match.timeRange}\n")
-                    append("匹配概率：${match.similarity}%")
-                    if (match.videoUrl.isNotBlank()) append("\n预览片段：已获取")
-                }
+                text = resultText
                 textSize = 16f
                 setTextColor(0xFF1C1C1E.toInt())
                 setLineSpacing(dp(4).toFloat(), 1.0f)
@@ -184,10 +181,38 @@ class AnimeSearchActivity : AppCompatActivity() {
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = if (match.imageUrl.isNotBlank()) dp(12) else 0 }
+                setOnLongClickListener {
+                    copyResult(resultText)
+                    true
+                }
             }
             card.addView(text)
+            card.addView(Button(this).apply {
+                this.text = "复制内容"
+                setOnClickListener { copyResult(resultText) }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(44)
+                ).apply { topMargin = dp(10) }
+            })
             container.addView(card)
         }
+    }
+
+
+    private fun AnimeMatch.copyText(): String = buildString {
+        append("#${rank}  ${title}\n")
+        append("类型：${type}\n")
+        append("大概集数：${episodeInfo}\n")
+        append("片段时间：${timeRange}\n")
+        append("匹配概率：${similarity}%")
+        if (videoUrl.isNotBlank()) append("\n预览片段：已获取")
+    }
+
+    private fun copyResult(text: String) {
+        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+            .setPrimaryClip(ClipData.newPlainText("以图搜番结果", text))
+        Toast.makeText(this, "已复制识别内容", Toast.LENGTH_SHORT).show()
     }
 
     private fun addTextOnlyCard(message: String) {

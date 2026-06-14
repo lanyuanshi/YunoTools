@@ -378,19 +378,39 @@
                 </com.google.android.material.card.MaterialCardView>
             </GridLayout>
 
-            <!-- 更多工具标题 -->
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- 更多工具标题：可折叠分区 -->
+            <LinearLayout
+                android:id="@+id/moreToolsHeader"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="12dp"
-                android:text="更多工具"
-                android:textColor="#1C1C1E"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="更多工具"
+                    android:textColor="#1C1C1E"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvMoreToolsArrow"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:gravity="center"
+                    android:text="⌄"
+                    android:textColor="#8E8E93"
+                    android:textSize="24sp" />
+            </LinearLayout>
 
             <!-- 更多工具功能区 -->
             <GridLayout
+                android:id="@+id/gridMoreTools"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:columnCount="3">
@@ -641,8 +661,11 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
+
+
+
                 <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardFlashPhoto"
+                    android:id="@+id/cardBase64Tool"
                     android:layout_width="0dp"
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"
@@ -662,21 +685,103 @@
                         <FrameLayout
                             android:layout_width="44dp"
                             android:layout_height="44dp"
-                            android:background="@drawable/bg_circle_orange_light">
+                            android:background="@drawable/bg_circle_blue_light">
 
                             <ImageView
                                 android:layout_width="24dp"
                                 android:layout_height="24dp"
                                 android:layout_gravity="center"
-                                android:src="@drawable/ic_image_watermark"
-                                app:tint="#FF9500" />
+                                android:src="@drawable/ic_copy"
+                                app:tint="#007AFF" />
                         </FrameLayout>
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="图片留存助手"
+                            android:text="Base64转换"
+                            android:textColor="#1C1C1E"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardWallpaperTool"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="4dp"
+                    app:cardBackgroundColor="@android:color/white"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <FrameLayout
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_circle_pink_light">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_image_watermark"
+                                app:tint="#FF2D55" />
+                        </FrameLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="当前壁纸"
+                            android:textColor="#1C1C1E"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardExpressQuery"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="4dp"
+                    app:cardBackgroundColor="@android:color/white"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <FrameLayout
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_circle_green_light">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_download"
+                                app:tint="#34C759" />
+                        </FrameLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="快递查询"
                             android:textColor="#1C1C1E"
                             android:textSize="13sp" />
                     </LinearLayout>

@@ -2,6 +2,7 @@ package com.yuno.tools.ui.tools
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -9,90 +10,182 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.roundToInt
 
 class PokiGamesActivity : AppCompatActivity() {
+    private lateinit var root: FrameLayout
     private lateinit var webView: WebView
     private lateinit var progress: ProgressBar
-    private lateinit var statusText: TextView
+    private lateinit var menuPanel: LinearLayout
+    private lateinit var menuButton: TextView
+    private var customView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private val gamesUrl = "https://poki.com/zh"
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F8FAFC"))
-            addView(header())
-            progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-                max = 100
-                progress = 0
-                progressDrawable.setTint(Color.parseColor("#7C3AED"))
-                layoutParams = LinearLayout.LayoutParams(-1, dp(3))
-            }
-            addView(progress)
-            addView(toolbar())
-            addView(FrameLayout(context).apply {
-                layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
-                webView = WebView(context).apply {
-                    setBackgroundColor(Color.WHITE)
-                    overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.databaseEnabled = true
-                    settings.cacheMode = WebSettings.LOAD_DEFAULT
-                    settings.loadsImagesAutomatically = true
-                    settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
-                    settings.builtInZoomControls = false
-                    settings.displayZoomControls = false
-                    settings.mediaPlaybackRequiresUserGesture = false
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                    webChromeClient = object : WebChromeClient() {
-                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                            this@PokiGamesActivity.progress.progress = newProgress
-                            this@PokiGamesActivity.progress.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
-                        }
-                    }
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                            val url = request.url.toString()
-                            return if (url.startsWith("http://") || url.startsWith("https://")) {
-                                view.loadUrl(url)
-                                true
-                            } else {
-                                runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
-                                true
-                            }
-                        }
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            statusText.text = "已加载 Poki 小游戏，可选择网页内游戏游玩"
-                        }
-                        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                            if (request?.isForMainFrame == true) statusText.text = "加载失败：请检查网络后点刷新"
-                        }
-                    }
-                    loadUrl(gamesUrl)
+        enterImmersive()
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        setContentView(root)
+
+        webView = WebView(this).apply {
+            setBackgroundColor(Color.WHITE)
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.databaseEnabled = true
+            settings.cacheMode = WebSettings.LOAD_DEFAULT
+            settings.loadsImagesAutomatically = true
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.builtInZoomControls = false
+            settings.displayZoomControls = false
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    this@PokiGamesActivity.progress.progress = newProgress
+                    this@PokiGamesActivity.progress.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
                 }
-                addView(webView, FrameLayout.LayoutParams(-1, -1))
-            })
-        })
+                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                    if (view == null) return
+                    showWebFullScreen(view, callback)
+                }
+                override fun onHideCustomView() { hideWebFullScreen() }
+            }
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val url = request.url.toString()
+                    return if (url.startsWith("http://") || url.startsWith("https://")) {
+                        view.loadUrl(url); true
+                    } else {
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
+                        true
+                    }
+                }
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    if (request?.isForMainFrame == true) Toast.makeText(this@PokiGamesActivity, "加载失败，请检查网络", Toast.LENGTH_SHORT).show()
+                }
+            }
+            loadUrl(gamesUrl)
+        }
+        root.addView(webView, FrameLayout.LayoutParams(-1, -1))
+
+        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            progressDrawable.setTint(Color.parseColor("#7C3AED"))
+        }
+        root.addView(progress, FrameLayout.LayoutParams(-1, dp(3), Gravity.TOP))
+        addFloatingMenu()
+    }
+
+    private fun addFloatingMenu() {
+        menuPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            background = rounded("#E61F2937", 22)
+            elevation = dp(10).toFloat()
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            addView(icon("↻", "刷新") { webView.reload(); toggleMenu(false) })
+            addView(icon("‹", "后退") { if (webView.canGoBack()) webView.goBack(); toggleMenu(false) })
+            addView(icon("›", "前进") { if (webView.canGoForward()) webView.goForward(); toggleMenu(false) })
+            addView(icon("⛶", "浏览器") { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(gamesUrl))); toggleMenu(false) })
+            addView(icon("✕", "关闭") { finish() })
+        }
+        root.addView(menuPanel, FrameLayout.LayoutParams(dp(56), -2, Gravity.TOP or Gravity.END).apply { topMargin = dp(42); rightMargin = dp(10) })
+        menuButton = TextView(this).apply {
+            text = "⋮"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = rounded("#CC111827", 22)
+            elevation = dp(12).toFloat()
+            setOnClickListener { toggleMenu(menuPanel.visibility != View.VISIBLE) }
+        }
+        root.addView(menuButton, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP or Gravity.END).apply { topMargin = dp(8); rightMargin = dp(10) })
+    }
+
+    private fun icon(symbol: String, desc: String, action: () -> Unit) = TextView(this).apply {
+        text = symbol
+        contentDescription = desc
+        textSize = 24f
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        typeface = Typeface.DEFAULT_BOLD
+        setOnClickListener { action() }
+        layoutParams = LinearLayout.LayoutParams(dp(42), dp(42)).apply { bottomMargin = dp(4) }
+    }
+
+    private fun toggleMenu(show: Boolean) {
+        menuPanel.visibility = if (show) View.VISIBLE else View.GONE
+        menuButton.text = if (show) "×" else "⋮"
+    }
+
+    private fun showWebFullScreen(view: View, callback: WebChromeClient.CustomViewCallback?) {
+        if (customView != null) { callback?.onCustomViewHidden(); return }
+        customView = view
+        customViewCallback = callback
+        root.addView(view, FrameLayout.LayoutParams(-1, -1))
+        webView.visibility = View.GONE
+        menuButton.visibility = View.GONE
+        menuPanel.visibility = View.GONE
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        enterImmersive()
+    }
+
+    private fun hideWebFullScreen() {
+        customView?.let { root.removeView(it) }
+        customView = null
+        customViewCallback?.onCustomViewHidden()
+        customViewCallback = null
+        webView.visibility = View.VISIBLE
+        menuButton.visibility = View.VISIBLE
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        enterImmersive()
+    }
+
+    private fun enterImmersive() {
+        window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            )
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) enterImmersive()
     }
 
     override fun onBackPressed() {
-        if (::webView.isInitialized && webView.canGoBack()) webView.goBack() else super.onBackPressed()
+        when {
+            customView != null -> hideWebFullScreen()
+            menuPanel.visibility == View.VISIBLE -> toggleMenu(false)
+            webView.canGoBack() -> webView.goBack()
+            else -> super.onBackPressed()
+        }
     }
 
     override fun onDestroy() {
@@ -102,47 +195,6 @@ class PokiGamesActivity : AppCompatActivity() {
             webView.destroy()
         }
         super.onDestroy()
-    }
-
-    private fun header() = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(16), dp(16), dp(16), dp(10))
-        background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.parseColor("#F5F3FF"), Color.parseColor("#F8FAFC")))
-        addView(TextView(context).apply {
-            text = "Poki 小游戏"
-            textSize = 24f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#2E1065"))
-        })
-        statusText = TextView(context).apply {
-            text = "正在加载 https://poki.com/zh"
-            textSize = 13f
-            setTextColor(Color.parseColor("#6B7280"))
-            setPadding(0, dp(4), 0, 0)
-        }
-        addView(statusText)
-    }
-
-    private fun toolbar() = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
-        setPadding(dp(10), dp(8), dp(10), dp(8))
-        background = rounded("#EFFFFFFF", 0)
-        addView(toolButton("刷新") { webView.reload() })
-        addView(toolButton("后退") { if (webView.canGoBack()) webView.goBack() })
-        addView(toolButton("前进") { if (webView.canGoForward()) webView.goForward() })
-        addView(toolButton("浏览器") { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(gamesUrl))) })
-    }
-
-    private fun toolButton(textValue: String, action: () -> Unit) = Button(this).apply {
-        text = textValue
-        textSize = 13f
-        setTextColor(Color.WHITE)
-        background = rounded("#7C3AED", 16)
-        stateListAnimator = null
-        setOnClickListener { action() }
-        layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(4), 0, dp(4), 0) }
     }
 
     private fun rounded(color: String, radius: Int) = GradientDrawable().apply {

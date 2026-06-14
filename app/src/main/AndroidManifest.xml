@@ -115,7 +115,8 @@
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.PokiGamesActivity"
-            android:screenOrientation="portrait" />
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="unspecified" />
         <activity
             android:name=".ui.tools.AnimeSearchActivity"
             android:screenOrientation="portrait" />

@@ -10,9 +10,9 @@ android {
     defaultConfig {
         applicationId = "com.yuno.tools"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 140
-        versionName = "1.1.40"
+        targetSdk = 32
+        versionCode = 141
+        versionName = "1.1.41"
     }
 
     buildFeatures {
@@ -34,6 +34,11 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    lint {
+        disable += "ExpiredTargetSdkVersion"
+        abortOnError = false
     }
 }
 

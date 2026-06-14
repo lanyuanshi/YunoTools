@@ -151,7 +151,7 @@ class WallpaperToolActivity : AppCompatActivity() {
 
         val missingPermissions = wallpaperPermissions().filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (missingPermissions.isNotEmpty()) {
-            status.text = "当前设备需要读取图片/存储权限后才能访问系统壁纸，正在请求权限..."
+            status.text = "当前设备需要旧版读取存储权限后才能访问系统壁纸，正在请求权限..."
             requestLegacyPermission.launch(missingPermissions.toTypedArray())
             return
         }
@@ -187,15 +187,13 @@ class WallpaperToolActivity : AppCompatActivity() {
     }
 
     private fun wallpaperPermissions(): Array<String> {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_EXTERNAL_STORAGE)
-        } else {
-            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
+        // The user's ROM checks READ_EXTERNAL_STORAGE inside WallpaperManager.
+        // Target SDK 32 keeps this legacy permission requestable/visible on newer Android.
+        return arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
 
     private fun showPermissionDenied() {
-        status.text = "未授予读取图片/存储权限，无法继续读取壁纸。请到系统设置里允许“照片和视频/存储”权限后重试。"
+        status.text = "未授予读取存储权限，无法继续读取壁纸。请在权限弹窗或应用设置里允许文件/照片读取权限后重试。"
         toast("需要读取存储权限")
     }
 

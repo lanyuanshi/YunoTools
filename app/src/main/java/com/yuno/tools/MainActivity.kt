@@ -83,6 +83,7 @@ import com.yuno.tools.ui.tools.CompassToolActivity
 import com.yuno.tools.ui.tools.VibratorToolActivity
 import com.yuno.tools.ui.tools.MetalDetectorActivity
 import com.yuno.tools.ui.tools.WoodenFishActivity
+import com.yuno.tools.ui.tools.MagicCubeActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
@@ -213,6 +214,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardWoodenFish).setOnClickListener {
             startActivity(Intent(this, WoodenFishActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardMagicCube).setOnClickListener {
+            startActivity(Intent(this, MagicCubeActivity::class.java))
         }
     }
 

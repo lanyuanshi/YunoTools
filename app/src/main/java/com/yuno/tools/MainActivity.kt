@@ -707,66 +707,69 @@ class MainActivity : AppCompatActivity() {
                     })
                 } else {
                     val grid = GridLayout(this).apply {
-                        columnCount = 2
-                        setPadding((4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt())
+                        columnCount = 3
+                        setPadding((2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt())
                     }
-                    val cardSize = ((resources.displayMetrics.widthPixels - 36 * density) / 2).toInt()
+                    val dialogSafeWidth = (resources.displayMetrics.widthPixels - 64 * density).toInt().coerceAtLeast((300 * density).toInt())
+                    val gap = (4 * density).toInt()
+                    val cardSize = ((dialogSafeWidth - gap * 6) / 3).coerceAtMost((104 * density).toInt()).coerceAtLeast((82 * density).toInt())
+                    val coverSize = (cardSize * 0.52f).toInt()
+                    val playSize = (28 * density).toInt()
                     for (s in songs) {
                         val card = FrameLayout(this).apply {
                             layoutParams = GridLayout.LayoutParams().apply {
                                 width = cardSize
-                                height = (cardSize * 1.2f).toInt()
-                                setMargins((4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt())
+                                height = (cardSize * 1.05f).toInt()
+                                setMargins(gap, gap, gap, gap)
                             }
                             background = GradientDrawable().apply {
                                 shape = GradientDrawable.RECTANGLE
-                                cornerRadius = 12f * density
-                                setColor(Color.argb(180, 255, 255, 255))
+                                cornerRadius = 10f * density
+                                setColor(Color.argb(185, 255, 255, 255))
                             }
                         }
                         val inner = LinearLayout(this).apply {
                             orientation = LinearLayout.VERTICAL
                             gravity = Gravity.CENTER
-                            setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt())
+                            setPadding((5 * density).toInt(), (6 * density).toInt(), (5 * density).toInt(), (5 * density).toInt())
                         }
                         val cover = ImageView(this).apply {
-                            layoutParams = LinearLayout.LayoutParams((cardSize * 0.7f).toInt(), (cardSize * 0.7f).toInt())
+                            layoutParams = LinearLayout.LayoutParams(coverSize, coverSize)
                             scaleType = ImageView.ScaleType.CENTER_CROP
                             background = GradientDrawable().apply {
                                 shape = GradientDrawable.RECTANGLE
-                                cornerRadius = 10f * density
-                                setColor(Color.argb(60, 30, 136, 229))
+                                cornerRadius = 8f * density
+                                setColor(Color.argb(55, 30, 136, 229))
                             }
-
                         }
                         inner.addView(cover)
                         inner.addView(TextView(this).apply {
                             text = s.title
-                            textSize = 12f
+                            textSize = 10.5f
                             typeface = Typeface.DEFAULT_BOLD
                             setTextColor(Color.parseColor("#182033"))
                             maxLines = 1
                             gravity = Gravity.CENTER
-                            setPadding(0, (6 * density).toInt(), 0, (2 * density).toInt())
+                            setPadding(0, (4 * density).toInt(), 0, 0)
                         })
                         inner.addView(TextView(this).apply {
                             text = s.artist.ifBlank { s.source.label }
-                            textSize = 10f
+                            textSize = 9f
                             setTextColor(Color.parseColor("#6F7A8C"))
                             maxLines = 1
                             gravity = Gravity.CENTER
                         })
                         val playIcon = TextView(this).apply {
                             text = "▶"
-                            textSize = 18f
+                            textSize = 14f
                             gravity = Gravity.CENTER
                             setTextColor(Color.WHITE)
                             background = GradientDrawable().apply {
                                 shape = GradientDrawable.OVAL
-                                setColor(Color.argb(200, 30, 136, 229))
+                                setColor(Color.argb(210, 30, 136, 229))
                             }
-                            layoutParams = FrameLayout.LayoutParams((36 * density).toInt(), (36 * density).toInt(), Gravity.CENTER or Gravity.BOTTOM).apply {
-                                bottomMargin = (22 * density).toInt()
+                            layoutParams = FrameLayout.LayoutParams(playSize, playSize, Gravity.CENTER or Gravity.BOTTOM).apply {
+                                bottomMargin = (10 * density).toInt()
                             }
                             setOnClickListener {
                                 playOnlineRecord(OnlineMusicRecord(

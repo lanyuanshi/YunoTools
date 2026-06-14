@@ -48,6 +48,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.children
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
@@ -88,6 +89,7 @@ import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
 import com.yuno.tools.util.ThemeApplier
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -146,9 +148,31 @@ class MainActivity : AppCompatActivity() {
         bindHomeCards()
         setupMoreToolsCollapse()
         setupHomeGridPersonalization()
+        applyGlassHomeCards()
         bindProfilePage()
         bindBottomNav()
         showHome(animate = false)
+    }
+
+
+    private fun applyGlassHomeCards() {
+        val root = findViewById<View>(R.id.mainRoot)
+        root.setBackgroundColor(Color.parseColor("#EEF2F7"))
+        applyGlassIn(root)
+    }
+
+    private fun applyGlassIn(view: View) {
+        if (view is MaterialCardView) {
+            view.setCardBackgroundColor(Color.parseColor("#CCFFFFFF"))
+            view.cardElevation = 8f * resources.displayMetrics.density
+            view.radius = 18f * resources.displayMetrics.density
+            view.strokeWidth = (1f * resources.displayMetrics.density).roundToInt()
+            view.strokeColor = Color.parseColor("#88FFFFFF")
+            view.alpha = 0.96f
+        }
+        if (view is android.view.ViewGroup) {
+            view.children.forEach { applyGlassIn(it) }
+        }
     }
 
     private fun bindHomeCards() {

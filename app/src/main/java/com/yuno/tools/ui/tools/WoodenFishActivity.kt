@@ -5,6 +5,10 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -27,6 +31,7 @@ class WoodenFishActivity : AppCompatActivity() {
     private lateinit var meritText: TextView
     private lateinit var fishView: WoodenFishView
     private lateinit var autoButton: Button
+    private var soundEnabled = true
     private var count = 0
     private var auto = false
     private val handler = Handler(Looper.getMainLooper())
@@ -53,8 +58,11 @@ class WoodenFishActivity : AppCompatActivity() {
                 meritText = line(levelText())
                 addView(countText); addView(meritText)
             })
-            addView(row(btn("敲一下") { knock() }, btn("自动") { toggleAuto() }.also { autoButton = it }))
-            addView(row(btn("清零") { reset() }))
+            addView(row(btn("敲一下") { _ -> knock() }, btn("自动") { _ -> toggleAuto() }.also { autoButton = it }))
+            addView(row(btn("清零") { _ -> reset() }, btn("音效：开") {
+                soundEnabled = !soundEnabled
+                (it as Button).text = if (soundEnabled) "音效：开" else "音效：关"
+            }))
         })
     }
 
@@ -63,11 +71,54 @@ class WoodenFishActivity : AppCompatActivity() {
         count += 1
         updateTexts()
         fishView.hit()
+        playWoodenFishSound()
         if (vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE)) else @Suppress("DEPRECATION") vibrator.vibrate(35)
         }
         save()
     }
+    private fun playWoodenFishSound() {
+        if (!soundEnabled) return
+        Thread {
+            try {
+                val sampleRate = 22050
+                val durationMs = 150
+                val samples = sampleRate * durationMs / 1000
+                val data = ShortArray(samples)
+                for (i in 0 until samples) {
+                    val t = i.toDouble() / sampleRate
+                    val env = kotlin.math.exp(-22.0 * t)
+                    val tone = kotlin.math.sin(2.0 * Math.PI * 260.0 * t) * 0.75 + kotlin.math.sin(2.0 * Math.PI * 520.0 * t) * 0.25
+                    data[i] = (tone * env * Short.MAX_VALUE * 0.55).toInt().toShort()
+                }
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val fmt = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+                val track = if (Build.VERSION.SDK_INT >= 23) {
+                    AudioTrack.Builder()
+                        .setAudioAttributes(attrs)
+                        .setAudioFormat(fmt)
+                        .setBufferSizeInBytes(data.size * 2)
+                        .setTransferMode(AudioTrack.MODE_STATIC)
+                        .build()
+                } else {
+                    @Suppress("DEPRECATION")
+                    AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, data.size * 2, AudioTrack.MODE_STATIC)
+                }
+                track.write(data, 0, data.size)
+                track.play()
+                Thread.sleep(durationMs.toLong() + 40)
+                track.release()
+            } catch (_: Exception) {}
+        }.start()
+    }
+
     private fun toggleAuto() {
         auto = !auto
         autoButton.text = if (auto) "停止自动" else "自动"
@@ -156,7 +207,7 @@ class WoodenFishActivity : AppCompatActivity() {
     private fun hero(t: String, s: String) = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = gradient("#F59E0B", "#EA580C", 24); setPadding(dp(18), dp(18), dp(18), dp(18)); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) }; addView(TextView(context).apply { text = t; textSize = 25f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) }); addView(TextView(context).apply { text = s; textSize = 13.5f; setTextColor(Color.argb(230, 255, 255, 255)); setPadding(0, dp(8), 0, 0) }) }
     private fun card() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rounded("#FFFFFF", 22); elevation = dp(2).toFloat(); setPadding(dp(16), dp(14), dp(16), dp(14)); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) } }
     private fun row(vararg bs: Button) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }; bs.forEachIndexed { i, b -> addView(b, LinearLayout.LayoutParams(0, dp(50), 1f).apply { if (i != bs.lastIndex) rightMargin = dp(10) }) } }
-    private fun btn(t: String, a: () -> Unit) = Button(this).apply { text = t; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); background = rounded("#EA580C", 18); stateListAnimator = null; setOnClickListener { a() } }
+    private fun btn(t: String, a: (View) -> Unit) = Button(this).apply { text = t; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); background = rounded("#EA580C", 18); stateListAnimator = null; setOnClickListener { a(it) } }
     private fun big(t: String) = TextView(this).apply { text = t; textSize = 28f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#7C2D12")); setPadding(0, dp(5), 0, dp(5)) }
     private fun line(t: String) = TextView(this).apply { text = t; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#9A3412")); setPadding(0, dp(5), 0, dp(5)) }
     private fun rounded(c: String, r: Int) = GradientDrawable().apply { setColor(Color.parseColor(c)); cornerRadius = dp(r).toFloat() }

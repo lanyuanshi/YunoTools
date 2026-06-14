@@ -87,6 +87,7 @@ import com.yuno.tools.ui.tools.WoodenFishActivity
 import com.yuno.tools.ui.tools.MagicCubeActivity
 import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
+import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
@@ -240,6 +241,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardWoodenFish).setOnClickListener {
             startActivity(Intent(this, WoodenFishActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardTranslateTool).setOnClickListener {
+            startActivity(Intent(this, TranslateActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardMagicCube).setOnClickListener {
             startActivity(Intent(this, MagicCubeActivity::class.java))

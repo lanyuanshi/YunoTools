@@ -78,6 +78,10 @@ import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
 import com.yuno.tools.ui.tools.SubscriptionActivity
 import com.yuno.tools.ui.tools.TinyReaderActivity
+import com.yuno.tools.ui.tools.LevelToolActivity
+import com.yuno.tools.ui.tools.CompassToolActivity
+import com.yuno.tools.ui.tools.VibratorToolActivity
+import com.yuno.tools.ui.tools.MetalDetectorActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
@@ -194,6 +198,18 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardExpressQuery).setOnClickListener {
             startActivity(Intent(this, ExpressQueryActivity::class.java))
         }
+        findViewById<MaterialCardView>(R.id.cardLevelTool).setOnClickListener {
+            startActivity(Intent(this, LevelToolActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardCompassTool).setOnClickListener {
+            startActivity(Intent(this, CompassToolActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardVibratorTool).setOnClickListener {
+            startActivity(Intent(this, VibratorToolActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardMetalDetector).setOnClickListener {
+            startActivity(Intent(this, MetalDetectorActivity::class.java))
+        }
     }
 
     private fun setupMoreToolsCollapse() {
@@ -222,6 +238,7 @@ class MainActivity : AppCompatActivity() {
         setupGridDragSort("image", findViewById(R.id.gridImageTools))
         setupGridDragSort("media", findViewById(R.id.gridMediaTools))
         setupGridDragSort("more", findViewById(R.id.gridMoreTools))
+        setupGridDragSort("daily", findViewById(R.id.gridDailyTools))
     }
 
     private fun setupGridDragSort(key: String, grid: GridLayout) {

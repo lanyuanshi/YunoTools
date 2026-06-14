@@ -111,6 +111,9 @@
             android:name=".ui.tools.MagicCubeActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.tools.DinoRunActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.tools.AnimeSearchActivity"
             android:screenOrientation="portrait" />
         <activity

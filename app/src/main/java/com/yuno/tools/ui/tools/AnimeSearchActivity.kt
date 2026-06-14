@@ -101,6 +101,19 @@ class AnimeSearchActivity : AppCompatActivity() {
         }.start()
     }
 
+
+    private fun pickChineseTitle(anilist: JSONObject?, title: JSONObject?): String {
+        val candidates = mutableListOf<String>()
+        title?.optString("chinese")?.takeIf { it.isNotBlank() }?.let { candidates += it }
+        anilist?.optJSONArray("synonyms")?.let { arr ->
+            for (i in 0 until arr.length()) candidates += arr.optString(i)
+        }
+        title?.optString("native")?.takeIf { it.isNotBlank() }?.let { candidates += it }
+        return candidates.firstOrNull { it.hasChinese() }.orEmpty()
+    }
+
+    private fun String.hasChinese(): Boolean = any { it.code in 0x4E00..0x9FFF }
+
     private fun requestTraceMoe(bytes: ByteArray, cutBorders: Boolean): List<AnimeMatch> {
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart(
@@ -141,9 +154,11 @@ class AnimeSearchActivity : AppCompatActivity() {
                     episode != "未知" -> "大概第 $episode 集"
                     else -> "未知"
                 }
+                val cnName = pickChineseTitle(anilist, title)
                 list += AnimeMatch(
                     rank = i + 1,
                     title = name,
+                    chineseTitle = cnName,
                     type = anilist?.optString("type", "").orEmpty().ifBlank { "未知" },
                     episodeInfo = episodeInfo,
                     timeRange = "${formatTime(item.optDouble("from", 0.0))} - ${formatTime(item.optDouble("to", 0.0))}",
@@ -212,7 +227,8 @@ class AnimeSearchActivity : AppCompatActivity() {
 
 
     private fun AnimeMatch.copyText(): String = buildString {
-        append("#${rank}  ${title}\n")
+        append("#${rank}  ${displayTitle()}\n")
+        if (chineseTitle.isNotBlank() && chineseTitle != title) append("中文名：${chineseTitle}\n")
         append("类型：${type}\n")
         append("大概集数：${episodeInfo}\n")
         append("片段时间：${timeRange}\n")
@@ -246,9 +262,12 @@ class AnimeSearchActivity : AppCompatActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
+    private fun AnimeMatch.displayTitle(): String = if (chineseTitle.isNotBlank()) chineseTitle else title
+
     private data class AnimeMatch(
         val rank: Int,
         val title: String,
+        val chineseTitle: String,
         val type: String,
         val episodeInfo: String,
         val timeRange: String,

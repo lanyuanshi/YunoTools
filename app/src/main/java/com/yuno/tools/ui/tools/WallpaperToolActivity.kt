@@ -3,6 +3,7 @@ package com.yuno.tools.ui.tools
 import android.app.WallpaperManager
 import android.content.ContentValues
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Drawable
@@ -42,13 +43,10 @@ class WallpaperToolActivity : AppCompatActivity() {
 
     private fun loadWallpaper(lock: Boolean) {
         val wm = WallpaperManager.getInstance(this)
-        val drawable = runCatching {
-            if (lock && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) wm.getDrawable(WallpaperManager.FLAG_LOCK) else wm.drawable
-        }.getOrNull()
-        val bmp = (drawable as? BitmapDrawable)?.bitmap
+        val bmp = readWallpaperBitmap(wm, lock)
         if (bmp == null) {
             currentBitmap = null
-            info.text = if (lock) "当前系统不允许读取锁屏壁纸，或未设置独立锁屏壁纸。" else "读取桌面壁纸失败。"
+            info.text = if (lock) "当前系统不允许读取锁屏壁纸，或未设置独立锁屏壁纸。" else "读取桌面壁纸失败：当前系统未开放壁纸文件。"
             preview.setImageDrawable(null)
             return
         }
@@ -56,6 +54,20 @@ class WallpaperToolActivity : AppCompatActivity() {
         currentName = if (lock) "lock_wallpaper" else "home_wallpaper"
         preview.setImageBitmap(bmp)
         info.text = "已获取${if (lock) "锁屏" else "桌面"}壁纸：${bmp.width} × ${bmp.height}"
+    }
+
+    private fun readWallpaperBitmap(wm: WallpaperManager, lock: Boolean): Bitmap? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val flag = if (lock) WallpaperManager.FLAG_LOCK else WallpaperManager.FLAG_SYSTEM
+            runCatching {
+                wm.getWallpaperFile(flag)?.use { pfd -> BitmapFactory.decodeFileDescriptor(pfd.fileDescriptor) }
+            }.getOrNull()?.let { return it }
+        }
+        if (!lock) {
+            runCatching { wm.drawable?.toBitmapSafe() }.getOrNull()?.let { return it }
+            runCatching { wm.fastDrawable?.toBitmapSafe() }.getOrNull()?.let { return it }
+        }
+        return null
     }
 
     private fun saveCurrent() {

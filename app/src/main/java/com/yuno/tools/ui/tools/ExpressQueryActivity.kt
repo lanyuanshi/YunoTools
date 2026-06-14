@@ -22,6 +22,9 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 class ExpressQueryActivity : AppCompatActivity() {
+    private companion object {
+        const val UA = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+    }
     private val client = OkHttpClient.Builder().connectTimeout(12, TimeUnit.SECONDS).readTimeout(18, TimeUnit.SECONDS).build()
     private lateinit var numberInput: EditText
     private lateinit var resultBox: LinearLayout
@@ -51,15 +54,29 @@ class ExpressQueryActivity : AppCompatActivity() {
     }
 
     private fun requestExpress(no: String): ExpressResult {
-        val url = "https://www.kuaidi100.com/query?type=auto&postid=${URLEncoder.encode(no, "UTF-8")}&temp=${System.currentTimeMillis()}"
-        val req = Request.Builder().url(url).addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) Chrome/120").addHeader("Referer", "https://www.kuaidi100.com/").build()
+        val companyCode = detectCompany(no)
+        val url = "https://www.kuaidi100.com/query?type=${URLEncoder.encode(companyCode, "UTF-8")}&postid=${URLEncoder.encode(no, "UTF-8")}&temp=${System.currentTimeMillis()}"
+        val req = Request.Builder().url(url).addHeader("User-Agent", UA).addHeader("Referer", "https://www.kuaidi100.com/").build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("HTTP ${resp.code}")
             val json = JSONObject(resp.body?.string().orEmpty())
             val arr = json.optJSONArray("data")
             val items = mutableListOf<Pair<String, String>>()
             if (arr != null) for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { items += it.optString("time") to it.optString("context") }
-            return ExpressResult(no, json.optString("com").ifBlank { "自动识别" }, json.optString("message").ifBlank { if (items.isEmpty()) "未查到轨迹" else "已返回轨迹" }, items)
+            val message = json.optString("message").ifBlank { if (items.isEmpty()) json.optString("nu").ifBlank { "未查到轨迹" } else "已返回轨迹" }
+            return ExpressResult(no, companyCode, message, items)
+        }
+    }
+
+    private fun detectCompany(no: String): String {
+        val url = "https://www.kuaidi100.com/autonumber/autoComNum?text=${URLEncoder.encode(no, "UTF-8")}&resultv2=1"
+        val req = Request.Builder().url(url).addHeader("User-Agent", UA).addHeader("Referer", "https://www.kuaidi100.com/").build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) error("识别快递公司失败：HTTP ${resp.code}")
+            val arr = JSONObject(resp.body?.string().orEmpty()).optJSONArray("auto")
+            val code = arr?.optJSONObject(0)?.optString("comCode").orEmpty()
+            if (code.isBlank()) error("无法自动识别快递公司")
+            return code
         }
     }
 

@@ -130,6 +130,7 @@ class BangumiWatchActivity : AppCompatActivity() {
     private var fullscreenControlsLocked = false
     private var fullscreenEnhanceEnabled = false
     private var fullscreenScaleModeIndex = 0
+    private var fullscreenPlayerStateListener: Player.Listener? = null
     private var tab = Tab.BANGUMI
     private var screen = Screen.LIST
     private var loading = false
@@ -1138,7 +1139,7 @@ class BangumiWatchActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 addView(fullscreenIcon("|‹", 19f) { playAdjacentEpisode(detail, -1) }, LinearLayout.LayoutParams(dp(46), dp(40)))
-                val playButton = fullscreenIcon(if (preparedPlayer?.isPlaying == true) "Ⅱ" else "▶", 26f) { toggleFullscreenPlayPause(it as TextView) }
+                val playButton = fullscreenIcon(if (preparedPlayer?.isPlaying == true) "Ⅱ" else "▶", 26f) { toggleFullscreenPlayPause(it as TextView) }.apply { tag = "fullscreen_play_button" }
                 addView(playButton, LinearLayout.LayoutParams(dp(52), dp(42)).apply { leftMargin = dp(6); rightMargin = dp(6) })
                 addView(fullscreenIcon("›|", 19f) { playAdjacentEpisode(detail, 1) }, LinearLayout.LayoutParams(dp(46), dp(40)))
                 addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
@@ -1146,6 +1147,8 @@ class BangumiWatchActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         }, FrameLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
 
+        attachFullscreenPlayerStateListener(preparedPlayer)
+        updateFullscreenPlaybackViews()
         if (fullscreenControlsVisible) scheduleFullscreenControlsHide()
     }
 
@@ -1237,11 +1240,38 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun updateFullscreenSeekViews() {
+        updateFullscreenPlaybackViews()
+    }
+
+    private fun updateFullscreenPlaybackViews(button: TextView? = null) {
         val rootView = window.decorView
+        val exo = player
         val timeText = rootView.findViewWithTag<TextView>("fullscreen_time_text")
         val seekBar = rootView.findViewWithTag<SeekBar>("fullscreen_seek_bar")
-        timeText?.text = fullscreenTimeText(player)
-        seekBar?.progress = fullscreenProgress(player)
+        val playButton = button ?: rootView.findViewWithTag<TextView>("fullscreen_play_button")
+        timeText?.text = fullscreenTimeText(exo)
+        seekBar?.progress = fullscreenProgress(exo)
+        playButton?.text = if (exo?.isPlaying == true) "Ⅱ" else "▶"
+        playButton?.alpha = if (exo?.playbackState == Player.STATE_BUFFERING) 0.62f else 1f
+    }
+
+    private fun attachFullscreenPlayerStateListener(exo: ExoPlayer?) {
+        val old = fullscreenPlayerStateListener
+        if (old != null) player?.removeListener(old)
+        if (exo == null || !isFullscreenPlayer) {
+            fullscreenPlayerStateListener = null
+            return
+        }
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                updateFullscreenPlaybackViews()
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                updateFullscreenPlaybackViews()
+            }
+        }
+        fullscreenPlayerStateListener = listener
+        exo.addListener(listener)
     }
 
     private fun toggleFullscreenLock() {
@@ -1282,7 +1312,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls") ?: return
         controls.isClickable = false
         controls.animate().cancel()
-        controls.animate().alpha(1f).translationY(0f).setDuration(180L).start()
+        controls.animate().alpha(1f).translationY(0f).setDuration(140L).start()
         scheduleFullscreenControlsHide()
     }
 
@@ -1291,7 +1321,7 @@ class BangumiWatchActivity : AppCompatActivity() {
         val controls = window.decorView.findViewWithTag<View>("fullscreen_overlay_controls") ?: return
         controls.isClickable = false
         controls.animate().cancel()
-        controls.animate().alpha(0f).translationY(dp(14).toFloat()).setDuration(220L).withEndAction {
+        controls.animate().alpha(0f).translationY(dp(14).toFloat()).setDuration(160L).withEndAction {
             fullscreenControlsVisible = false
         }.start()
     }
@@ -1312,7 +1342,12 @@ class BangumiWatchActivity : AppCompatActivity() {
     private fun toggleFullscreenPlayPause(button: TextView?) {
         val exo = player ?: return
         if (exo.isPlaying) exo.pause() else exo.play()
-        button?.text = if (exo.isPlaying) "Ⅱ" else "▶"
+        val targetButton = button ?: window.decorView.findViewWithTag<TextView>("fullscreen_play_button")
+        targetButton?.animate()?.cancel()
+        targetButton?.scaleX = 0.88f
+        targetButton?.scaleY = 0.88f
+        updateFullscreenPlaybackViews(targetButton)
+        targetButton?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(110L)?.start()
         showFullscreenControlsTemporarily()
     }
 
@@ -1379,9 +1414,8 @@ class BangumiWatchActivity : AppCompatActivity() {
         fullscreenTimeTicker = object : Runnable {
             override fun run() {
                 if (!isFullscreenPlayer) return
-                timeText.text = fullscreenTimeText(exo)
-                seekBar.progress = fullscreenProgress(exo)
-                fullscreenHandler.postDelayed(this, 500L)
+                updateFullscreenPlaybackViews()
+                fullscreenHandler.postDelayed(this, 250L)
             }
         }
         fullscreenHandler.post(fullscreenTimeTicker!!)
@@ -1852,6 +1886,8 @@ if (showBack) navigateBack()
         isFullscreenPlayer = false
         fullscreenTimeTicker?.let { fullscreenHandler.removeCallbacks(it) }
         fullscreenHideRunnable?.let { fullscreenHandler.removeCallbacks(it) }
+        fullscreenPlayerStateListener?.let { player?.removeListener(it) }
+        fullscreenPlayerStateListener = null
         fullscreenTimeTicker = null
         fullscreenHideRunnable = null
         fullscreenControlsVisible = true

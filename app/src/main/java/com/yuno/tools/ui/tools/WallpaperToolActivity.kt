@@ -1,8 +1,10 @@
 package com.yuno.tools.ui.tools
 
+import android.Manifest
 import android.app.WallpaperManager
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -24,6 +26,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 
 class WallpaperToolActivity : AppCompatActivity() {
@@ -32,6 +36,10 @@ class WallpaperToolActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private var currentBitmap: Bitmap? = null
     private var currentName = "wallpaper"
+    private var pendingLockRead = false
+    private val requestLegacyPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result.values.any { it }) loadWallpaperInternal(pendingLockRead) else showPermissionDenied()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,7 +95,7 @@ class WallpaperToolActivity : AppCompatActivity() {
         ))
         addView(row(
             pill("保存图片", "#10B981") { saveCurrent() },
-            pill("壁纸设置", "#F59E0B") { openWallpaperSettings() }
+            pill("权限设置", "#F59E0B") { openWallpaperSettings() }
         ).apply { setPadding(0, dp(10), 0, 0) })
     }
 
@@ -135,11 +143,24 @@ class WallpaperToolActivity : AppCompatActivity() {
     }
 
     private fun loadWallpaper(lock: Boolean) {
+        pendingLockRead = lock
         val label = if (lock) "锁屏" else "桌面"
         status.text = "正在读取${label}壁纸..."
         preview.setImageDrawable(null)
         currentBitmap = null
 
+        val missingPermissions = wallpaperPermissions().filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (missingPermissions.isNotEmpty()) {
+            status.text = "当前设备需要读取图片/存储权限后才能访问系统壁纸，正在请求权限..."
+            requestLegacyPermission.launch(missingPermissions.toTypedArray())
+            return
+        }
+
+        loadWallpaperInternal(lock)
+    }
+
+    private fun loadWallpaperInternal(lock: Boolean) {
+        val label = if (lock) "锁屏" else "桌面"
         val report = StringBuilder()
         val wm = WallpaperManager.getInstance(this)
         val result = readWallpaperBitmap(wm, lock, report)
@@ -163,6 +184,19 @@ class WallpaperToolActivity : AppCompatActivity() {
             append("已获取${label}壁纸：${result.width} × ${result.height}\n\n")
             append(report.toString())
         }
+    }
+
+    private fun wallpaperPermissions(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_EXTERNAL_STORAGE)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    private fun showPermissionDenied() {
+        status.text = "未授予读取图片/存储权限，无法继续读取壁纸。请到系统设置里允许“照片和视频/存储”权限后重试。"
+        toast("需要读取存储权限")
     }
 
     private fun readWallpaperBitmap(wm: WallpaperManager, lock: Boolean, report: StringBuilder): Bitmap? {
@@ -255,8 +289,7 @@ class WallpaperToolActivity : AppCompatActivity() {
     }
 
     private fun openWallpaperSettings() {
-        runCatching { startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)) }
-            .recoverCatching { startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
+        runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = android.net.Uri.parse("package:$packageName") }) }
             .recoverCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
     }
 

@@ -51,6 +51,9 @@
             android:name=".ui.profile.ProfileActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.profile.MemberCenterActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.profile.ParseHistoryActivity"
             android:screenOrientation="portrait" />
         <activity

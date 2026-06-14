@@ -19,6 +19,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.yuno.tools.R
 import com.yuno.tools.data.UserSettingsStore
+import com.yuno.tools.data.AccountStore
 import com.yuno.tools.util.ThemeApplier
 class ProfileActivity : AppCompatActivity() {
     private var avatarPlayer: ExoPlayer? = null
@@ -36,11 +37,29 @@ class ProfileActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finishWithAnim() }
         findViewById<MaterialCardView>(R.id.cardAvatarHeader).setOnClickListener { chooseAvatar() }
         findViewById<MaterialCardView>(R.id.cardChooseAvatar).setOnClickListener { chooseAvatar() }
+        findViewById<MaterialCardView>(R.id.cardMemberCenter).setOnClickListener { startActivity(Intent(this, MemberCenterActivity::class.java)) }
         findViewById<MaterialCardView>(R.id.cardParseHistory).setOnClickListener { startActivity(Intent(this, ParseHistoryActivity::class.java)) }
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         loadAvatar()
+        refreshAccountPanel()
     }
-    override fun onResume() { super.onResume(); ThemeApplier.apply(this); loadAvatar() }
+    override fun onResume() { super.onResume(); ThemeApplier.apply(this); loadAvatar(); refreshAccountPanel() }
+
+    private fun refreshAccountPanel() {
+        val state = AccountStore.state(this)
+        val name = findViewById<TextView>(R.id.tvProfileName)
+        val hint = findViewById<TextView>(R.id.tvAvatarHint)
+        val summary = findViewById<TextView>(R.id.tvMemberSummary)
+        if (state.loggedIn) {
+            name.text = state.nickname.ifBlank { state.username }
+            hint.text = if (state.isVip) "VIP会员 · ${AccountStore.vipText(state)} · ${state.points}积分" else "普通用户 · ${state.points}积分 · 点击头像可更换"
+            summary.text = "${AccountStore.vipText(state)} · ${state.points}积分 · 连续签到${state.streak}天"
+        } else {
+            name.text = "YunoTools"
+            hint.text = "未登录 · 点击会员中心可注册/登录"
+            summary.text = "未登录 · 登录后可签到获得积分"
+        }
+    }
     private fun chooseAvatar() {
         pickAvatar.launch(arrayOf("image/*", "video/*"))
     }

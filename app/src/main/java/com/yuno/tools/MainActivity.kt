@@ -86,6 +86,7 @@ import com.yuno.tools.ui.tools.MetalDetectorActivity
 import com.yuno.tools.ui.tools.WoodenFishActivity
 import com.yuno.tools.ui.tools.MagicCubeActivity
 import com.yuno.tools.ui.tools.DinoRunActivity
+import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
@@ -245,6 +246,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardDinoRun).setOnClickListener {
             startActivity(Intent(this, DinoRunActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardPokiGames).setOnClickListener {
+            startActivity(Intent(this, PokiGamesActivity::class.java))
         }
     }
 

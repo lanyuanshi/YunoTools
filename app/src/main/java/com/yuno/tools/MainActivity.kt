@@ -54,6 +54,7 @@ import com.google.android.material.card.MaterialCardView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -312,7 +313,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (player.mediaItemCount == 0 || currentMusicUri == null) {
-            playSelectedMusic("本地音乐 · 用户歌曲", defaultLocalSongUri(), null)
+            playSelectedMusic("内置音乐 · 用户歌曲", defaultLocalSongUri(), null)
             return
         }
         player.playWhenReady = true
@@ -370,8 +371,9 @@ class MainActivity : AppCompatActivity() {
                 .setConnectTimeoutMs(12000)
                 .setReadTimeoutMs(12000)
                 .setDefaultRequestProperties(musicHttpHeaders())
+            val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
             ExoPlayer.Builder(this)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+                .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
                 .build()
         }.also { created ->
             musicPlayer = created
@@ -443,7 +445,7 @@ class MainActivity : AppCompatActivity() {
     private fun playLocalMusicFromPanel() {
         currentOnlinePlayKey = null
         loadingOnlinePlayKey = null
-        playSelectedMusic("本地音乐 · 用户歌曲", currentMusicUri ?: defaultLocalSongUri(), null)
+        playSelectedMusic("内置音乐 · 用户歌曲", defaultLocalSongUri(), null)
     }
 
     private fun defaultLocalSongUri(): Uri {
@@ -583,65 +585,53 @@ class MainActivity : AppCompatActivity() {
         fun showLocalTab() {
             musicPanelLastTab = MusicPanelTab.LOCAL
             content.removeAllViews()
-            val list = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
-            }
             if (!hasAudioPermission()) {
-                list.addView(makeMusicRow("读取本地音乐", "需要授权后才能显示手机里的歌曲名字和列表", "授权") {
-                    requestAudioPermissionIfNeeded()
-                })
-                list.addView(makeMusicRow("备用歌曲", "你上次发来的歌曲 · 无权限时可播放", "播放") {
-                    playSelectedMusic("备用歌曲 · 用户发送", defaultLocalSongUri())
-                    subTitle.text = currentMusicTitle
-                })
+                val items = listOf(
+                    Triple("授权音乐", "读取手机歌曲") { requestAudioPermissionIfNeeded() },
+                    Triple("用户歌曲", "APP内置音乐") {
+                        playSelectedMusic("内置音乐 · 用户歌曲", defaultLocalSongUri())
+                        subTitle.text = currentMusicTitle
+                    }
+                )
+                content.addView(musicCardGrid(items), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             } else {
                 val songs = loadLocalSongs()
-                if (songs.isEmpty()) {
-                    list.addView(makeMusicRow("未扫描到本地歌曲", "先播放你上次发来的备用歌曲", "播放") {
-                        playSelectedMusic("备用歌曲 · 用户发送", defaultLocalSongUri())
+                val items = if (songs.isEmpty()) {
+                    listOf(Triple("用户歌曲", "APP内置音乐") {
+                        playSelectedMusic("内置音乐 · 用户歌曲", defaultLocalSongUri())
                         subTitle.text = currentMusicTitle
                     })
                 } else {
-                    songs.forEach { song ->
-                        val desc = "${song.artist} · ${formatDuration(song.durationMs)}"
-                        list.addView(makeMusicRow(song.title, desc, "选择") {
+                    songs.map { song ->
+                        Triple(song.title, "${song.artist} · ${formatDuration(song.durationMs)}") {
                             playSelectedMusic("本地音乐 · ${song.title}", song.uri)
                             subTitle.text = currentMusicTitle
-                        })
+                        }
                     }
                 }
+                content.addView(musicCardGrid(items), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             }
-            content.addView(ScrollView(this).apply { addView(list) })
         }
 
         fun showFavoriteTab() {
             musicPanelLastTab = MusicPanelTab.FAVORITE
             content.removeAllViews()
-            val list = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
-            }
             val favorites = loadMusicRecords(MUSIC_FAVORITES_KEY)
             if (favorites.isEmpty()) {
+                val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                 list.addView(makeHintText("暂无在线歌曲收藏。搜索网易云榜单 / 歌曲海后，点击“收藏”即可保存到这里。"))
+                content.addView(ScrollView(this).apply { isFillViewport = true; addView(list) }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             } else {
-                favorites.forEach { record ->
-                    list.addView(makeOnlineRecordRow(
-                        record,
-                        showDownload = true,
-                        onChanged = { showFavoriteTab() },
-                        playAction = {
-                            playOnlineRecord(record)
-                            subTitle.text = currentMusicTitle
-                        }
-                    ))
+                val items = favorites.map { record ->
+                    Triple(record.title, record.artist.ifBlank { record.sourceLabel }) {
+                        playOnlineRecord(record)
+                        subTitle.text = currentMusicTitle
+                    }
                 }
+                val loading = favorites.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                val current = favorites.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                content.addView(musicCardGrid(items, loading, current), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             }
-            content.addView(ScrollView(this).apply {
-                isFillViewport = true
-                addView(list)
-            }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
 
         fun showOnlineMusicTab() {
@@ -706,108 +696,39 @@ class MainActivity : AppCompatActivity() {
                         orientation = LinearLayout.VERTICAL
                         setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                     }
-                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试更换关键词；歌曲海部分结果可能暂无公开播放源", "", {}))
+                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试更换关键词；部分结果可能暂无公开播放源", "", {}))
                     replaceOnlineList(ScrollView(this).apply {
                         isFillViewport = true
                         addView(listArea)
                     })
-                } else {
-                    val grid = GridLayout(this).apply {
-                        columnCount = 3
-                        setPadding((2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt())
-                    }
-                    val dialogSafeWidth = (resources.displayMetrics.widthPixels - 64 * density).toInt().coerceAtLeast((300 * density).toInt())
-                    val gap = (4 * density).toInt()
-                    val cardSize = ((dialogSafeWidth - gap * 6) / 3).coerceAtMost((104 * density).toInt()).coerceAtLeast((82 * density).toInt())
-                    val coverSize = (cardSize * 0.52f).toInt()
-                    val playSize = (28 * density).toInt()
-                    for (s in songs) {
-                        val card = FrameLayout(this).apply {
-                            layoutParams = GridLayout.LayoutParams().apply {
-                                width = cardSize
-                                height = (cardSize * 1.05f).toInt()
-                                setMargins(gap, gap, gap, gap)
-                            }
-                            background = GradientDrawable().apply {
-                                shape = GradientDrawable.RECTANGLE
-                                cornerRadius = 10f * density
-                                setColor(Color.argb(185, 255, 255, 255))
-                            }
-                        }
-                        val inner = LinearLayout(this).apply {
-                            orientation = LinearLayout.VERTICAL
-                            gravity = Gravity.CENTER
-                            setPadding((5 * density).toInt(), (6 * density).toInt(), (5 * density).toInt(), (5 * density).toInt())
-                        }
-                        val cover = ImageView(this).apply {
-                            layoutParams = LinearLayout.LayoutParams(coverSize, coverSize)
-                            scaleType = ImageView.ScaleType.CENTER_CROP
-                            background = GradientDrawable().apply {
-                                shape = GradientDrawable.RECTANGLE
-                                cornerRadius = 8f * density
-                                setColor(Color.argb(55, 30, 136, 229))
-                            }
-                        }
-                        inner.addView(cover)
-                        inner.addView(TextView(this).apply {
-                            text = s.title
-                            textSize = 10.5f
-                            typeface = Typeface.DEFAULT_BOLD
-                            setTextColor(Color.parseColor("#182033"))
-                            maxLines = 1
-                            gravity = Gravity.CENTER
-                            setPadding(0, (4 * density).toInt(), 0, 0)
-                        })
-                        inner.addView(TextView(this).apply {
-                            text = s.artist.ifBlank { s.source.label }
-                            textSize = 9f
-                            setTextColor(Color.parseColor("#6F7A8C"))
-                            maxLines = 1
-                            gravity = Gravity.CENTER
-                        })
-                        val playIcon = TextView(this).apply {
-                            text = "▶"
-                            textSize = 14f
-                            gravity = Gravity.CENTER
-                            setTextColor(Color.WHITE)
-                            background = GradientDrawable().apply {
-                                shape = GradientDrawable.OVAL
-                                setColor(Color.argb(210, 30, 136, 229))
-                            }
-                            layoutParams = FrameLayout.LayoutParams(playSize, playSize, Gravity.CENTER or Gravity.BOTTOM).apply {
-                                bottomMargin = (10 * density).toInt()
-                            }
-                            setOnClickListener {
-                                playOnlineRecord(OnlineMusicRecord(
-                                    title = s.title,
-                                    artist = s.artist,
-                                    sourceLabel = s.source.label,
-                                    pageUrl = s.pageUrl,
-                                    playUrl = s.playUrl.orEmpty(),
-                                    savedAt = System.currentTimeMillis()
-                                ))
-                            }
-                        }
-                        card.addView(inner, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-                        card.addView(playIcon)
-                        card.setOnClickListener {
-                            playOnlineRecord(OnlineMusicRecord(
-                                title = s.title,
-                                artist = s.artist,
-                                sourceLabel = s.source.label,
-                                pageUrl = s.pageUrl,
-                                playUrl = s.playUrl.orEmpty(),
-                                savedAt = System.currentTimeMillis()
-                            ))
+                    return
+                }
+                val records = songs.map { s ->
+                    OnlineMusicRecord(
+                        title = s.title,
+                        artist = s.artist,
+                        sourceLabel = s.source.label,
+                        pageUrl = s.pageUrl,
+                        playUrl = s.playUrl.orEmpty(),
+                        savedAt = System.currentTimeMillis()
+                    )
+                }
+                val items = records.map { record ->
+                    Triple(record.title, record.artist.ifBlank { record.sourceLabel }) {
+                        if (record.playUrl.isBlank()) {
+                            Toast.makeText(this, "该歌曲暂无公开播放源", Toast.LENGTH_SHORT).show()
+                        } else {
+                            loadingOnlinePlayKey = musicRecordKey(record)
+                            currentOnlinePlayKey = musicRecordKey(record)
+                            renderOnlineSongs(songs)
+                            playOnlineRecord(record)
                             subTitle.text = currentMusicTitle
                         }
-                        grid.addView(card)
                     }
-                    replaceOnlineList(ScrollView(this).apply {
-                        isFillViewport = true
-                        addView(grid)
-                    })
                 }
+                val loading = records.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                val current = records.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                replaceOnlineList(musicCardGrid(items, loading, current))
             }
 
             refreshOnlineMusicList = { renderOnlineSongs(onlineCachedSongs) }
@@ -892,6 +813,100 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
         dialog.window?.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
     }
+
+    private fun musicCardGrid(items: List<Triple<String, String, () -> Unit>>, loadingKeys: List<String> = emptyList(), currentKeys: List<String> = emptyList()): ScrollView {
+        val density = resources.displayMetrics.density
+    val grid = GridLayout(this).apply {
+        columnCount = 3
+        setPadding((2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt())
+    }
+    val dialogSafeWidth = (resources.displayMetrics.widthPixels - 64 * density).toInt().coerceAtLeast((300 * density).toInt())
+    val gap = (4 * density).toInt()
+    val cardSize = ((dialogSafeWidth - gap * 6) / 3).coerceAtMost((104 * density).toInt()).coerceAtLeast((82 * density).toInt())
+    val coverSize = (cardSize * 0.58f).toInt()
+    val playSize = (30 * density).toInt()
+    items.forEachIndexed { index, item ->
+        val titleText = item.first
+        val subText = item.second
+        val action = item.third
+        val isLoading = loadingKeys.getOrNull(index) == "1"
+        val isCurrent = currentKeys.getOrNull(index) == "1"
+        val card = FrameLayout(this).apply {
+            layoutParams = GridLayout.LayoutParams().apply {
+                width = cardSize
+                height = (cardSize * 1.12f).toInt()
+                setMargins(gap, gap, gap, gap)
+            }
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 10f * density
+                setColor(Color.argb(if (isCurrent) 220 else 185, 255, 255, 255))
+                if (isCurrent) setStroke((1.4f * density).toInt(), Color.parseColor("#1E88E5"))
+            }
+            setOnClickListener { action() }
+        }
+        val inner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding((5 * density).toInt(), (5 * density).toInt(), (5 * density).toInt(), (4 * density).toInt())
+        }
+        val coverBox = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(coverSize, coverSize)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 9f * density
+                setColor(Color.argb(62, 30, 136, 229))
+            }
+        }
+        coverBox.addView(ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER
+            setImageResource(R.drawable.ic_nav_music_disc)
+            imageTintList = ColorStateList.valueOf(Color.parseColor("#1E88E5"))
+        }, FrameLayout.LayoutParams((coverSize * 0.58f).toInt(), (coverSize * 0.58f).toInt(), Gravity.CENTER))
+        coverBox.addView(TextView(this).apply {
+            text = when {
+                isLoading -> "…"
+                isCurrent && musicPlayer?.isPlaying == true -> "Ⅱ"
+                else -> "▶"
+            }
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.argb(218, 30, 136, 229))
+            }
+            setOnClickListener { action() }
+        }, FrameLayout.LayoutParams(playSize, playSize, Gravity.CENTER))
+        inner.addView(coverBox)
+        inner.addView(TextView(this).apply {
+            text = titleText
+            textSize = 10.5f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#182033"))
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+            setPadding(0, (4 * density).toInt(), 0, 0)
+        })
+        inner.addView(TextView(this).apply {
+            text = subText
+            textSize = 9f
+            setTextColor(Color.parseColor("#6F7A8C"))
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+        })
+        card.addView(inner, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        grid.addView(card)
+    }
+    return ScrollView(this).apply {
+        isFillViewport = true
+        addView(grid)
+    }
+}
+
 
     private fun makeMusicChip(text: String, action: () -> Unit): TextView {
         val density = resources.displayMetrics.density

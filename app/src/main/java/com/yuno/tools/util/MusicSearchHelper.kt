@@ -51,7 +51,7 @@ object MusicSearchHelper {
                     }
                 }
             }
-            latch.await(10, TimeUnit.SECONDS)
+            latch.await(5, TimeUnit.SECONDS)
             executor.shutdownNow()
             val songs = allSongs
                 .distinctBy { it.source.name + "|" + it.pageUrl + "|" + it.title }
@@ -212,8 +212,8 @@ object MusicSearchHelper {
         conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
         conn.setRequestProperty("X-Requested-With", "XMLHttpRequest")
         conn.setRequestProperty("X-Custom-Header", "SecretKey")
-        conn.connectTimeout = 4500
-        conn.readTimeout = 4500
+        conn.connectTimeout = 2500
+        conn.readTimeout = 2500
         return try {
             conn.outputStream.use { it.write(body) }
             conn.inputStream.bufferedReader().readText()
@@ -227,8 +227,8 @@ object MusicSearchHelper {
         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
         conn.setRequestProperty("Referer", referer)
         conn.setRequestProperty("Accept", accept)
-        conn.connectTimeout = 4500
-        conn.readTimeout = 4500
+        conn.connectTimeout = 2500
+        conn.readTimeout = 2500
         return try {
             conn.inputStream.bufferedReader().readText()
         } finally {

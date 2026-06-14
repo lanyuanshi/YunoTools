@@ -1,93 +1,231 @@
 package com.yuno.tools.ui.tools
 
 import android.app.WallpaperManager
-import android.Manifest
 import android.content.ContentValues
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.Drawable
-import android.graphics.Color
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
+import android.view.Gravity
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import kotlin.math.roundToInt
 
 class WallpaperToolActivity : AppCompatActivity() {
     private lateinit var preview: ImageView
     private lateinit var info: TextView
+    private lateinit var status: TextView
     private var currentBitmap: Bitmap? = null
     private var currentName = "wallpaper"
-    private var pendingLockRead = false
-    private val requestImagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) loadWallpaperInternal(pendingLockRead) else info.text = "未授予图片读取权限，无法读取当前壁纸。"
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(18), dp(16), dp(18)); setBackgroundColor(Color.parseColor("#F2F2F7")) }
-        root.addView(TextView(this).apply { text = "获取当前壁纸"; textSize = 24f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#111827")); setPadding(0, 0, 0, dp(4)) })
-        root.addView(TextView(this).apply { text = "可读取桌面壁纸；锁屏壁纸受系统权限限制，支持的设备会显示。"; textSize = 13f; setTextColor(Color.parseColor("#8A8F98")); setPadding(0, dp(4), 0, dp(12)) })
-        preview = ImageView(this).apply { background = roundedBg("#E5E7EB", 18); scaleType = ImageView.ScaleType.CENTER_CROP; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(360)) }
-        info = TextView(this).apply { textSize = 14f; setTextColor(Color.parseColor("#374151")); setPadding(0, dp(12), 0, dp(8)) }
-        root.addView(row(button("桌面壁纸") { loadWallpaper(false) }, button("锁屏壁纸") { loadWallpaper(true) }, button("保存") { saveCurrent() }))
-        root.addView(row(button("壁纸设置") { openWallpaperSettings() }))
-        root.addView(preview)
-        root.addView(info)
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#F3F6FF"))
+            addView(LinearLayout(this@WallpaperToolActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(18), dp(16), dp(24))
+                addView(heroCard())
+                addView(actionCard())
+                addView(previewCard())
+                addView(statusCard())
+            })
+        })
+    }
+
+    private fun heroCard() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = gradientBg("#667EEA", "#764BA2", 24)
+        setPadding(dp(18), dp(18), dp(18), dp(18))
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) }
+        addView(TextView(context).apply {
+            text = "当前壁纸"
+            textSize = 25f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+        })
+        addView(TextView(context).apply {
+            text = "读取桌面/锁屏壁纸，支持保存到相册。若 ROM 限制读取，会显示详细诊断。"
+            textSize = 13.5f
+            setTextColor(Color.argb(225, 255, 255, 255))
+            setPadding(0, dp(8), 0, 0)
+            setLineSpacing(dp(2).toFloat(), 1.0f)
+        })
+    }
+
+    private fun actionCard() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = roundedBg("#FFFFFF", 22)
+        elevation = dp(2).toFloat()
+        setPadding(dp(14), dp(14), dp(14), dp(14))
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) }
+        addView(TextView(context).apply {
+            text = "操作"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#111827"))
+            setPadding(0, 0, 0, dp(10))
+        })
+        addView(row(
+            pill("桌面壁纸", "#2563EB") { loadWallpaper(false) },
+            pill("锁屏壁纸", "#7C3AED") { loadWallpaper(true) }
+        ))
+        addView(row(
+            pill("保存图片", "#10B981") { saveCurrent() },
+            pill("壁纸设置", "#F59E0B") { openWallpaperSettings() }
+        ).apply { setPadding(0, dp(10), 0, 0) })
+    }
+
+    private fun previewCard() = FrameLayout(this).apply {
+        background = roundedBg("#FFFFFF", 24)
+        elevation = dp(2).toFloat()
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        layoutParams = LinearLayout.LayoutParams(-1, dp(430)).apply { bottomMargin = dp(14) }
+        preview = ImageView(context).apply {
+            background = roundedBg("#E5E7EB", 20)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setImageDrawable(null)
+        }
+        addView(preview, FrameLayout.LayoutParams(-1, -1))
+        addView(TextView(context).apply {
+            text = "预览区域"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = roundedBg("#66000000", 14)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { leftMargin = dp(16); topMargin = dp(16) })
+    }
+
+    private fun statusCard() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = roundedBg("#FFFFFF", 22)
+        elevation = dp(2).toFloat()
+        setPadding(dp(14), dp(14), dp(14), dp(14))
+        addView(TextView(context).apply {
+            text = "状态 / 诊断"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#111827"))
+            setPadding(0, 0, 0, dp(8))
+        })
+        status = TextView(context).apply {
+            text = "请选择要读取的壁纸。"
+            textSize = 13f
+            setTextColor(Color.parseColor("#4B5563"))
+            setLineSpacing(dp(3).toFloat(), 1.0f)
+        }
+        info = status
+        addView(status)
     }
 
     private fun loadWallpaper(lock: Boolean) {
-        pendingLockRead = lock
-        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-            requestImagePermission.launch(permission)
-            return
-        }
-        loadWallpaperInternal(lock)
-    }
+        val label = if (lock) "锁屏" else "桌面"
+        status.text = "正在读取${label}壁纸..."
+        preview.setImageDrawable(null)
+        currentBitmap = null
 
-    private fun loadWallpaperInternal(lock: Boolean) {
+        val report = StringBuilder()
         val wm = WallpaperManager.getInstance(this)
-        val bmp = readWallpaperBitmap(wm, lock)
-        if (bmp == null) {
+        val result = readWallpaperBitmap(wm, lock, report)
+        if (result == null) {
             currentBitmap = null
-            info.text = if (lock) "当前系统不允许读取锁屏壁纸，或未设置独立锁屏壁纸。" else "读取桌面壁纸失败：当前系统未开放壁纸文件。"
-            preview.setImageDrawable(null)
+            status.text = buildString {
+                append("读取${label}壁纸失败。\n\n")
+                append(report.toString())
+                append("\n可能原因：\n")
+                append("1. 当前 ROM 禁止普通应用读取壁纸原图；\n")
+                append("2. 锁屏壁纸未单独设置，或系统不开放 FLAG_LOCK；\n")
+                append("3. 使用动态壁纸/主题壁纸时系统不返回 Bitmap；\n")
+                append("4. 如一个木函可读取，可能用了该机型的私有适配或系统级权限。")
+            }
             return
         }
-        currentBitmap = bmp
+        currentBitmap = result
         currentName = if (lock) "lock_wallpaper" else "home_wallpaper"
-        preview.setImageBitmap(bmp)
-        info.text = "已获取${if (lock) "锁屏" else "桌面"}壁纸：${bmp.width} × ${bmp.height}"
+        preview.setImageBitmap(result)
+        status.text = buildString {
+            append("已获取${label}壁纸：${result.width} × ${result.height}\n\n")
+            append(report.toString())
+        }
     }
 
-    private fun readWallpaperBitmap(wm: WallpaperManager, lock: Boolean): Bitmap? {
+    private fun readWallpaperBitmap(wm: WallpaperManager, lock: Boolean, report: StringBuilder): Bitmap? {
+        fun log(ok: Boolean, name: String, extra: String = "") {
+            report.append(if (ok) "✓ " else "✕ ").append(name)
+            if (extra.isNotBlank()) report.append("：").append(extra)
+            report.append('\n')
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val flag = if (lock) WallpaperManager.FLAG_LOCK else WallpaperManager.FLAG_SYSTEM
-            runCatching {
-                wm.getWallpaperFile(flag)?.use { pfd -> BitmapFactory.decodeFileDescriptor(pfd.fileDescriptor) }
-            }.getOrNull()?.let { return it }
+            try {
+                val pfd = wm.getWallpaperFile(flag)
+                if (pfd == null) {
+                    log(false, "getWallpaperFile(${if (lock) "FLAG_LOCK" else "FLAG_SYSTEM"})", "系统返回空")
+                } else {
+                    pfd.use {
+                        val bmp = BitmapFactory.decodeFileDescriptor(it.fileDescriptor)
+                        if (bmp != null) {
+                            log(true, "getWallpaperFile", "${bmp.width}×${bmp.height}")
+                            return bmp
+                        } else {
+                            log(false, "decodeFileDescriptor", "解码为空")
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                log(false, "getWallpaperFile", t.javaClass.simpleName + ": " + (t.message ?: "无信息"))
+            }
+        } else {
+            log(false, "getWallpaperFile", "Android 7.0 以下不可用")
         }
+
         if (!lock) {
-            runCatching { wm.drawable?.toBitmapSafe() }.getOrNull()?.let { return it }
-            runCatching { wm.fastDrawable?.toBitmapSafe() }.getOrNull()?.let { return it }
+            try {
+                val d = wm.drawable
+                val bmp = d?.toBitmapSafe()
+                if (bmp != null) {
+                    log(true, "WallpaperManager.drawable", "${bmp.width}×${bmp.height}")
+                    return bmp
+                } else {
+                    log(false, "WallpaperManager.drawable", "Drawable 为空或无法绘制")
+                }
+            } catch (t: Throwable) {
+                log(false, "WallpaperManager.drawable", t.javaClass.simpleName + ": " + (t.message ?: "无信息"))
+            }
+
+            try {
+                val d = wm.fastDrawable
+                val bmp = d?.toBitmapSafe()
+                if (bmp != null) {
+                    log(true, "WallpaperManager.fastDrawable", "${bmp.width}×${bmp.height}")
+                    return bmp
+                } else {
+                    log(false, "WallpaperManager.fastDrawable", "Drawable 为空或无法绘制")
+                }
+            } catch (t: Throwable) {
+                log(false, "WallpaperManager.fastDrawable", t.javaClass.simpleName + ": " + (t.message ?: "无信息"))
+            }
+        } else {
+            log(false, "Drawable fallback", "Android 不提供锁屏壁纸 Drawable fallback")
         }
+
         return null
     }
 
@@ -103,7 +241,6 @@ class WallpaperToolActivity : AppCompatActivity() {
         toast("已保存到相册/YunoTools")
     }
 
-
     private fun Drawable.toBitmapSafe(): Bitmap? {
         if (this is BitmapDrawable && bitmap != null) return bitmap
         val w = if (intrinsicWidth > 0) intrinsicWidth else resources.displayMetrics.widthPixels
@@ -117,18 +254,41 @@ class WallpaperToolActivity : AppCompatActivity() {
         }.getOrNull()
     }
 
+    private fun openWallpaperSettings() {
+        runCatching { startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)) }
+            .recoverCatching { startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
+            .recoverCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+    }
+
+    private fun row(vararg views: Button) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        views.forEachIndexed { index, v ->
+            addView(v, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+                if (index != views.lastIndex) rightMargin = dp(10)
+            })
+        }
+    }
+
+    private fun pill(textValue: String, color: String, action: () -> Unit) = Button(this).apply {
+        text = textValue
+        textSize = 14f
+        typeface = Typeface.DEFAULT_BOLD
+        setTextColor(Color.WHITE)
+        background = roundedBg(color, 18)
+        stateListAnimator = null
+        setOnClickListener { action() }
+    }
+
     private fun roundedBg(color: String, radius: Int) = GradientDrawable().apply {
         setColor(Color.parseColor(color))
         cornerRadius = dp(radius).toFloat()
     }
 
-    private fun openWallpaperSettings() {
-        runCatching { startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
-            .recoverCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
-    }
+    private fun gradientBg(start: String, end: String, radius: Int) = GradientDrawable(
+        GradientDrawable.Orientation.TL_BR,
+        intArrayOf(Color.parseColor(start), Color.parseColor(end))
+    ).apply { cornerRadius = dp(radius).toFloat() }
 
-    private fun row(vararg views: Button) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; views.forEach { addView(it, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(6) }) } }
-    private fun button(t: String, action: () -> Unit) = Button(this).apply { text = t; setOnClickListener { action() } }
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt()
 }

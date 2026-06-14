@@ -98,39 +98,66 @@
             android:textSize="18sp"
             android:textStyle="bold" />
 
-
         <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardMemberCenter"
+            android:id="@+id/cardAccountPanel"
             android:layout_width="match_parent"
-            android:layout_height="86dp"
+            android:layout_height="wrap_content"
             android:foreground="?attr/selectableItemBackground"
-            app:cardBackgroundColor="#FFF7ED"
-            app:cardCornerRadius="20dp"
+            app:cardBackgroundColor="#FFFFFBEB"
+            app:cardCornerRadius="24dp"
             app:cardElevation="0dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp">
-                <FrameLayout android:layout_width="46dp" android:layout_height="46dp" android:background="@drawable/bg_circle_orange_light"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="VIP" android:textColor="#F97316" android:textSize="13sp" android:textStyle="bold" /></FrameLayout>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="会员中心" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/tvMemberSummary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="登录、签到、积分、会员权益" android:textColor="#92400E" android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <FrameLayout android:layout_width="46dp" android:layout_height="46dp" android:background="@drawable/bg_circle_orange_light"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="VIP" android:textColor="#F97316" android:textSize="13sp" android:textStyle="bold" /></FrameLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="账号 · 会员 · 签到" android:textColor="#111827" android:textSize="17sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/tvMemberSummary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="未登录 · 登录后可签到获得积分" android:textColor="#92400E" android:textSize="13sp" />
+                    </LinearLayout>
                 </LinearLayout>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="进入" android:textColor="#F97316" android:textSize="14sp" android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/loginInlinePanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical">
+                    <EditText android:id="@+id/etProfileAccount" android:layout_width="match_parent" android:layout_height="48dp" android:background="#FFFFFFFF" android:hint="账号，随便注册" android:paddingHorizontal="14dp" android:singleLine="true" android:textColor="#111827" android:textColorHint="#94A3B8" android:textSize="14sp" />
+                    <EditText android:id="@+id/etProfilePassword" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="8dp" android:background="#FFFFFFFF" android:hint="密码，至少3位" android:inputType="textPassword" android:paddingHorizontal="14dp" android:singleLine="true" android:textColor="#111827" android:textColorHint="#94A3B8" android:textSize="14sp" />
+                    <Button android:id="@+id/btnProfileLogin" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="10dp" android:backgroundTint="#4F46E5" android:text="登录 / 注册" android:textColor="#FFFFFF" android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/memberInlinePanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+                    <TextView android:id="@+id/tvProfileVip" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#FFFFFFFF" android:padding="12dp" android:text="普通用户 · 0积分" android:textColor="#111827" android:textSize="15sp" android:textStyle="bold" />
+                    <Button android:id="@+id/btnProfileCheckIn" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="10dp" android:backgroundTint="#F97316" android:text="立即签到" android:textColor="#FFFFFF" android:textStyle="bold" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
+                        <Button android:id="@+id/btnVip7" android:layout_width="0dp" android:layout_height="54dp" android:layout_marginEnd="4dp" android:layout_weight="1" android:backgroundTint="#FEF3C7" android:text="7天
+80积分" android:textColor="#92400E" android:textSize="12sp" />
+                        <Button android:id="@+id/btnVip30" android:layout_width="0dp" android:layout_height="54dp" android:layout_marginHorizontal="4dp" android:layout_weight="1" android:backgroundTint="#FEF3C7" android:text="30天
+260积分" android:textColor="#92400E" android:textSize="12sp" />
+                        <Button android:id="@+id/btnVip365" android:layout_width="0dp" android:layout_height="54dp" android:layout_marginStart="4dp" android:layout_weight="1" android:backgroundTint="#FEF3C7" android:text="365天
+1999积分" android:textColor="#92400E" android:textSize="12sp" />
+                    </LinearLayout>
+                    <Button android:id="@+id/btnProfileLogout" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="10dp" android:backgroundTint="#FEE2E2" android:text="退出登录" android:textColor="#EF4444" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardChooseAvatar"
-            android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:foreground="?attr/selectableItemBackground"
-            app:cardBackgroundColor="@android:color/white"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="0dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp">
-                <FrameLayout android:layout_width="42dp" android:layout_height="42dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_gravity="center" android:src="@drawable/ic_profile" app:tint="#007AFF" /></FrameLayout>
-                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:text="自定义头像" android:textColor="#111827" android:textSize="16sp" android:textStyle="bold" />
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="选择" android:textColor="#8E8E93" android:textSize="14sp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardParseHistory"

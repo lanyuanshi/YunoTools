@@ -39,6 +39,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.EditText
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -63,6 +64,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.yuno.tools.data.UserSettingsStore
+import com.yuno.tools.data.AccountStore
 import com.yuno.tools.ui.video.VideoParseActivity
 import com.yuno.tools.ui.tools.AIChatActivity
 import com.yuno.tools.ui.image.ImageCompressActivity
@@ -368,7 +370,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindProfilePage() {
         findViewById<MaterialCardView>(R.id.cardAvatarHeader).setOnClickListener { chooseAvatar() }
-        findViewById<MaterialCardView>(R.id.cardChooseAvatar).setOnClickListener { chooseAvatar() }
         findViewById<MaterialCardView>(R.id.cardParseHistory).setOnClickListener {
             startActivity(Intent(this, ParseHistoryActivity::class.java))
         }
@@ -378,6 +379,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        bindAccountPanel()
     }
 
     private fun bindBottomNav() {
@@ -428,6 +430,7 @@ class MainActivity : AppCompatActivity() {
         profile.visibility = View.VISIBLE
         findViewById<TextView>(R.id.tvMainTitle).text = "个人资料"
         loadAvatar()
+        refreshAccountPanel()
         playProfileEntranceBounce()
         updateNavSelection(MainTab.PROFILE, true)
     }
@@ -1512,6 +1515,62 @@ class MainActivity : AppCompatActivity() {
         manager.notify(MUSIC_NOTIFICATION_ID, notification)
     }
 
+
+    private fun bindAccountPanel() {
+        findViewById<Button>(R.id.btnProfileLogin).setOnClickListener {
+            val user = findViewById<EditText>(R.id.etProfileAccount).text.toString()
+            val pass = findViewById<EditText>(R.id.etProfilePassword).text.toString()
+            AccountStore.registerOrLogin(this, user, pass)
+                .onSuccess { toast("登录成功"); refreshAccountPanel() }
+                .onFailure { toast(it.message ?: "登录失败") }
+        }
+        findViewById<Button>(R.id.btnProfileCheckIn).setOnClickListener {
+            val r = AccountStore.checkIn(this)
+            toast(r.message)
+            refreshAccountPanel()
+        }
+        findViewById<Button>(R.id.btnVip7).setOnClickListener { redeemVip(7, 80) }
+        findViewById<Button>(R.id.btnVip30).setOnClickListener { redeemVip(30, 260) }
+        findViewById<Button>(R.id.btnVip365).setOnClickListener { redeemVip(365, 1999) }
+        findViewById<Button>(R.id.btnProfileLogout).setOnClickListener {
+            AccountStore.logout(this)
+            toast("已退出登录")
+            refreshAccountPanel()
+        }
+    }
+
+    private fun redeemVip(days: Int, cost: Int) {
+        AccountStore.redeemVip(this, days, cost)
+            .onSuccess { toast("兑换成功，会员已延长 ${days}天"); refreshAccountPanel() }
+            .onFailure { toast(it.message ?: "兑换失败") }
+    }
+
+    private fun refreshAccountPanel() {
+        val state = AccountStore.state(this)
+        runCatching {
+            findViewById<TextView>(R.id.tvProfileName).text = if (state.loggedIn) state.nickname.ifBlank { state.username } else "YunoTools"
+            findViewById<TextView>(R.id.tvAvatarHint).text = if (state.loggedIn) {
+                if (state.isVip) "VIP会员 · ${AccountStore.vipText(state)} · ${state.points}积分" else "普通用户 · ${state.points}积分 · 点击头像可更换"
+            } else "未登录 · 点击下方账号卡片可注册/登录，点击头像可更换"
+            findViewById<TextView>(R.id.tvMemberSummary).text = if (state.loggedIn) {
+                "${AccountStore.vipText(state)} · ${state.points}积分 · 连续签到${state.streak}天"
+            } else "未登录 · 登录后可签到获得积分"
+            findViewById<View>(R.id.loginInlinePanel).visibility = if (state.loggedIn) View.GONE else View.VISIBLE
+            findViewById<View>(R.id.memberInlinePanel).visibility = if (state.loggedIn) View.VISIBLE else View.GONE
+            if (state.loggedIn) {
+                findViewById<TextView>(R.id.tvProfileVip).text = "${AccountStore.vipText(state)} · ${state.points}积分 · 累计签到${state.totalCheckIn}天"
+                val checked = AccountStore.todayChecked(this)
+                findViewById<Button>(R.id.btnProfileCheckIn).apply {
+                    text = if (checked) "今日已签到 · 连续${state.streak}天" else "立即签到 · 连续${state.streak}天"
+                    isEnabled = !checked
+                    alpha = if (checked) 0.65f else 1f
+                }
+            }
+        }
+    }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
     private fun chooseAvatar() {
         pickAvatar.launch(arrayOf("image/*", "video/*"))
     }
@@ -1585,7 +1644,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         ThemeApplier.apply(this)
         updateNavSelection(currentTab, animate = false)
-        if (currentTab == MainTab.PROFILE) loadAvatar()
+        if (currentTab == MainTab.PROFILE) { loadAvatar(); refreshAccountPanel() }
     }
 
     override fun onBackPressed() {

@@ -307,10 +307,16 @@ class MainActivity : AppCompatActivity() {
         val player = ensureMusicPlayer()
         if (player.isPlaying) {
             player.pause()
-        } else {
-            player.playWhenReady = true
-            player.play()
+            updateMusicNavState(false)
+            updateMusicNotification(false)
+            return
         }
+        if (player.mediaItemCount == 0 || currentMusicUri == null) {
+            playSelectedMusic("本地音乐 · 用户歌曲", defaultLocalSongUri(), null)
+            return
+        }
+        player.playWhenReady = true
+        player.play()
         updateMusicNavState(player.isPlaying)
         updateMusicNotification(player.isPlaying)
     }

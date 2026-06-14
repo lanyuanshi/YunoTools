@@ -112,6 +112,7 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private lateinit var root: LinearLayout
     private lateinit var content: LinearLayout
+    private var showingFullscreenContent = false
     private var tab = Tab.BANGUMI
     private var screen = Screen.LIST
     private var loading = false
@@ -241,8 +242,17 @@ class BangumiWatchActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        if (isFullscreenPlayer && screen == Screen.DETAIL) {
+            renderFullscreenPlayerOnly()
+            return
+        }
+        if (showingFullscreenContent) {
+            showingFullscreenContent = false
+            buildUi()
+            return
+        }
         content.removeAllViews()
-        content.setPadding(if (isFullscreenPlayer) 0 else dp(10), if (isFullscreenPlayer) 0 else dp(8), if (isFullscreenPlayer) 0 else dp(10), if (isFullscreenPlayer) 0 else dp(82))
+        content.setPadding(dp(10), dp(8), dp(10), dp(82))
         updateBottomBarVisibility()
         when (screen) {
             Screen.HISTORY -> renderRecords("历史记录", "history")
@@ -960,9 +970,10 @@ class BangumiWatchActivity : AppCompatActivity() {
     private fun playerBox(detail: AnimeDetail) = FrameLayout(this).apply {
         tag = "playerRoot"
         setBackgroundColor(Color.BLACK)
-        val height = if (isFullscreenPlayer) resources.displayMetrics.heightPixels else dp(240)
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, height).apply {
-            if (!isFullscreenPlayer) setMargins(-dp(10), -dp(8), -dp(10), dp(12))
+        layoutParams = if (isFullscreenPlayer) {
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        } else {
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240)).apply { setMargins(-dp(10), -dp(8), -dp(10), dp(12)) }
         }
         val active = currentEpisode
         val preparedPlayer = if (active != null && currentPlayDirect) {
@@ -1253,8 +1264,26 @@ class BangumiWatchActivity : AppCompatActivity() {
 
     private fun renderDetailOnly() {
         if (screen != Screen.DETAIL) return
+        if (isFullscreenPlayer) {
+            renderFullscreenPlayerOnly()
+            return
+        }
+        if (showingFullscreenContent) {
+            showingFullscreenContent = false
+            buildUi()
+            return
+        }
         content.removeAllViews()
         renderDetail()
+    }
+
+    private fun renderFullscreenPlayerOnly() {
+        val detail = selectedDetail ?: return
+        showingFullscreenContent = true
+        setContentView(FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            addView(playerBox(detail), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        })
     }
 
     private fun ensurePlayer(headers: Map<String, String> = currentPlayHeaders): ExoPlayer {
@@ -1444,7 +1473,7 @@ if (showBack) navigateBack()
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         val insetsController = window.insetsController
         insetsController?.show(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars())
-        renderDetailOnly()
+        render()
     }
 
     private fun bottomBar(): LinearLayout = LinearLayout(this).apply {

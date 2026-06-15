@@ -142,6 +142,15 @@
             android:name=".ui.tools.TinyReaderActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.tools.NovelReaderActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.tools.NovelDetailActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.tools.NovelReaderPageActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.tools.FlashPhotoActivity"
             android:exported="true"
             android:screenOrientation="portrait">

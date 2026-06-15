@@ -15,6 +15,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.signature.ObjectKey
 import com.google.android.material.card.MaterialCardView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -137,6 +139,9 @@ class ProfileActivity : AppCompatActivity() {
                 pv.visibility = View.GONE
                 Glide.with(iv)
                     .load(uri)
+                    .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
+                    .skipMemoryCache(true)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .circleCrop()
                     .placeholder(R.drawable.bg_circle_blue)
                     .error(R.drawable.ic_profile)

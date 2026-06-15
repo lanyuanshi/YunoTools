@@ -54,6 +54,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.signature.ObjectKey
 import com.google.android.material.card.MaterialCardView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -411,7 +413,15 @@ class MainActivity : AppCompatActivity() {
                     iv.setPadding(dp(18), dp(18), dp(18), dp(18))
                 } else {
                     iv.setPadding(0, 0, 0, 0)
-                    Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).error(R.drawable.ic_profile).into(iv)
+                    Glide.with(iv)
+                        .load(uri)
+                        .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
+                        .skipMemoryCache(true)
+                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .circleCrop()
+                        .placeholder(R.drawable.bg_circle_blue)
+                        .error(R.drawable.ic_profile)
+                        .into(iv)
                 }
             } else {
                 Glide.with(iv).clear(iv)
@@ -444,7 +454,15 @@ class MainActivity : AppCompatActivity() {
                         iv.setPadding(dp(14), dp(14), dp(14), dp(14))
                     } else {
                         iv.setPadding(0, 0, 0, 0)
-                        Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).error(R.drawable.ic_profile).into(iv)
+                        Glide.with(iv)
+                        .load(uri)
+                        .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
+                        .skipMemoryCache(true)
+                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .circleCrop()
+                        .placeholder(R.drawable.bg_circle_blue)
+                        .error(R.drawable.ic_profile)
+                        .into(iv)
                     }
                 } else {
                     Glide.with(iv).clear(iv)

@@ -3,11 +3,13 @@ package com.yuno.tools
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.Manifest
+import android.app.AlertDialog
 import android.app.Dialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.ContentValues
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -406,7 +408,81 @@ class MainActivity : AppCompatActivity() {
             loadHomeRandomBanner()
             toast("正在换一张图片")
         }
-        loadHomeRandomBanner()
+        findViewById<MaterialCardView>(R.id.bannerRandomImage).setOnLongClickListener {
+            showHomeBannerActions()
+            true
+        }
+        if (homeRandomBannerUrl.isNullOrBlank()) {
+            loadHomeRandomBanner()
+        }
+    }
+
+    private fun showHomeBannerActions() {
+        val url = homeRandomBannerUrl.orEmpty()
+        if (url.isBlank()) {
+            toast("当前没有可操作的原图")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("轮播图操作")
+            .setItems(arrayOf("保存图片", "查看原图")) { _, which ->
+                when (which) {
+                    0 -> saveHomeBannerImage(url)
+                    1 -> openHomeBannerOriginal(url)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun openHomeBannerOriginal(url: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            toast("无法打开原图")
+        }
+    }
+
+    private fun saveHomeBannerImage(url: String) {
+        toast("正在保存轮播图")
+        CoroutineScope(Dispatchers.IO).launch {
+            val result = runCatching {
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 10000
+                    readTimeout = 15000
+                    setRequestProperty("User-Agent", "Mozilla/5.0 YunoTools")
+                    setRequestProperty("Accept", "image/*,*/*")
+                }
+                val bytes = conn.inputStream.use { it.readBytes() }
+                val mime = conn.contentType?.takeIf { it.startsWith("image/") } ?: "image/jpeg"
+                conn.disconnect()
+                val ext = when {
+                    mime.contains("png") -> "png"
+                    mime.contains("webp") -> "webp"
+                    else -> "jpg"
+                }
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "YunoTools_Banner_${System.currentTimeMillis()}.$ext")
+                    put(MediaStore.Images.Media.MIME_TYPE, mime)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/YunoTools")
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                }
+                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: error("创建媒体文件失败")
+                contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("写入失败")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    values.clear()
+                    values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                    contentResolver.update(uri, values, null, null)
+                }
+            }
+            withContext(Dispatchers.Main) {
+                toast(if (result.isSuccess) "轮播图已保存到相册" else "保存失败")
+            }
+        }
     }
 
     private fun loadHomeRandomBanner() {
@@ -1820,7 +1896,6 @@ class MainActivity : AppCompatActivity() {
         updateHomeProfileEntry()
         updateNavSelection(currentTab, animate = false)
         if (currentTab == MainTab.PROFILE) { updateProfileEntry() }
-        if (currentTab == MainTab.HOME) { loadHomeRandomBanner() }
     }
 
     override fun onBackPressed() {

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.app.AlertDialog
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -38,7 +39,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class HeisiImageActivity : AppCompatActivity() {
-    private val apiUrl = "http://api.tinise.cn/api/heisitu"
+    private val apiUrl = "https://v2.xxapi.cn/api/heisi?return=302"
     private var currentImageUrl: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,6 +49,7 @@ class HeisiImageActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnRefresh).setOnClickListener { loadImage() }
         findViewById<ImageView>(R.id.ivHeisi).setOnClickListener { loadImage() }
+        findViewById<ImageView>(R.id.ivHeisi).setOnLongClickListener { showImageActions(); true }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveCurrentImage() }
         findViewById<Button>(R.id.btnShare).setOnClickListener { shareCurrentImage() }
         loadImage()
@@ -91,6 +93,12 @@ class HeisiImageActivity : AppCompatActivity() {
         val code = conn.responseCode
         val finalUrl = conn.url?.toString().orEmpty()
         val contentType = conn.contentType.orEmpty().lowercase()
+        if (code in 300..399) {
+            conn.getHeaderField("Location")?.takeIf { it.isNotBlank() }?.let { location ->
+                conn.disconnect()
+                return normalizeImageUrl(location)
+            }
+        }
         if (contentType.startsWith("image/")) {
             conn.disconnect()
             return finalUrl.ifBlank { apiUrl }
@@ -215,6 +223,34 @@ class HeisiImageActivity : AppCompatActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "分享图片"))
+    }
+
+    private fun showImageActions() {
+        if (currentImageUrl.isBlank()) {
+            toast("请先加载图片")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("图片操作")
+            .setItems(arrayOf("保存图片", "查看原图")) { _, which ->
+                when (which) {
+                    0 -> saveCurrentImage()
+                    1 -> openOriginalImage()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun openOriginalImage() {
+        runCatching {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse(currentImageUrl)
+            }
+            startActivity(intent)
+        }.onFailure {
+            toast("无法打开原图")
+        }
     }
 
     private fun setLoading(loading: Boolean, text: String) {

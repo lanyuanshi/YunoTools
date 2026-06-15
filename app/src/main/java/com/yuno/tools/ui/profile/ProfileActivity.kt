@@ -42,10 +42,9 @@ class ProfileActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finishWithAnim() }
         findViewById<MaterialCardView>(R.id.cardAvatarHeader).setOnClickListener { chooseAvatar() }
         bindAccountPanel()
-        runCatching { findViewById<MaterialCardView>(R.id.cardParseHistory) }.getOrNull()
-            ?.setOnClickListener { startActivity(Intent(this, ParseHistoryActivity::class.java)) }
-        runCatching { findViewById<MaterialCardView>(R.id.cardSettings) }.getOrNull()
-            ?.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+        findViewById<MaterialCardView>(R.id.cardPointsMall).setOnClickListener {
+            startActivity(Intent(this, PointsMallActivity::class.java))
+        }
         loadAvatar()
         refreshAccountPanel()
     }
@@ -64,20 +63,11 @@ class ProfileActivity : AppCompatActivity() {
             toast(r.message)
             refreshAccountPanel()
         }
-        findViewById<Button>(R.id.btnVip7).setOnClickListener { redeemVip(7, 80) }
-        findViewById<Button>(R.id.btnVip30).setOnClickListener { redeemVip(30, 260) }
-        findViewById<Button>(R.id.btnVip365).setOnClickListener { redeemVip(365, 1999) }
         findViewById<Button>(R.id.btnProfileLogout).setOnClickListener {
             AccountStore.logout(this)
             toast("已退出登录")
             refreshAccountPanel()
         }
-    }
-
-    private fun redeemVip(days: Int, cost: Int) {
-        AccountStore.redeemVip(this, days, cost)
-            .onSuccess { toast("兑换成功，会员已延长 ${days}天"); refreshAccountPanel() }
-            .onFailure { toast(it.message ?: "兑换失败") }
     }
 
     private fun refreshAccountPanel() {

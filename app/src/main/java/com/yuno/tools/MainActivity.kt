@@ -388,12 +388,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        findViewById<MaterialCardView>(R.id.bannerTranslate).setOnClickListener {
-            startActivity(Intent(this, TranslateActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.bannerDaily).setOnClickListener {
-            startActivity(Intent(this, ClockActivity::class.java))
-        }
         findViewById<MaterialCardView>(R.id.cardTitleProfile).setOnClickListener {
             showProfile()
         }
@@ -402,10 +396,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupHomeBannerCarousel() {
         val flipper = findViewById<ViewFlipper>(R.id.homeBannerFlipper)
-        if (flipper.childCount > 0) {
-            flipper.displayedChild = Random.nextInt(flipper.childCount)
-            flipper.startFlipping()
-        }
+        flipper.displayedChild = 0
+        flipper.stopFlipping()
         loadHomeRandomBanner()
     }
 

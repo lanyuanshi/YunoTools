@@ -33,7 +33,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 个人资料页里的个人页入口：点击进入独立个人页 -->
+            <!-- 个人资料页里的我的页面入口：点击进入独立我的页面 -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardAvatarHeader"
                 android:layout_width="match_parent"
@@ -79,7 +79,7 @@
                             android:id="@+id/tvProfileEntryTitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="进入个人页"
+                            android:text="进入我的页面"
                             android:textColor="#1F1722"
                             android:textSize="22sp"
                             android:textStyle="bold" />

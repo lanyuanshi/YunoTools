@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/pointsMallRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F7EEF4">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0.32"
+        android:scaleType="centerCrop"
+        android:src="@drawable/bg_sakura" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#70FFFFFF" />
+
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="34dp"
+        android:background="@drawable/bg_circle_white"
+        android:contentDescription="返回"
+        android:elevation="8dp"
+        android:padding="12dp"
+        android:src="@android:drawable/ic_media_previous"
+        app:tint="#1F1722" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="32dp"
+        android:paddingBottom="96dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:gravity="center"
+                android:text="积分商城"
+                android:textColor="#1F1722"
+                android:textSize="23sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="#EFFFFFFF"
+                app:cardCornerRadius="26dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#77FFFFFF"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <TextView
+                        android:id="@+id/tvMallSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="登录后可使用积分兑换 VIP"
+                        android:textColor="#241723"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvMallHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="积分可通过每日签到获得"
+                        android:textColor="#8A6E7F"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="26dp"
+                android:layout_marginBottom="12dp"
+                android:text="VIP 兑换"
+                android:textColor="#1F1722"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnVip7"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:backgroundTint="#FFF4BE"
+                android:text="兑换 VIP 7天 · 80积分"
+                android:textColor="#80676F"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/btnVip30"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="12dp"
+                android:backgroundTint="#FFF4BE"
+                android:text="兑换 VIP 30天 · 260积分"
+                android:textColor="#80676F"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/btnVip365"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="12dp"
+                android:backgroundTint="#FFF4BE"
+                android:text="兑换 VIP 365天 · 1999积分"
+                android:textColor="#80676F"
+                android:textSize="16sp" />
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

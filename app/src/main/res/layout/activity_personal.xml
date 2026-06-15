@@ -51,7 +51,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="54dp"
                 android:gravity="center"
-                android:text="个人页"
+                android:text="我的页面"
                 android:textColor="#1F1722"
                 android:textSize="23sp"
                 android:textStyle="bold" />
@@ -281,48 +281,26 @@
                             android:textSize="16sp"
                             android:textStyle="bold" />
 
-                        <LinearLayout
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/cardPointsMall"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
+                            android:layout_height="76dp"
                             android:layout_marginTop="18dp"
-                            android:orientation="horizontal">
-
-                            <Button
-                                android:id="@+id/btnVip7"
-                                android:layout_width="0dp"
-                                android:layout_height="58dp"
-                                android:layout_marginEnd="5dp"
-                                android:layout_weight="1"
-                                android:backgroundTint="#FFF4BE"
-                                android:padding="0dp"
-                                android:text="7天 80积分"
-                                android:textColor="#80676F"
-                                android:textSize="13sp" />
-
-                            <Button
-                                android:id="@+id/btnVip30"
-                                android:layout_width="0dp"
-                                android:layout_height="58dp"
-                                android:layout_marginHorizontal="5dp"
-                                android:layout_weight="1"
-                                android:backgroundTint="#FFF4BE"
-                                android:padding="0dp"
-                                android:text="30天 260积分"
-                                android:textColor="#80676F"
-                                android:textSize="13sp" />
-
-                            <Button
-                                android:id="@+id/btnVip365"
-                                android:layout_width="0dp"
-                                android:layout_height="58dp"
-                                android:layout_marginStart="5dp"
-                                android:layout_weight="1"
-                                android:backgroundTint="#FFF4BE"
-                                android:padding="0dp"
-                                android:text="365天 1999积分"
-                                android:textColor="#80676F"
-                                android:textSize="13sp" />
-                        </LinearLayout>
+                            android:foreground="?attr/selectableItemBackground"
+                            app:cardBackgroundColor="#FFFFF2"
+                            app:cardCornerRadius="22dp"
+                            app:cardElevation="0dp"
+                            app:strokeColor="#77FFFFFF"
+                            app:strokeWidth="1dp">
+                            <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="18dp">
+                                <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_circle_orange_light"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="兑" android:textColor="#7A5C62" android:textSize="18sp" android:textStyle="bold" /></FrameLayout>
+                                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:orientation="vertical">
+                                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="积分商城" android:textColor="#241723" android:textSize="18sp" android:textStyle="bold" />
+                                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="使用积分兑换 VIP 时长" android:textColor="#8A6E7F" android:textSize="13sp" />
+                                </LinearLayout>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="进入" android:textColor="#8A6E7F" android:textSize="15sp" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
 
                         <Button
                             android:id="@+id/btnProfileLogout"
@@ -337,59 +315,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardParseHistory"
-                android:layout_width="match_parent"
-                android:layout_height="76dp"
-                android:layout_marginTop="18dp"
-                android:foreground="?attr/selectableItemBackground"
-                app:cardBackgroundColor="#EFFFFFFF"
-                app:cardCornerRadius="22dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#77FFFFFF"
-                app:strokeWidth="1dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="18dp">
-                    <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="25dp" android:layout_height="25dp" android:layout_gravity="center" android:src="@drawable/ic_history" app:tint="#2D9CDB" /></FrameLayout>
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:text="解析历史" android:textColor="#241723" android:textSize="18sp" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8A6E7F" android:textSize="15sp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardMusicDownloads"
-                android:layout_width="match_parent"
-                android:layout_height="76dp"
-                android:layout_marginTop="14dp"
-                android:foreground="?attr/selectableItemBackground"
-                app:cardBackgroundColor="#EFFFFFFF"
-                app:cardCornerRadius="22dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#77FFFFFF"
-                app:strokeWidth="1dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="18dp">
-                    <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_circle_cyan_light"><ImageView android:layout_width="25dp" android:layout_height="25dp" android:layout_gravity="center" android:src="@drawable/ic_download" app:tint="#34C759" /></FrameLayout>
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:text="下载内容" android:textColor="#241723" android:textSize="18sp" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8A6E7F" android:textSize="15sp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardSettings"
-                android:layout_width="match_parent"
-                android:layout_height="76dp"
-                android:layout_marginTop="14dp"
-                android:foreground="?attr/selectableItemBackground"
-                app:cardBackgroundColor="#EFFFFFFF"
-                app:cardCornerRadius="22dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#77FFFFFF"
-                app:strokeWidth="1dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="18dp">
-                    <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_circle_purple_light"><ImageView android:layout_width="25dp" android:layout_height="25dp" android:layout_gravity="center" android:src="@drawable/ic_nav_settings" app:tint="#E0569B" /></FrameLayout>
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:text="设置" android:textColor="#241723" android:textSize="18sp" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="主题" android:textColor="#8A6E7F" android:textSize="15sp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </ScrollView>
 </FrameLayout>

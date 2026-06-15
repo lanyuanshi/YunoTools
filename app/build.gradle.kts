@@ -11,8 +11,8 @@ android {
         applicationId = "com.yuno.tools"
         minSdk = 24
         targetSdk = 32
-        versionCode = 166
-        versionName = "1.1.66"
+        versionCode = 167
+        versionName = "1.1.67"
     }
 
     buildFeatures {

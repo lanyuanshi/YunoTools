@@ -53,8 +53,7 @@
                 android:layout_height="match_parent"
                 android:padding="13dp"
                 android:scaleType="centerCrop"
-                android:src="@drawable/ic_profile"
-                app:tint="@android:color/white" />
+                android:src="@drawable/ic_profile" />
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 

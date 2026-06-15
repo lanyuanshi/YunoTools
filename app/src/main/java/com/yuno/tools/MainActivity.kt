@@ -455,33 +455,41 @@ class MainActivity : AppCompatActivity() {
         runCatching {
             val uriText = UserSettingsStore.getAvatarUri(this)
             val iv = findViewById<ImageView>(R.id.ivTitleAvatar)
-            iv.imageTintList = null
-            iv.clearColorFilter()
-            if (uriText.isNotBlank()) {
-                val uri = Uri.parse(uriText)
-                val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
-                if (isVideo) {
-                    Glide.with(iv).clear(iv)
+            // 首页右上角头像需要在视图恢复显示后强制重载，避免 XML tint / Glide 缓存残留导致仍显示默认头像
+            iv.post {
+                iv.imageTintList = null
+                iv.clearColorFilter()
+                Glide.with(iv).clear(iv)
+                if (uriText.isNotBlank()) {
+                    val uri = Uri.parse(uriText)
+                    val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
+                    if (isVideo) {
+                        iv.setImageResource(R.drawable.ic_profile)
+                        iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                        iv.setPadding(dp(14), dp(14), dp(14), dp(14))
+                        iv.scaleType = ImageView.ScaleType.CENTER
+                    } else {
+                        iv.imageTintList = null
+                        iv.clearColorFilter()
+                        iv.setPadding(0, 0, 0, 0)
+                        iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                        Glide.with(iv)
+                            .load(uri)
+                            .signature(ObjectKey(uriText + "#homeTitle#" + System.currentTimeMillis()))
+                            .skipMemoryCache(true)
+                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .circleCrop()
+                            .dontAnimate()
+                            .placeholder(R.drawable.bg_circle_blue)
+                            .error(R.drawable.ic_profile)
+                            .into(iv)
+                    }
+                } else {
                     iv.setImageResource(R.drawable.ic_profile)
                     iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
                     iv.setPadding(dp(14), dp(14), dp(14), dp(14))
-                } else {
-                    iv.setPadding(0, 0, 0, 0)
-                    Glide.with(iv)
-                        .load(uri)
-                        .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
-                        .skipMemoryCache(true)
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .circleCrop()
-                        .placeholder(R.drawable.bg_circle_blue)
-                        .error(R.drawable.ic_profile)
-                        .into(iv)
+                    iv.scaleType = ImageView.ScaleType.CENTER
                 }
-            } else {
-                Glide.with(iv).clear(iv)
-                iv.setImageResource(R.drawable.ic_profile)
-                iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                iv.setPadding(dp(14), dp(14), dp(14), dp(14))
             }
         }
     }
@@ -514,6 +522,7 @@ class MainActivity : AppCompatActivity() {
         profile.visibility = View.GONE
         findViewById<TextView>(R.id.tvMainTitle).text = "首页"
         findViewById<View>(R.id.cardTitleProfile).visibility = View.VISIBLE
+        updateHomeProfileEntry()
         if (animate) {
             home.alpha = 0f
             home.translationY = resources.displayMetrics.density * 12f

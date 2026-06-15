@@ -40,8 +40,10 @@ class ProfileActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finishWithAnim() }
         findViewById<MaterialCardView>(R.id.cardAvatarHeader).setOnClickListener { chooseAvatar() }
         bindAccountPanel()
-        findViewById<MaterialCardView>(R.id.cardParseHistory).setOnClickListener { startActivity(Intent(this, ParseHistoryActivity::class.java)) }
-        findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+        runCatching { findViewById<MaterialCardView>(R.id.cardParseHistory) }.getOrNull()
+            ?.setOnClickListener { startActivity(Intent(this, ParseHistoryActivity::class.java)) }
+        runCatching { findViewById<MaterialCardView>(R.id.cardSettings) }.getOrNull()
+            ?.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         loadAvatar()
         refreshAccountPanel()
     }
@@ -157,7 +159,7 @@ class ProfileActivity : AppCompatActivity() {
         avatarPlayer = null
     }
     private fun playEntranceBounce() {
-        val root = findViewById<View>(R.id.profileRoot)
+        val root = findViewById<View>(R.id.personalRoot)
         root.alpha = 0f
         root.translationY = resources.displayMetrics.density * 48f
         root.animate().alpha(1f).translationY(0f).setDuration(360L).setInterpolator(OvershootInterpolator(0.55f)).start()

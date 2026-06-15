@@ -1059,7 +1059,7 @@ class MainActivity : AppCompatActivity() {
             val favorites = loadMusicRecords(MUSIC_FAVORITES_KEY)
             if (favorites.isEmpty()) {
                 val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                list.addView(makeHintText("暂无在线歌曲收藏。搜索网易云榜单 / 歌曲海后，点击“收藏”即可保存到这里。"))
+                list.addView(makeHintText("暂无咪咕音乐收藏。搜索歌曲或歌手后，点击“收藏”即可保存到这里。"))
                 content.addView(ScrollView(this).apply { isFillViewport = true; addView(list) }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             } else {
                 val items = favorites.map { record ->
@@ -1113,10 +1113,12 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, 0, 0, (8 * density).toInt())
             }
             val input = android.widget.EditText(this).apply {
-                hint = "搜索网易云榜单 / 歌曲海音乐..."
+                hint = "搜索咪咕音乐，输入歌曲或歌手..."
                 setText(onlineLastKeyword)
                 textSize = 14f
                 isSingleLine = true
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+                inputType = android.text.InputType.TYPE_CLASS_TEXT
                 setTextColor(Color.parseColor("#182033"))
                 setHintTextColor(Color.parseColor("#A0A7B3"))
                 setPadding((12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt(), (8 * density).toInt())
@@ -1136,7 +1138,7 @@ class MainActivity : AppCompatActivity() {
                         orientation = LinearLayout.VERTICAL
                         setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                     }
-                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试更换关键词；部分结果可能暂无公开播放源", "", {}))
+                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试输入完整歌名或歌手名；接口限流时请稍后重试", "", {}))
                     replaceOnlineList(ScrollView(this).apply {
                         isFillViewport = true
                         addView(listArea)
@@ -1156,7 +1158,7 @@ class MainActivity : AppCompatActivity() {
                 val items = records.map { record ->
                     Triple(record.title, record.artist.ifBlank { record.sourceLabel }) {
                         if (record.playUrl.isBlank()) {
-                            Toast.makeText(this, "该歌曲暂无公开播放源", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, "该歌曲暂无可用播放链接", Toast.LENGTH_SHORT).show()
                         } else {
                             loadingOnlinePlayKey = musicRecordKey(record)
                             currentOnlinePlayKey = musicRecordKey(record)
@@ -1178,7 +1180,7 @@ class MainActivity : AppCompatActivity() {
                 onlineLastKeyword = keyword
                 if (keyword.isBlank()) {
                     onlineCachedSongs = emptyList()
-                    showOnlineHint("输入关键词搜索网易云榜单 / 歌曲海音乐")
+                    showOnlineHint("输入歌曲名或歌手名搜索咪咕音乐")
                     return@makeControlButton
                 }
 
@@ -1197,6 +1199,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             searchRow.addView(searchButton)
+            input.setOnEditorActionListener { _, actionId, event ->
+                val enterPressed = event?.keyCode == android.view.KeyEvent.KEYCODE_ENTER && event.action == android.view.KeyEvent.ACTION_UP
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || enterPressed) {
+                    searchButton.performClick()
+                    true
+                } else {
+                    false
+                }
+            }
 
             page.addView(searchRow, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1216,7 +1227,7 @@ class MainActivity : AppCompatActivity() {
             } else if (onlineLastKeyword.isNotBlank()) {
                 searchButton.performClick()
             } else {
-                showOnlineHint("输入关键词搜索网易云榜单 / 歌曲海音乐")
+                showOnlineHint("输入歌曲名或歌手名搜索咪咕音乐")
             }
         }
 
@@ -1417,7 +1428,7 @@ class MainActivity : AppCompatActivity() {
             isLoading -> " · 正在加载"
             isCurrent && musicPlayer?.isPlaying == true -> " · 正在播放"
             isCurrent -> " · 已选中"
-            !canPlay -> " · 暂无公开播放源"
+            !canPlay -> " · 暂无可用播放链接"
             else -> ""
         }
         val desc = record.sourceLabel + " · " + record.artist + status
@@ -1430,7 +1441,7 @@ class MainActivity : AppCompatActivity() {
         }
         actions += playLabel to {
             if (!canPlay) {
-                Toast.makeText(this, "该歌曲暂无公开播放源，不能播放或下载", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "该歌曲暂无可用播放链接，不能播放或下载", Toast.LENGTH_SHORT).show()
             } else {
                 loadingOnlinePlayKey = key
                 currentOnlinePlayKey = key
@@ -1605,7 +1616,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun downloadOnlineSong(record: OnlineMusicRecord) {
         if (record.playUrl.isBlank()) {
-            Toast.makeText(this, "该歌曲暂无公开播放源，不能下载", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "该歌曲暂无可用播放链接，不能下载", Toast.LENGTH_SHORT).show()
             return
         }
         Toast.makeText(this, "开始下载：${record.title}", Toast.LENGTH_SHORT).show()

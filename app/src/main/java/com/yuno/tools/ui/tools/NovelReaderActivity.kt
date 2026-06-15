@@ -32,6 +32,7 @@ class NovelReaderActivity : AppCompatActivity() {
     private val fallbackDomain = "https://shuapi.jiaston.com"
     private val imageBase = "https://appbdimg.cdn.bcebos.com/BookFiles/BookImages/"
     private lateinit var adapter: BookAdapter
+    private val filterButtons = mutableListOf<Button>()
     private var currentType = "hot"
     private var currentGender = "man"
 
@@ -66,7 +67,10 @@ class NovelReaderActivity : AppCompatActivity() {
 
     private fun setupFilters() {
         val row = findViewById<android.widget.LinearLayout>(R.id.filterRow)
-        row.removeAllViews()
+        if (filterButtons.isNotEmpty()) {
+            updateFilterStyles()
+            return
+        }
         listOf(
             "man:hot" to "男频最热",
             "lady:hot" to "女频最热",
@@ -77,23 +81,34 @@ class NovelReaderActivity : AppCompatActivity() {
             val parts = key.split(':')
             val gender = parts[0]
             val type = parts[1]
-            val selected = gender == currentGender && type == currentType
             val button = Button(this).apply {
                 text = label
+                tag = key
                 setTextColor(resources.getColor(android.R.color.white, theme))
-                backgroundTintList = android.content.res.ColorStateList.valueOf(if (selected) 0xFF7C3AED.toInt() else 0xFF8E8E93.toInt())
                 setOnClickListener {
+                    if (currentGender == gender && currentType == type) return@setOnClickListener
                     currentGender = gender
                     currentType = type
                     findViewById<EditText>(R.id.etKeyword).setText("")
-                    setupFilters()
+                    updateFilterStyles()
                     loadBooks()
                 }
             }
+            filterButtons.add(button)
             row.addView(button, android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)).apply {
                 val margin = dp(6)
                 setMargins(margin, margin, margin, margin)
             })
+        }
+        updateFilterStyles()
+    }
+
+    private fun updateFilterStyles() {
+        val selectedKey = "$currentGender:$currentType"
+        filterButtons.forEach { button ->
+            val selected = button.tag == selectedKey
+            button.isSelected = selected
+            button.backgroundTintList = android.content.res.ColorStateList.valueOf(if (selected) 0xFF7C3AED.toInt() else 0xFF8E8E93.toInt())
         }
     }
 

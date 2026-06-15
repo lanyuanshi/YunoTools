@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/personalRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F7EEF4">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0.38"
+        android:scaleType="centerCrop"
+        android:src="@drawable/bg_sakura" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#66FFFFFF" />
+
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="34dp"
+        android:layout_gravity="top|start"
+        android:background="@drawable/bg_circle_white"
+        android:contentDescription="返回"
+        android:elevation="8dp"
+        android:padding="12dp"
+        android:src="@android:drawable/ic_media_previous"
+        app:tint="#1F1722" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="32dp"
+        android:paddingBottom="112dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:gravity="center"
+                android:text="个人页"
+                android:textColor="#1F1722"
+                android:textSize="23sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardAvatarHeader"
+                android:layout_width="match_parent"
+                android:layout_height="138dp"
+                android:layout_marginTop="10dp"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#EFFFFFFF"
+                app:cardCornerRadius="26dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#77FFFFFF"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="22dp">
+
+                    <FrameLayout
+                        android:layout_width="92dp"
+                        android:layout_height="92dp"
+                        android:background="@drawable/bg_circle_blue"
+                        android:clipChildren="true"
+                        android:clipToOutline="true"
+                        android:clipToPadding="true">
+
+                        <ImageView
+                            android:id="@+id/ivAvatar"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/ic_profile"
+                            app:tint="#FFFFFF" />
+
+                        <androidx.media3.ui.PlayerView
+                            android:id="@+id/pvAvatar"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center"
+                            android:visibility="gone"
+                            app:resize_mode="zoom"
+                            app:surface_type="texture_view"
+                            app:use_controller="false" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="22dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvProfileName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="YunoTools"
+                            android:textColor="#241723"
+                            android:textSize="25sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvAvatarHint"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:lineSpacingExtra="2dp"
+                            android:text="未登录 · 点击下方账号卡片可注册/登录，点击头像可更换"
+                            android:textColor="#8A6E7F"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:layout_marginBottom="12dp"
+                android:text="功能"
+                android:textColor="#1F1722"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardAccountPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#EFFFFFFF"
+                app:cardCornerRadius="26dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#77FFFFFF"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <FrameLayout
+                            android:layout_width="56dp"
+                            android:layout_height="56dp"
+                            android:background="@drawable/bg_circle_orange_light">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:text="VIP"
+                                android:textColor="#2B2027"
+                                android:textSize="17sp" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="18dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="账号 · 会员 · 签到"
+                                android:textColor="#241723"
+                                android:textSize="21sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvMemberSummary"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="5dp"
+                                android:text="未登录 · 登录后可签到获得积分"
+                                android:textColor="#8A6E7F"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/loginInlinePanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical">
+
+                        <EditText
+                            android:id="@+id/etProfileAccount"
+                            android:layout_width="match_parent"
+                            android:layout_height="50dp"
+                            android:background="#F8FFFFFF"
+                            android:hint="账号，随便注册"
+                            android:paddingHorizontal="16dp"
+                            android:singleLine="true"
+                            android:textColor="#241723"
+                            android:textColorHint="#AA8A9A"
+                            android:textSize="15sp" />
+
+                        <EditText
+                            android:id="@+id/etProfilePassword"
+                            android:layout_width="match_parent"
+                            android:layout_height="50dp"
+                            android:layout_marginTop="10dp"
+                            android:background="#F8FFFFFF"
+                            android:hint="密码，至少3位"
+                            android:inputType="textPassword"
+                            android:paddingHorizontal="16dp"
+                            android:singleLine="true"
+                            android:textColor="#241723"
+                            android:textColorHint="#AA8A9A"
+                            android:textSize="15sp" />
+
+                        <Button
+                            android:id="@+id/btnProfileLogin"
+                            android:layout_width="match_parent"
+                            android:layout_height="54dp"
+                            android:layout_marginTop="12dp"
+                            android:backgroundTint="#FFA45F"
+                            android:text="登录 / 注册"
+                            android:textColor="#FFFFFF"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/memberInlinePanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/tvProfileVip"
+                            android:layout_width="match_parent"
+                            android:layout_height="58dp"
+                            android:background="#EFFFFFFF"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp"
+                            android:text="普通用户 · 0积分 · 累计签到0天"
+                            android:textColor="#241723"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <Button
+                            android:id="@+id/btnProfileCheckIn"
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:layout_marginTop="14dp"
+                            android:backgroundTint="#FFA45F"
+                            android:text="立即签到"
+                            android:textColor="#7A5C62"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="18dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btnVip7"
+                                android:layout_width="0dp"
+                                android:layout_height="58dp"
+                                android:layout_marginEnd="5dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="#FFF4BE"
+                                android:padding="0dp"
+                                android:text="7天 80积分"
+                                android:textColor="#80676F"
+                                android:textSize="13sp" />
+
+                            <Button
+                                android:id="@+id/btnVip30"
+                                android:layout_width="0dp"
+                                android:layout_height="58dp"
+                                android:layout_marginHorizontal="5dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="#FFF4BE"
+                                android:padding="0dp"
+                                android:text="30天 260积分"
+                                android:textColor="#80676F"
+                                android:textSize="13sp" />
+
+                            <Button
+                                android:id="@+id/btnVip365"
+                                android:layout_width="0dp"
+                                android:layout_height="58dp"
+                                android:layout_marginStart="5dp"
+                                android:layout_weight="1"
+                                android:backgroundTint="#FFF4BE"
+                                android:padding="0dp"
+                                android:text="365天 1999积分"
+                                android:textColor="#80676F"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btnProfileLogout"
+                            android:layout_width="match_parent"
+                            android:layout_height="54dp"
+                            android:layout_marginTop="18dp"
+                            android:backgroundTint="#FADDE2"
+                            android:text="退出登录"
+                            android:textColor="#8A6E7F"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardParseHistory"
+                android:layout_width="match_parent"
+                android:layout_height="76dp"
+                android:layout_marginTop="18dp"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#EFFFFFFF"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#77FFFFFF"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="18dp">
+                    <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_circle_blue_light"><ImageView android:layout_width="25dp" android:layout_height="25dp" android:layout_gravity="center" android:src="@drawable/ic_history" app:tint="#2D9CDB" /></FrameLayout>
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:text="解析历史" android:textColor="#241723" android:textSize="18sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8A6E7F" android:textSize="15sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardMusicDownloads"
+                android:layout_width="match_parent"
+                android:layout_height="76dp"
+                android:layout_marginTop="14dp"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#EFFFFFFF"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#77FFFFFF"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="18dp">
+                    <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_circle_cyan_light"><ImageView android:layout_width="25dp" android:layout_height="25dp" android:layout_gravity="center" android:src="@drawable/ic_download" app:tint="#34C759" /></FrameLayout>
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:text="下载内容" android:textColor="#241723" android:textSize="18sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看" android:textColor="#8A6E7F" android:textSize="15sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardSettings"
+                android:layout_width="match_parent"
+                android:layout_height="76dp"
+                android:layout_marginTop="14dp"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#EFFFFFFF"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#77FFFFFF"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="18dp">
+                    <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_circle_purple_light"><ImageView android:layout_width="25dp" android:layout_height="25dp" android:layout_gravity="center" android:src="@drawable/ic_nav_settings" app:tint="#E0569B" /></FrameLayout>
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_weight="1" android:text="设置" android:textColor="#241723" android:textSize="18sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="主题" android:textColor="#8A6E7F" android:textSize="15sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

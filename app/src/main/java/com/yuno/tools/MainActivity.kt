@@ -382,13 +382,44 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardHomeProfile).setOnClickListener {
-            startActivity(Intent(this, ProfileActivity::class.java))
+            showProfile()
         }
         findViewById<MaterialCardView>(R.id.cardTitleProfile).setOnClickListener {
-            startActivity(Intent(this, ProfileActivity::class.java))
+            showProfile()
         }
         updateHomeProfileEntry()
-        bindAccountPanel()
+    }
+
+    private fun updateProfileEntry() {
+        val state = AccountStore.state(this)
+        runCatching {
+            findViewById<TextView>(R.id.tvProfileEntryTitle).text = if (state.loggedIn) state.nickname.ifBlank { state.username } else "个人页"
+            findViewById<TextView>(R.id.tvProfileEntryHint).text = if (state.loggedIn) {
+                if (state.isVip) "VIP会员 · ${AccountStore.vipText(state)} · ${state.points}积分" else "普通用户 · ${state.points}积分 · 进入管理账号"
+            } else "进入后管理头像、登录、会员、签到"
+            val iv = findViewById<ImageView>(R.id.ivProfileEntryAvatar)
+            val uriText = UserSettingsStore.getAvatarUri(this)
+            iv.imageTintList = null
+            iv.clearColorFilter()
+            if (uriText.isNotBlank()) {
+                val uri = Uri.parse(uriText)
+                val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
+                if (isVideo) {
+                    Glide.with(iv).clear(iv)
+                    iv.setImageResource(R.drawable.ic_profile)
+                    iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                    iv.setPadding(dp(18), dp(18), dp(18), dp(18))
+                } else {
+                    iv.setPadding(0, 0, 0, 0)
+                    Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).error(R.drawable.ic_profile).into(iv)
+                }
+            } else {
+                Glide.with(iv).clear(iv)
+                iv.setImageResource(R.drawable.ic_profile)
+                iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                iv.setPadding(dp(18), dp(18), dp(18), dp(18))
+            }
+        }
     }
 
     private fun updateHomeProfileEntry() {
@@ -464,7 +495,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showProfile() {
-        startActivity(Intent(this, ProfileActivity::class.java))
+        if (currentTab == MainTab.PROFILE && findViewById<View>(R.id.profilePage).isVisible) return
+        currentTab = MainTab.PROFILE
+        releaseAvatarPlayer()
+        val home = findViewById<View>(R.id.scrollView)
+        val profile = findViewById<View>(R.id.profilePage)
+        home.animate().cancel()
+        profile.animate().cancel()
+        home.visibility = View.GONE
+        profile.visibility = View.VISIBLE
+        findViewById<TextView>(R.id.tvMainTitle).text = "个人资料"
+        profile.alpha = 0f
+        profile.translationY = resources.displayMetrics.density * 16f
+        profile.animate().alpha(1f).translationY(0f).setDuration(180L).start()
+        updateNavSelection(MainTab.PROFILE, animate = true)
+        updateProfileEntry()
     }
 
     private fun updateNavSelection(tab: MainTab, animate: Boolean = true) {
@@ -1677,7 +1722,7 @@ class MainActivity : AppCompatActivity() {
         ThemeApplier.apply(this)
         updateHomeProfileEntry()
         updateNavSelection(currentTab, animate = false)
-        if (currentTab == MainTab.PROFILE) { loadAvatar(); refreshAccountPanel() }
+        if (currentTab == MainTab.PROFILE) { updateProfileEntry() }
     }
 
     override fun onBackPressed() {

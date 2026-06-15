@@ -57,9 +57,9 @@ class VideoParseActivity : AppCompatActivity() {
 
     private fun doParse() {
         val rawInput = etUrl.text.toString().trim()
-        val url = UrlExtractor.extractUrl(rawInput) ?: rawInput
+        val url = UrlExtractor.extractUrl(rawInput) ?: rawInput.takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
         if (url.isEmpty()) {
-            Toast.makeText(this, "请输入视频链接", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请粘贴包含 http/https 的有效分享链接", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -100,7 +100,7 @@ class VideoParseActivity : AppCompatActivity() {
                         }
                     } else {
                         Toast.makeText(this@VideoParseActivity,
-                            "请求失败: ${response.code()}", Toast.LENGTH_LONG).show()
+                            parseHttpError(response.code()), Toast.LENGTH_LONG).show()
                     }
                 }
             } catch (e: Exception) {
@@ -114,6 +114,18 @@ class VideoParseActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun parseHttpError(code: Int): String {
+        return when (code) {
+            204 -> "解析接口未返回内容：链接可能失效、接口暂不支持，或服务被限流，请换链接/稍后重试"
+            400 -> "解析请求无效：请确认粘贴的是完整分享链接"
+            403 -> "解析接口拒绝访问：可能被平台限制或接口限流"
+            404 -> "解析接口没有找到内容：链接可能已失效或作品不可访问"
+            429 -> "解析接口请求过多：请稍后再试"
+            in 500..599 -> "解析接口服务异常：HTTP $code，请稍后重试"
+            else -> "请求失败：HTTP $code"
+        }
+    }
 
     private fun isDoubaoThreadUrl(url: String): Boolean {
         return url.contains("doubao.com/thread/", ignoreCase = true)

@@ -513,6 +513,7 @@ class MainActivity : AppCompatActivity() {
         home.visibility = View.VISIBLE
         profile.visibility = View.GONE
         findViewById<TextView>(R.id.tvMainTitle).text = "首页"
+        findViewById<View>(R.id.cardTitleProfile).visibility = View.VISIBLE
         if (animate) {
             home.alpha = 0f
             home.translationY = resources.displayMetrics.density * 12f
@@ -535,6 +536,8 @@ class MainActivity : AppCompatActivity() {
         home.visibility = View.GONE
         profile.visibility = View.VISIBLE
         findViewById<TextView>(R.id.tvMainTitle).text = "个人资料"
+        // 个人资料页不显示右上角头像入口，避免和页面内“进入个人页”入口重复
+        findViewById<View>(R.id.cardTitleProfile).visibility = View.GONE
         profile.alpha = 0f
         profile.translationY = resources.displayMetrics.density * 16f
         profile.animate().alpha(1f).translationY(0f).setDuration(180L).start()

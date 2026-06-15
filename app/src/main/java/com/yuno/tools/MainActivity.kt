@@ -384,6 +384,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardHomeProfile).setOnClickListener {
             startActivity(Intent(this, ProfileActivity::class.java))
         }
+        findViewById<MaterialCardView>(R.id.cardTitleProfile).setOnClickListener {
+            startActivity(Intent(this, ProfileActivity::class.java))
+        }
         updateHomeProfileEntry()
         bindAccountPanel()
     }
@@ -395,27 +398,29 @@ class MainActivity : AppCompatActivity() {
             findViewById<TextView>(R.id.tvHomeProfileHint).text = if (state.loggedIn) {
                 if (state.isVip) "VIP会员 · ${AccountStore.vipText(state)} · ${state.points}积分" else "普通用户 · ${state.points}积分"
             } else "点击进入个人页 · 登录 / 会员 / 自定义头像"
-            val iv = findViewById<ImageView>(R.id.ivHomeAvatar)
             val uriText = UserSettingsStore.getAvatarUri(this)
-            iv.imageTintList = null
-            iv.clearColorFilter()
-            if (uriText.isNotBlank()) {
-                val uri = Uri.parse(uriText)
-                val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
-                if (isVideo) {
+            listOf(R.id.ivHomeAvatar, R.id.ivTitleAvatar).forEach { avatarId ->
+                val iv = findViewById<ImageView>(avatarId)
+                iv.imageTintList = null
+                iv.clearColorFilter()
+                if (uriText.isNotBlank()) {
+                    val uri = Uri.parse(uriText)
+                    val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
+                    if (isVideo) {
+                        Glide.with(iv).clear(iv)
+                        iv.setImageResource(R.drawable.ic_profile)
+                        iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                        iv.setPadding(dp(14), dp(14), dp(14), dp(14))
+                    } else {
+                        iv.setPadding(0, 0, 0, 0)
+                        Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).error(R.drawable.ic_profile).into(iv)
+                    }
+                } else {
                     Glide.with(iv).clear(iv)
                     iv.setImageResource(R.drawable.ic_profile)
                     iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                    iv.setPadding(dp(18), dp(18), dp(18), dp(18))
-                } else {
-                    iv.setPadding(0, 0, 0, 0)
-                    Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).error(R.drawable.ic_profile).into(iv)
+                    iv.setPadding(dp(14), dp(14), dp(14), dp(14))
                 }
-            } else {
-                Glide.with(iv).clear(iv)
-                iv.setImageResource(R.drawable.ic_profile)
-                iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                iv.setPadding(dp(18), dp(18), dp(18), dp(18))
             }
         }
     }

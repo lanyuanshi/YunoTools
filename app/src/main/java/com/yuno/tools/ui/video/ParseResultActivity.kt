@@ -2,11 +2,13 @@ package com.yuno.tools.ui.video
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -19,7 +21,6 @@ import com.yuno.tools.R
 import com.yuno.tools.data.VideoParseResult
 import kotlinx.coroutines.*
 import java.io.File
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -108,7 +109,7 @@ class ParseResultActivity : AppCompatActivity() {
         btnSaveCover.setOnClickListener {
             val coverUrl = result?.coverUrl
             if (!coverUrl.isNullOrEmpty()) {
-                downloadFile(coverUrl, "cover_${System.currentTimeMillis()}.jpg", "图片")
+                downloadFile(coverUrl, "cover_${System.currentTimeMillis()}.jpg", "图片", "image/jpeg")
             } else {
                 Toast.makeText(this, "封面链接无效", Toast.LENGTH_SHORT).show()
             }
@@ -117,16 +118,17 @@ class ParseResultActivity : AppCompatActivity() {
         btnSaveContent.setOnClickListener {
             val videoUrl = result?.videoUrl
             if (!videoUrl.isNullOrEmpty()) {
-                downloadFile(videoUrl, "video_${System.currentTimeMillis()}.mp4", "视频")
+                downloadFile(videoUrl, "video_${System.currentTimeMillis()}.mp4", "视频", "video/mp4")
             } else {
                 Toast.makeText(this, "视频链接无效", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun downloadFile(fileUrl: String, fileName: String, type: String) {
+    private fun downloadFile(fileUrl: String, fileName: String, type: String, mimeType: String) {
         Toast.makeText(this, "开始下载${type}...", Toast.LENGTH_SHORT).show()
         CoroutineScope(Dispatchers.IO).launch {
+            var pendingUri: Uri? = null
             try {
                 val url = URL(fileUrl)
                 val connection = url.openConnection() as HttpURLConnection
@@ -136,21 +138,36 @@ class ParseResultActivity : AppCompatActivity() {
                 connection.connect()
 
                 if (connection.responseCode == 200) {
-                    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    val file = File(downloadsDir, fileName)
-                    FileOutputStream(file).use { output ->
-                        connection.inputStream.use { input ->
-                            input.copyTo(output)
-                        }
+                    val isVideo = mimeType.startsWith("video/")
+                    val collection = if (isVideo) {
+                        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    } else {
+                        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
                     }
-                    // 通知系统扫描新文件
-                    MediaScannerConnection.scanFile(
-                        this@ParseResultActivity,
-                        arrayOf(file.absolutePath),
-                        null
-                    ) { _, _ -> }
+                    val relativeDir = if (isVideo) {
+                        Environment.DIRECTORY_MOVIES + "/YunoTools"
+                    } else {
+                        Environment.DIRECTORY_PICTURES + "/YunoTools"
+                    }
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)
+                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+                    val resolver = contentResolver
+                    val uri = resolver.insert(collection, values) ?: error("无法创建媒体文件")
+                    pendingUri = uri
+                    resolver.openOutputStream(uri)?.use { output ->
+                        connection.inputStream.use { input -> input.copyTo(output) }
+                    } ?: error("无法写入媒体文件")
+
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ParseResultActivity, "${type}已保存到下载目录", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@ParseResultActivity, "${type}已保存到系统媒体库/YunoTools", Toast.LENGTH_LONG).show()
                     }
                 } else {
                     withContext(Dispatchers.Main) {
@@ -158,6 +175,7 @@ class ParseResultActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
+                pendingUri?.let { runCatching { contentResolver.delete(it, null, null) } }
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@ParseResultActivity, "下载错误: ${e.message}", Toast.LENGTH_SHORT).show()
                 }

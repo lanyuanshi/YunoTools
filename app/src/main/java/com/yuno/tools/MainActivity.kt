@@ -386,9 +386,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        findViewById<MaterialCardView>(R.id.bannerProfile).setOnClickListener {
-            showProfile()
-        }
         findViewById<MaterialCardView>(R.id.bannerTranslate).setOnClickListener {
             startActivity(Intent(this, TranslateActivity::class.java))
         }
@@ -455,28 +452,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateHomeProfileEntry() {
-        val state = AccountStore.state(this)
         runCatching {
-            findViewById<TextView>(R.id.tvHomeProfileName).text = if (state.loggedIn) state.nickname.ifBlank { state.username } else "YunoTools"
-            findViewById<TextView>(R.id.tvHomeProfileHint).text = if (state.loggedIn) {
-                if (state.isVip) "VIP会员 · ${AccountStore.vipText(state)} · ${state.points}积分" else "普通用户 · ${state.points}积分"
-            } else "点击进入个人页 · 登录 / 会员 / 自定义头像"
             val uriText = UserSettingsStore.getAvatarUri(this)
-            listOf(R.id.ivHomeAvatar, R.id.ivTitleAvatar).forEach { avatarId ->
-                val iv = findViewById<ImageView>(avatarId)
-                iv.imageTintList = null
-                iv.clearColorFilter()
-                if (uriText.isNotBlank()) {
-                    val uri = Uri.parse(uriText)
-                    val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
-                    if (isVideo) {
-                        Glide.with(iv).clear(iv)
-                        iv.setImageResource(R.drawable.ic_profile)
-                        iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                        iv.setPadding(dp(14), dp(14), dp(14), dp(14))
-                    } else {
-                        iv.setPadding(0, 0, 0, 0)
-                        Glide.with(iv)
+            val iv = findViewById<ImageView>(R.id.ivTitleAvatar)
+            iv.imageTintList = null
+            iv.clearColorFilter()
+            if (uriText.isNotBlank()) {
+                val uri = Uri.parse(uriText)
+                val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
+                if (isVideo) {
+                    Glide.with(iv).clear(iv)
+                    iv.setImageResource(R.drawable.ic_profile)
+                    iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                    iv.setPadding(dp(14), dp(14), dp(14), dp(14))
+                } else {
+                    iv.setPadding(0, 0, 0, 0)
+                    Glide.with(iv)
                         .load(uri)
                         .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
                         .skipMemoryCache(true)
@@ -485,13 +476,12 @@ class MainActivity : AppCompatActivity() {
                         .placeholder(R.drawable.bg_circle_blue)
                         .error(R.drawable.ic_profile)
                         .into(iv)
-                    }
-                } else {
-                    Glide.with(iv).clear(iv)
-                    iv.setImageResource(R.drawable.ic_profile)
-                    iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                    iv.setPadding(dp(14), dp(14), dp(14), dp(14))
                 }
+            } else {
+                Glide.with(iv).clear(iv)
+                iv.setImageResource(R.drawable.ic_profile)
+                iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                iv.setPadding(dp(14), dp(14), dp(14), dp(14))
             }
         }
     }

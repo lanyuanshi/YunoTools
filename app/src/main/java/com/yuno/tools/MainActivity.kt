@@ -91,6 +91,7 @@ import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
+import com.yuno.tools.ui.profile.ProfileActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
 import com.yuno.tools.util.ThemeApplier
@@ -369,7 +370,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindProfilePage() {
-        findViewById<MaterialCardView>(R.id.cardAvatarHeader).setOnClickListener { chooseAvatar() }
+        val profileHeader = runCatching { findViewById<MaterialCardView>(R.id.cardAvatarHeader) }.getOrNull()
+        profileHeader?.setOnClickListener { startActivity(Intent(this, ProfileActivity::class.java)) }
         findViewById<MaterialCardView>(R.id.cardParseHistory).setOnClickListener {
             startActivity(Intent(this, ParseHistoryActivity::class.java))
         }
@@ -379,7 +381,43 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        findViewById<MaterialCardView>(R.id.cardHomeProfile).setOnClickListener {
+            startActivity(Intent(this, ProfileActivity::class.java))
+        }
+        updateHomeProfileEntry()
         bindAccountPanel()
+    }
+
+    private fun updateHomeProfileEntry() {
+        val state = AccountStore.state(this)
+        runCatching {
+            findViewById<TextView>(R.id.tvHomeProfileName).text = if (state.loggedIn) state.nickname.ifBlank { state.username } else "YunoTools"
+            findViewById<TextView>(R.id.tvHomeProfileHint).text = if (state.loggedIn) {
+                if (state.isVip) "VIP会员 · ${AccountStore.vipText(state)} · ${state.points}积分" else "普通用户 · ${state.points}积分"
+            } else "点击进入个人页 · 登录 / 会员 / 自定义头像"
+            val iv = findViewById<ImageView>(R.id.ivHomeAvatar)
+            val uriText = UserSettingsStore.getAvatarUri(this)
+            iv.imageTintList = null
+            iv.clearColorFilter()
+            if (uriText.isNotBlank()) {
+                val uri = Uri.parse(uriText)
+                val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
+                if (isVideo) {
+                    Glide.with(iv).clear(iv)
+                    iv.setImageResource(R.drawable.ic_profile)
+                    iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                    iv.setPadding(dp(18), dp(18), dp(18), dp(18))
+                } else {
+                    iv.setPadding(0, 0, 0, 0)
+                    Glide.with(iv).load(uri).circleCrop().placeholder(R.drawable.bg_circle_blue).error(R.drawable.ic_profile).into(iv)
+                }
+            } else {
+                Glide.with(iv).clear(iv)
+                iv.setImageResource(R.drawable.ic_profile)
+                iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                iv.setPadding(dp(18), dp(18), dp(18), dp(18))
+            }
+        }
     }
 
     private fun bindBottomNav() {
@@ -421,18 +459,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showProfile() {
-        if (currentTab == MainTab.PROFILE && findViewById<View>(R.id.profilePage).isVisible) return
-        currentTab = MainTab.PROFILE
-        val home = findViewById<View>(R.id.scrollView)
-        val profile = findViewById<View>(R.id.profilePage)
-        home.animate().cancel()
-        home.visibility = View.GONE
-        profile.visibility = View.VISIBLE
-        findViewById<TextView>(R.id.tvMainTitle).text = "个人资料"
-        loadAvatar()
-        refreshAccountPanel()
-        playProfileEntranceBounce()
-        updateNavSelection(MainTab.PROFILE, true)
+        startActivity(Intent(this, ProfileActivity::class.java))
     }
 
     private fun updateNavSelection(tab: MainTab, animate: Boolean = true) {
@@ -1643,6 +1670,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ThemeApplier.apply(this)
+        updateHomeProfileEntry()
         updateNavSelection(currentTab, animate = false)
         if (currentTab == MainTab.PROFILE) { loadAvatar(); refreshAccountPanel() }
     }

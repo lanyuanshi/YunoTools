@@ -26,7 +26,7 @@
         android:textSize="18sp"
         android:textStyle="bold" />
 
-    <!-- 内容区域：首页与个人资料作为同级页面承载，个人资料不再单独跳 Activity -->
+    <!-- 内容区域：首页为主；首页头像资料卡会新开独立 ProfileActivity -->
     <FrameLayout
         android:id="@+id/mainPageHost"
         android:layout_width="match_parent"
@@ -46,6 +46,82 @@
             android:orientation="vertical"
             android:paddingHorizontal="16dp"
             android:paddingBottom="24dp">
+
+            <!-- 首页头像资料入口：点击后新开独立个人页，不再混同底部导航个人资料 -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardHomeProfile"
+                android:layout_width="match_parent"
+                android:layout_height="116dp"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="18dp"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#EFFFFFFF"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#88FFFFFF"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="22dp"
+                    android:paddingEnd="18dp">
+
+                    <FrameLayout
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:background="@drawable/bg_circle_blue">
+
+                        <ImageView
+                            android:id="@+id/ivHomeAvatar"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center"
+                            android:padding="18dp"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/ic_profile"
+                            app:tint="@android:color/white" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvHomeProfileName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="YunoTools"
+                            android:textColor="#1F1722"
+                            android:textSize="20sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvHomeProfileHint"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="7dp"
+                            android:text="点击进入个人页 · 登录 / 会员 / 自定义头像"
+                            android:textColor="#7A6674"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:background="@drawable/bg_circle_blue_light"
+                        android:gravity="center"
+                        android:text="›"
+                        android:textColor="#5B6EE1"
+                        android:textSize="30sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <!-- 首页功能区 -->
             <LinearLayout

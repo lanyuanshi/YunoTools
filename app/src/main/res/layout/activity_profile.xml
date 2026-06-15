@@ -18,6 +18,20 @@
         android:layout_height="match_parent"
         android:background="#66FFFFFF" />
 
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="34dp"
+        android:layout_gravity="top|start"
+        android:background="@drawable/bg_circle_white"
+        android:contentDescription="返回"
+        android:elevation="8dp"
+        android:padding="12dp"
+        android:src="@android:drawable/ic_media_previous"
+        app:tint="#1F1722" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"

@@ -401,33 +401,38 @@ class MainActivity : AppCompatActivity() {
             } else "进入后管理头像、登录、会员、签到"
             val iv = findViewById<ImageView>(R.id.ivProfileEntryAvatar)
             val uriText = UserSettingsStore.getAvatarUri(this)
-            iv.imageTintList = null
-            iv.clearColorFilter()
-            if (uriText.isNotBlank()) {
-                val uri = Uri.parse(uriText)
-                val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
-                if (isVideo) {
-                    Glide.with(iv).clear(iv)
+            iv.post {
+                iv.imageTintList = null
+                iv.clearColorFilter()
+                Glide.with(iv).clear(iv)
+                if (uriText.isNotBlank()) {
+                    val uri = Uri.parse(uriText)
+                    val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
+                    if (isVideo) {
+                        iv.setImageResource(R.drawable.ic_profile)
+                        iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+                        iv.setPadding(dp(18), dp(18), dp(18), dp(18))
+                    } else {
+                        iv.imageTintList = null
+                        iv.clearColorFilter()
+                        iv.setPadding(0, 0, 0, 0)
+                        iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                        Glide.with(iv)
+                            .load(uri)
+                            .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
+                            .skipMemoryCache(true)
+                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .circleCrop()
+                            .dontAnimate()
+                            .placeholder(R.drawable.bg_circle_blue)
+                            .error(R.drawable.ic_profile)
+                            .into(iv)
+                    }
+                } else {
                     iv.setImageResource(R.drawable.ic_profile)
                     iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
                     iv.setPadding(dp(18), dp(18), dp(18), dp(18))
-                } else {
-                    iv.setPadding(0, 0, 0, 0)
-                    Glide.with(iv)
-                        .load(uri)
-                        .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
-                        .skipMemoryCache(true)
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .circleCrop()
-                        .placeholder(R.drawable.bg_circle_blue)
-                        .error(R.drawable.ic_profile)
-                        .into(iv)
                 }
-            } else {
-                Glide.with(iv).clear(iv)
-                iv.setImageResource(R.drawable.ic_profile)
-                iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                iv.setPadding(dp(18), dp(18), dp(18), dp(18))
             }
         }
     }

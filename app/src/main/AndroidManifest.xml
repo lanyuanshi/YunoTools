@@ -117,6 +117,9 @@
             android:name=".ui.tools.TranslateActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.tools.HeisiImageActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.tools.MagicCubeActivity"
             android:screenOrientation="portrait" />
         <activity

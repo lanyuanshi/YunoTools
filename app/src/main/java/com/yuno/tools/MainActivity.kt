@@ -94,6 +94,7 @@ import com.yuno.tools.ui.tools.MagicCubeActivity
 import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
+import com.yuno.tools.ui.tools.HeisiImageActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ProfileActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
@@ -252,6 +253,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardWoodenFish).setOnClickListener {
             startActivity(Intent(this, WoodenFishActivity::class.java))
         }
+        findViewById<MaterialCardView>(R.id.cardHeisiTool).setOnClickListener {
+            startActivity(Intent(this, HeisiImageActivity::class.java))
+        }
         findViewById<MaterialCardView>(R.id.cardTranslateTool).setOnClickListener {
             startActivity(Intent(this, TranslateActivity::class.java))
         }
@@ -398,6 +402,10 @@ class MainActivity : AppCompatActivity() {
         val flipper = findViewById<ViewFlipper>(R.id.homeBannerFlipper)
         flipper.displayedChild = 0
         flipper.stopFlipping()
+        findViewById<MaterialCardView>(R.id.bannerRandomImage).setOnClickListener {
+            loadHomeRandomBanner()
+            toast("正在换一张图片")
+        }
         loadHomeRandomBanner()
     }
 

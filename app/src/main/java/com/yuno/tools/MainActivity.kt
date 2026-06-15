@@ -38,6 +38,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.ViewFlipper
 import android.widget.Toast
 import android.widget.EditText
 import java.io.File
@@ -98,6 +99,7 @@ import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
 import com.yuno.tools.util.ThemeApplier
 import kotlin.math.roundToInt
+import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -154,6 +156,7 @@ class MainActivity : AppCompatActivity() {
         ThemeApplier.apply(this)
 
         bindHomeCards()
+        setupHomeBannerCarousel()
         setupMoreToolsCollapse()
         setupHomeGridPersonalization()
         applyGlassHomeCards()
@@ -383,13 +386,27 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        findViewById<MaterialCardView>(R.id.cardHomeProfile).setOnClickListener {
+        findViewById<MaterialCardView>(R.id.bannerProfile).setOnClickListener {
             showProfile()
+        }
+        findViewById<MaterialCardView>(R.id.bannerTranslate).setOnClickListener {
+            startActivity(Intent(this, TranslateActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.bannerDaily).setOnClickListener {
+            startActivity(Intent(this, ClockActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardTitleProfile).setOnClickListener {
             showProfile()
         }
         updateHomeProfileEntry()
+    }
+
+    private fun setupHomeBannerCarousel() {
+        val flipper = findViewById<ViewFlipper>(R.id.homeBannerFlipper)
+        if (flipper.childCount > 0) {
+            flipper.displayedChild = Random.nextInt(flipper.childCount)
+            flipper.startFlipping()
+        }
     }
 
     private fun updateProfileEntry() {

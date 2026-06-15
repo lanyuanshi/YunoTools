@@ -79,81 +79,201 @@
             android:paddingHorizontal="16dp"
             android:paddingBottom="24dp">
 
-            <!-- 首页头像资料入口：点击后新开独立个人页，不再混同底部导航个人资料 -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardHomeProfile"
+            <!-- 首页轮播图：替换原个人资料入口大卡，随机起始，自动轮播 -->
+            <ViewFlipper
+                android:id="@+id/homeBannerFlipper"
                 android:layout_width="match_parent"
                 android:layout_height="148dp"
                 android:layout_marginTop="4dp"
                 android:layout_marginBottom="20dp"
-                android:foreground="?attr/selectableItemBackground"
-                app:cardBackgroundColor="#FFFFF7FB"
-                app:cardCornerRadius="28dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#88FFFFFF"
-                app:strokeWidth="1dp">
+                android:autoStart="false"
+                android:flipInterval="3600"
+                android:inAnimation="@android:anim/fade_in"
+                android:outAnimation="@android:anim/fade_out">
 
-                <LinearLayout
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/bannerProfile"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingStart="22dp"
-                    android:paddingEnd="18dp">
-
-                    <FrameLayout
-                        android:layout_width="86dp"
-                        android:layout_height="86dp"
-                        android:background="@drawable/bg_circle_blue">
-
-                        <ImageView
-                            android:id="@+id/ivHomeAvatar"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:layout_gravity="center"
-                            android:padding="18dp"
-                            android:scaleType="centerCrop"
-                            android:src="@drawable/ic_profile"
-                            app:tint="@android:color/white" />
-                    </FrameLayout>
+                    android:foreground="?attr/selectableItemBackground"
+                    app:cardBackgroundColor="#FFFFF7FB"
+                    app:cardCornerRadius="28dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="#88FFFFFF"
+                    app:strokeWidth="1dp">
 
                     <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="22dp"
+                        android:paddingEnd="18dp">
+
+                        <FrameLayout
+                            android:layout_width="86dp"
+                            android:layout_height="86dp"
+                            android:background="@drawable/bg_circle_blue">
+
+                            <ImageView
+                                android:id="@+id/ivHomeAvatar"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:layout_gravity="center"
+                                android:padding="18dp"
+                                android:scaleType="centerCrop"
+                                android:src="@drawable/ic_profile"
+                                app:tint="@android:color/white" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvHomeProfileName"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="个人资料"
+                                android:textColor="#1F1722"
+                                android:textSize="24sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvHomeProfileHint"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="7dp"
+                                android:text="点击进入个人资料页"
+                                android:textColor="#8A526B"
+                                android:textSize="15sp" />
+                        </LinearLayout>
 
                         <TextView
-                            android:id="@+id/tvHomeProfileName"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="个人中心"
-                            android:textColor="#1F1722"
-                            android:textSize="24sp"
+                            android:layout_width="42dp"
+                            android:layout_height="42dp"
+                            android:background="@drawable/bg_circle_blue_light"
+                            android:gravity="center"
+                            android:text="›"
+                            android:textColor="#5B6EE1"
+                            android:textSize="30sp"
                             android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/tvHomeProfileHint"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="7dp"
-                            android:text="点这里进入新个人页 · 头像 / 登录 / 会员 / 签到"
-                            android:textColor="#8A526B"
-                            android:textSize="15sp" />
                     </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                    <TextView
-                        android:layout_width="42dp"
-                        android:layout_height="42dp"
-                        android:background="@drawable/bg_circle_blue_light"
-                        android:gravity="center"
-                        android:text="›"
-                        android:textColor="#5B6EE1"
-                        android:textSize="30sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/bannerTranslate"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:foreground="?attr/selectableItemBackground"
+                    app:cardBackgroundColor="#F3FFFFFF"
+                    app:cardCornerRadius="28dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="#88FFFFFF"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="24dp"
+                        android:paddingEnd="22dp">
+
+                        <FrameLayout
+                            android:layout_width="82dp"
+                            android:layout_height="82dp"
+                            android:background="@drawable/bg_circle_purple_light">
+                            <ImageView
+                                android:layout_width="42dp"
+                                android:layout_height="42dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_translate"
+                                app:tint="#AF52DE" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="18dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="随机推荐 · 翻译"
+                                android:textColor="#1F1722"
+                                android:textSize="24sp"
+                                android:textStyle="bold" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="7dp"
+                                android:text="快速翻译多语言文本"
+                                android:textColor="#7A6674"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/bannerDaily"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:foreground="?attr/selectableItemBackground"
+                    app:cardBackgroundColor="#F5FFFFFF"
+                    app:cardCornerRadius="28dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="#88FFFFFF"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="24dp"
+                        android:paddingEnd="22dp">
+
+                        <FrameLayout
+                            android:layout_width="82dp"
+                            android:layout_height="82dp"
+                            android:background="@drawable/bg_circle_green_light">
+                            <ImageView
+                                android:layout_width="42dp"
+                                android:layout_height="42dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_clock"
+                                app:tint="#34C759" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="18dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="今日工具推荐"
+                                android:textColor="#1F1722"
+                                android:textSize="24sp"
+                                android:textStyle="bold" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="7dp"
+                                android:text="随机轮播，后续可接广告/公告"
+                                android:textColor="#7A6674"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </ViewFlipper>
 
             <!-- 首页功能区 -->
             <LinearLayout

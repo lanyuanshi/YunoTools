@@ -110,6 +110,19 @@
                         android:paddingEnd="22dp">
 
                         <FrameLayout
+                            android:layout_width="118dp"
+                            android:layout_height="92dp"
+                            android:background="@drawable/bg_banner_random">
+
+                            <ImageView
+                                android:id="@+id/ivHomeRandomBanner"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:scaleType="centerCrop"
+                                android:src="@drawable/bg_banner_random" />
+                        </FrameLayout>
+
+                        <FrameLayout
                             android:layout_width="82dp"
                             android:layout_height="82dp"
                             android:background="@drawable/bg_circle_purple_light">

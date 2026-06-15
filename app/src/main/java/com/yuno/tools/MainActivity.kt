@@ -50,6 +50,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import kotlinx.coroutines.*
 import androidx.core.view.children
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -138,6 +139,7 @@ class MainActivity : AppCompatActivity() {
     private var currentOnlinePlayKey: String? = null
     private var loadingOnlinePlayKey: String? = null
     private var refreshOnlineMusicList: (() -> Unit)? = null
+    private var homeRandomBannerUrl: String? = null
 
     private val requestAudioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showMusicPanel()
@@ -403,6 +405,59 @@ class MainActivity : AppCompatActivity() {
         if (flipper.childCount > 0) {
             flipper.displayedChild = Random.nextInt(flipper.childCount)
             flipper.startFlipping()
+        }
+        loadHomeRandomBanner()
+    }
+
+    private fun loadHomeRandomBanner() {
+        val banner = findViewById<ImageView>(R.id.ivHomeRandomBanner)
+        if (banner == null) return
+        banner.post {
+            banner.imageTintList = null
+            banner.clearColorFilter()
+            Glide.with(banner).clear(banner)
+            banner.setImageDrawable(null)
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val conn = (URL("https://t.alcy.cc/json?pc").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 10000
+                    readTimeout = 12000
+                    setRequestProperty("User-Agent", "Mozilla/5.0 YunoTools")
+                    setRequestProperty("Accept", "application/json,*/*")
+                }
+                val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                conn.disconnect()
+                val json = JSONObject(body)
+                val data = json.optJSONObject("data")
+                val link = data?.optString("link").orEmpty().trim()
+                if (link.isNotBlank()) {
+                    homeRandomBannerUrl = link
+                    withContext(Dispatchers.Main) {
+                        val iv = findViewById<ImageView>(R.id.ivHomeRandomBanner)
+                        if (iv != null) {
+                            iv.imageTintList = null
+                            iv.clearColorFilter()
+                            Glide.with(iv)
+                                .load(link)
+                                .signature(ObjectKey(link + "#banner#" + System.currentTimeMillis()))
+                                .skipMemoryCache(true)
+                                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                .dontAnimate()
+                                .centerCrop()
+                                .placeholder(R.drawable.bg_banner_random)
+                                .error(R.drawable.bg_banner_random)
+                                .into(iv)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    val iv = findViewById<ImageView>(R.id.ivHomeRandomBanner)
+                    iv?.setImageResource(R.drawable.bg_banner_random)
+                }
+            }
         }
     }
 
@@ -1765,6 +1820,7 @@ class MainActivity : AppCompatActivity() {
         updateHomeProfileEntry()
         updateNavSelection(currentTab, animate = false)
         if (currentTab == MainTab.PROFILE) { updateProfileEntry() }
+        if (currentTab == MainTab.HOME) { loadHomeRandomBanner() }
     }
 
     override fun onBackPressed() {

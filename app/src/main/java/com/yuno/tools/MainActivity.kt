@@ -2038,7 +2038,7 @@ class MainActivity : AppCompatActivity() {
             if (width <= 0 || height <= 0) return
             val count = barCount
             if (spectrumStyle) {
-                if (mirrorSpectrum) drawMirrorSpectrum(canvas, count) else drawUpSpectrum(canvas, count)
+                if (mirrorSpectrum) drawVinylWrapSpectrum(canvas, count) else drawUpSpectrum(canvas, count)
                 return
             }
             val gap = width / (count * 1.18f)
@@ -2058,34 +2058,62 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        private fun drawMirrorSpectrum(canvas: Canvas, count: Int) {
-            val centerY = height * 0.56f
-            val gap = width / (count * 1.03f)
-            val barWidth = (gap * 0.48f).coerceAtLeast(2f)
+        private fun drawVinylWrapSpectrum(canvas: Canvas, count: Int) {
+            val cx = width / 2f
+            val cy = height * 0.54f
+            val frameSize = (height * 0.58f).coerceAtMost(width * 0.58f)
+            val half = frameSize / 2f
+            val left = cx - half
+            val top = cy - half
+            val right = cx + half
+            val bottom = cy + half
             val dynamicLevel = (levelProvider?.invoke() ?: 0.68f).coerceIn(0.18f, 1f)
-            val maxTopHeight = height * 0.50f * amplitude * dynamicLevel
-            val maxBottomHeight = height * 0.27f * amplitude * dynamicLevel
-            val minTopHeight = height * 0.08f
-            val minBottomHeight = height * 0.04f
-            val startX = width / 2f - (count * gap) / 2f
-            paint.color = Color.argb(105, 255, 255, 255)
-            canvas.drawRect(0f, centerY - 0.5f, width.toFloat(), centerY + 0.5f, paint)
-            for (i in 0 until count) {
-                val waveA = kotlin.math.sin(((phase * 360f) + i * 31f) * Math.PI / 180f).toFloat()
-                val waveB = kotlin.math.cos(((phase * 230f) + i * 67f) * Math.PI / 180f).toFloat()
-                val waveC = kotlin.math.sin(((phase * 520f) + i * 13f) * Math.PI / 180f).toFloat()
-                val normalized = (0.42f * kotlin.math.abs(waveA) + 0.34f * kotlin.math.abs(waveB) + 0.24f * kotlin.math.abs(waveC)).coerceIn(0f, 1f)
-                val envelope = (0.40f + 0.60f * kotlin.math.abs(kotlin.math.sin((i * 0.34f) + phase * Math.PI.toFloat()))).coerceIn(0f, 1f)
-                val topHeight = (minTopHeight + maxTopHeight * normalized * envelope).coerceIn(minTopHeight, centerY - 1f)
-                val bottomHeight = (minBottomHeight + maxBottomHeight * normalized * (0.78f + 0.22f * envelope)).coerceIn(minBottomHeight, height - centerY - 1f)
-                val left = startX + i * gap + gap * 0.28f
-                val right = left + barWidth
-                val color = colors[i % colors.size]
-                paint.color = if (colors.size == 1) Color.WHITE else color
-                canvas.drawRoundRect(left, centerY - topHeight, right, centerY, 1.2f, 1.2f, paint)
-                paint.color = Color.argb(88, Color.red(color), Color.green(color), Color.blue(color))
-                canvas.drawRoundRect(left, centerY, right, centerY + bottomHeight, 1.2f, 1.2f, paint)
+            val color = colors.firstOrNull() ?: Color.WHITE
+            val accent = if (colors.size == 1) Color.WHITE else color
+            val oldStyle = paint.style
+            val oldStroke = paint.strokeWidth
+
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.4f
+            paint.color = Color.argb(210, Color.red(accent), Color.green(accent), Color.blue(accent))
+            canvas.drawRoundRect(left, top, right, bottom, 10f, 10f, paint)
+
+            paint.strokeWidth = 1.2f
+            paint.color = Color.argb(190, 255, 255, 255)
+            canvas.drawCircle(cx, cy, frameSize * 0.31f, paint)
+            paint.color = Color.argb(145, 255, 255, 255)
+            canvas.drawCircle(cx, cy, frameSize * 0.15f, paint)
+
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(200, Color.red(accent), Color.green(accent), Color.blue(accent))
+            val dot = frameSize * 0.035f
+            canvas.drawCircle(left + frameSize * 0.18f, top + frameSize * 0.18f, dot, paint)
+            canvas.drawCircle(right - frameSize * 0.18f, top + frameSize * 0.18f, dot, paint)
+            canvas.drawCircle(left + frameSize * 0.18f, bottom - frameSize * 0.18f, dot, paint)
+            canvas.drawCircle(right - frameSize * 0.18f, bottom - frameSize * 0.18f, dot, paint)
+
+            val barsPerSide = (count / 4).coerceAtLeast(8)
+            paint.strokeWidth = 1.1f
+            paint.strokeCap = Paint.Cap.ROUND
+            for (i in 0 until barsPerSide) {
+                val t = (i + 0.5f) / barsPerSide
+                drawWrapBar(canvas, left + frameSize * t, top, 0f, -1f, i, dynamicLevel, accent)
+                drawWrapBar(canvas, left + frameSize * t, bottom, 0f, 1f, i + barsPerSide, dynamicLevel, accent)
+                drawWrapBar(canvas, left, top + frameSize * t, -1f, 0f, i + barsPerSide * 2, dynamicLevel, accent)
+                drawWrapBar(canvas, right, top + frameSize * t, 1f, 0f, i + barsPerSide * 3, dynamicLevel, accent)
             }
+            paint.strokeCap = Paint.Cap.BUTT
+            paint.strokeWidth = oldStroke
+            paint.style = oldStyle
+        }
+
+        private fun drawWrapBar(canvas: Canvas, x: Float, y: Float, dx: Float, dy: Float, index: Int, dynamicLevel: Float, accent: Int) {
+            val waveA = kotlin.math.sin(((phase * 360f) + index * 31f) * Math.PI / 180f).toFloat()
+            val waveB = kotlin.math.cos(((phase * 240f) + index * 57f) * Math.PI / 180f).toFloat()
+            val normalized = (0.52f * kotlin.math.abs(waveA) + 0.48f * kotlin.math.abs(waveB)).coerceIn(0f, 1f)
+            val length = (height * (0.05f + 0.17f * amplitude * dynamicLevel * normalized)).coerceAtLeast(2f)
+            paint.color = Color.argb(205, Color.red(accent), Color.green(accent), Color.blue(accent))
+            canvas.drawLine(x + dx * 2f, y + dy * 2f, x + dx * (2f + length), y + dy * (2f + length), paint)
         }
 
         private fun drawUpSpectrum(canvas: Canvas, count: Int) {

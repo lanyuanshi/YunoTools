@@ -225,7 +225,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="当前：镜像波形"
+                        android:text="当前：唱片包裹"
                         android:textColor="#8E8E93"
                         android:textSize="13sp" />
 
@@ -236,7 +236,7 @@
                         android:layout_marginTop="10dp"
                         app:singleSelection="true">
 
-                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumMirror" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="镜像波形" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumMirror" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="唱片包裹" android:checkable="true" />
                         <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumUp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="仅向上" android:checkable="true" />
                     </com.google.android.material.chip.ChipGroup>
 

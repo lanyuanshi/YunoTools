@@ -175,7 +175,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun musicSpectrumStyleName(style: String): String = when (style) {
         UserSettingsStore.MUSIC_SPECTRUM_UP -> "仅向上"
-        else -> "镜像波形"
+        else -> "唱片包裹"
     }
 
     private fun bindLyricHighlightSettings() {

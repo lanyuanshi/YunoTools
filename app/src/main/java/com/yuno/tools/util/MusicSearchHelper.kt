@@ -22,6 +22,13 @@ object MusicSearchHelper {
         val playUrl: String?
     )
 
+    private data class MiguResourceInfo(
+        val title: String?,
+        val artist: String?,
+        val album: String?,
+        val playUrl: String?
+    )
+
     fun searchOnline(keyword: String, callback: (List<OnlineSong>) -> Unit) {
         Thread {
             val trimmed = keyword.trim()
@@ -135,14 +142,22 @@ object MusicSearchHelper {
         ).replace("\\/", "/")
         if (playUrl.isBlank() && pageUrl.isBlank()) return null
 
-        val songId = pageUrl.substringAfterLast('/').takeIf { it.isNotBlank() && it != pageUrl }
+        val copyrightId = extractMiguCopyrightId(pageUrl) ?: extractMiguCopyrightId(playUrl)
+        val resourceInfo = copyrightId?.let { fetchMiguResourceInfo(it) }
+
+        val resolvedPlayUrl = firstNotBlank(
+            playUrl,
+            resourceInfo?.playUrl.orEmpty()
+        ).replace("\\/", "/")
+
         val title = cleanTitle(firstNotBlank(
             obj.optString("title"),
             obj.optString("name"),
             obj.optString("song"),
             obj.optString("songName"),
             obj.optString("musicName"),
-            if (!songId.isNullOrBlank()) "咪咕歌曲 $songId" else keyword
+            resourceInfo?.title.orEmpty(),
+            if (!copyrightId.isNullOrBlank()) "咪咕歌曲 $copyrightId" else keyword
         ))
         val artist = cleanTitle(firstNotBlank(
             obj.optString("singer"),
@@ -150,19 +165,92 @@ object MusicSearchHelper {
             obj.optString("author"),
             obj.optString("singers"),
             obj.optString("singerName"),
+            resourceInfo?.artist.orEmpty(),
+            resourceInfo?.album.orEmpty(),
             "咪咕音乐"
         ))
-        return OnlineSong(title, artist, OnlineSource.MIGU, pageUrl, playUrl.takeIf { isPublicAudioUrl(it) })
+        return OnlineSong(title, artist, OnlineSource.MIGU, pageUrl, resolvedPlayUrl.takeIf { isPublicAudioUrl(it) })
     }
 
-    private fun requestText(urlStr: String, method: String = "GET", body: String? = null): String {
+    private fun extractMiguCopyrightId(url: String): String? {
+        val cleaned = decodeHtmlEntities(url).substringBefore('?').trim('/')
+        if (cleaned.isBlank()) return null
+        return Regex("([0-9A-Za-z]{8,})$").find(cleaned)?.groupValues?.getOrNull(1)
+    }
+
+    private fun fetchMiguResourceInfo(copyrightId: String): MiguResourceInfo? {
+        val endpoints = listOf(
+            "https://app.c.nf.migu.cn/MIGUM3.0/v1.0/content/resourceinfo.do?copyrightId=$copyrightId&resourceType=2",
+            "https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/resourceinfo.do?copyrightId=$copyrightId&resourceType=2",
+            "https://c.musicapp.migu.cn/MIGUM3.0/v1.0/content/resourceinfo.do?copyrightId=$copyrightId&resourceType=2"
+        )
+        for (endpoint in endpoints) {
+            val info = runCatching { parseMiguResourceInfo(requestText(endpoint, referer = "https://music.migu.cn/")) }.getOrNull()
+            if (info != null && (!info.title.isNullOrBlank() || !info.artist.isNullOrBlank() || !info.playUrl.isNullOrBlank())) {
+                return info
+            }
+        }
+        return null
+    }
+
+    private fun parseMiguResourceInfo(raw: String): MiguResourceInfo? {
+        val root = runCatching { JSONObject(raw.trim()) }.getOrNull() ?: return null
+        val resource = root.optJSONArray("resource")?.optJSONObject(0)
+            ?: root.optJSONObject("resource")
+            ?: root.optJSONObject("data")
+            ?: root.optJSONObject("result")
+            ?: return null
+        val title = firstNotBlank(
+            resource.optString("songName"),
+            resource.optString("title"),
+            resource.optString("name")
+        )
+        val artist = firstNotBlank(
+            resource.optString("singer"),
+            resource.optString("singerName"),
+            resource.optString("artist")
+        )
+        val album = firstNotBlank(
+            resource.optString("album"),
+            resource.optString("albumName")
+        )
+        val playUrl = firstPublicAudioUrl(resource)
+        return MiguResourceInfo(title.takeIf { it.isNotBlank() }, artist.takeIf { it.isNotBlank() }, album.takeIf { it.isNotBlank() }, playUrl)
+    }
+
+    private fun firstPublicAudioUrl(value: Any?): String? {
+        return when (value) {
+            is JSONObject -> {
+                val keys = value.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val nested = value.opt(key)
+                    if (nested is String) {
+                        val cleaned = cleanField(nested).replace("\\/", "/")
+                        if (isPublicAudioUrl(cleaned)) return cleaned
+                    } else {
+                        firstPublicAudioUrl(nested)?.let { return it }
+                    }
+                }
+                null
+            }
+            is JSONArray -> {
+                for (i in 0 until value.length()) firstPublicAudioUrl(value.opt(i))?.let { return it }
+                null
+            }
+            is String -> cleanField(value).replace("\\/", "/").takeIf { isPublicAudioUrl(it) }
+            else -> null
+        }
+    }
+
+    private fun requestText(urlStr: String, method: String = "GET", body: String? = null, referer: String = "https://api.xcvts.cn/"): String {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.requestMethod = method
         conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.79")
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.80")
         conn.setRequestProperty("Accept", "application/json,text/plain,*/*")
-        conn.setRequestProperty("Referer", "https://api.xcvts.cn/")
-        conn.setRequestProperty("Origin", "https://api.xcvts.cn")
+        conn.setRequestProperty("Referer", referer)
+        conn.setRequestProperty("Origin", Uri.parse(referer).let { "${it.scheme}://${it.host}" })
         conn.connectTimeout = 8000
         conn.readTimeout = 12000
         if (method.equals("POST", ignoreCase = true) && body != null) {
@@ -180,9 +268,11 @@ object MusicSearchHelper {
 
     private fun isPublicAudioUrl(url: String): Boolean {
         val cleaned = decodeHtmlEntities(url).trim()
-        return cleaned.startsWith("http", ignoreCase = true) &&
-            (Regex("\\.(mp3|m4a|aac|wav|flac)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleaned) ||
-                cleaned.contains("migu", ignoreCase = true))
+        if (!cleaned.startsWith("http", ignoreCase = true)) return false
+        if (Regex("\\.(jpg|jpeg|png|webp|gif|bmp)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)) return false
+        return Regex("\\.(mp3|m4a|aac|wav|flac)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleaned) ||
+            cleaned.contains("/audio/", ignoreCase = true) ||
+            (cleaned.contains("/music/", ignoreCase = true) && cleaned.contains("url", ignoreCase = true))
     }
 
     private fun cleanTitle(text: String): String {

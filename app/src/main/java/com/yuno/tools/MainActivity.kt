@@ -22,6 +22,8 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.text.TextUtils
 import android.view.Gravity
@@ -130,6 +132,7 @@ class MainActivity : AppCompatActivity() {
         val localPath: String = "",
         val savedAt: Long = System.currentTimeMillis()
     )
+    private data class TimedLyricLine(val timeMs: Long, val text: String)
 
     private var currentTab = MainTab.HOME
     private var avatarPlayer: ExoPlayer? = null
@@ -149,6 +152,15 @@ class MainActivity : AppCompatActivity() {
     private var loadingOnlinePlayKey: String? = null
     private var currentLyricsKey: String? = null
     private var currentLyricsText = "歌词将在播放酷我歌曲后显示"
+    private var currentTimedLyrics: List<TimedLyricLine> = emptyList()
+    private var currentLyricIndex = -1
+    private val lyricsHandler = Handler(Looper.getMainLooper())
+    private val lyricsTicker = object : Runnable {
+        override fun run() {
+            updateFlowingLyrics()
+            lyricsHandler.postDelayed(this, 600L)
+        }
+    }
     private var refreshLyricsView: ((String) -> Unit)? = null
     private var refreshPlayerPanelState: (() -> Unit)? = null
     private var refreshOnlineMusicList: (() -> Unit)? = null
@@ -188,6 +200,7 @@ class MainActivity : AppCompatActivity() {
         applyGlassHomeCards()
         bindProfilePage()
         bindBottomNav()
+        lyricsHandler.post(lyricsTicker)
         showHome(animate = false)
     }
 
@@ -916,6 +929,13 @@ class MainActivity : AppCompatActivity() {
         currentMusicUri = uri
         currentOnlinePlayKey = onlineKey
         loadingOnlinePlayKey = onlineKey
+        if (onlineKey == null) {
+            currentLyricsKey = null
+            currentTimedLyrics = emptyList()
+            currentLyricIndex = -1
+            currentLyricsText = "本地歌曲暂无在线歌词"
+            refreshLyricsView?.invoke(currentLyricsText)
+        }
         val player = ensureMusicPlayer()
         player.stop()
         player.clearMediaItems()
@@ -1126,7 +1146,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 val loading = favorites.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
                 val current = favorites.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
-                content.addView(musicCardGrid(items, loading, current), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                val favoriteActions = favorites.map { record ->
+                    {
+                        removeMusicRecord(MUSIC_FAVORITES_KEY, record)
+                        Toast.makeText(this@MainActivity, "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
+                        showFavoriteTab()
+                    }
+                }
+                content.addView(musicCardGrid(items, loading, current, favoriteStates = favorites.map { true }, favoriteActions = favoriteActions), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             }
         }
 
@@ -1234,9 +1261,17 @@ class MainActivity : AppCompatActivity() {
                         if (record.playUrl.isNotBlank()) add("下载" to { downloadOnlineSong(record) })
                     }
                 }
+                val favoriteActions = records.map { record ->
+                    {
+                        toggleMusicFavorite(record)
+                        Toast.makeText(this@MainActivity, if (isMusicFavorite(record)) "已收藏：${record.title}" else "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
+                        renderOnlineSongs(songs)
+                    }
+                }
                 val loading = records.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
                 val current = records.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
-                replaceOnlineList(musicCardGrid(items, loading, current, longActions))
+                val favorites = records.map { isMusicFavorite(it) }
+                replaceOnlineList(musicCardGrid(items, loading, current, longActions, favorites, favoriteActions))
             }
 
             refreshOnlineMusicList = { renderOnlineSongs(onlineCachedSongs) }
@@ -1359,9 +1394,9 @@ class MainActivity : AppCompatActivity() {
         val lyricsText = TextView(this).apply {
             text = currentLyricsText
             textSize = 12f
-            setLineSpacing(2f * density, 1.05f)
-            maxLines = 3
-            ellipsize = TextUtils.TruncateAt.END
+            setLineSpacing(2f * density, 1.08f)
+            maxLines = 4
+            ellipsize = null
             setTextColor(Color.parseColor("#5F6673"))
             gravity = Gravity.CENTER
             setPadding((10 * density).toInt(), (8 * density).toInt(), (10 * density).toInt(), 0)
@@ -1389,7 +1424,14 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
     }
 
-    private fun musicCardGrid(items: List<Triple<String, String, () -> Unit>>, loadingKeys: List<String> = emptyList(), currentKeys: List<String> = emptyList(), longActions: List<List<Pair<String, () -> Unit>>> = emptyList()): ScrollView {
+    private fun musicCardGrid(
+        items: List<Triple<String, String, () -> Unit>>,
+        loadingKeys: List<String> = emptyList(),
+        currentKeys: List<String> = emptyList(),
+        longActions: List<List<Pair<String, () -> Unit>>> = emptyList(),
+        favoriteStates: List<Boolean> = emptyList(),
+        favoriteActions: List<(() -> Unit)?> = emptyList()
+    ): ScrollView {
         val density = resources.displayMetrics.density
     val grid = GridLayout(this).apply {
         columnCount = 2
@@ -1406,6 +1448,8 @@ class MainActivity : AppCompatActivity() {
         val action = item.third
         val isLoading = loadingKeys.getOrNull(index) == "1"
         val isCurrent = currentKeys.getOrNull(index) == "1"
+        val isFavorite = favoriteStates.getOrNull(index) == true
+        val favoriteAction = favoriteActions.getOrNull(index)
         val card = FrameLayout(this).apply {
             layoutParams = GridLayout.LayoutParams().apply {
                 width = cardSize
@@ -1452,6 +1496,8 @@ class MainActivity : AppCompatActivity() {
         val playIndicator: View = if (isCurrent && musicPlayer?.isPlaying == true) {
             MiniBarsView(this).apply {
                 setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
+                setAmplitude(0.24f)
+                setBarCount(4)
                 setOnClickListener { action() }
                 start()
             }
@@ -1490,6 +1536,26 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         })
         card.addView(inner, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        favoriteAction?.let { favAction ->
+            card.addView(TextView(this).apply {
+                text = if (isFavorite) "♥" else "♡"
+                textSize = 18f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(if (isFavorite) Color.parseColor("#FF2D55") else Color.parseColor("#8E8E93"))
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.argb(220, 255, 255, 255))
+                }
+                elevation = 3f * density
+                setOnClickListener {
+                    favAction.invoke()
+                }
+            }, FrameLayout.LayoutParams((28 * density).toInt(), (28 * density).toInt(), Gravity.TOP or Gravity.END).apply {
+                topMargin = (7 * density).toInt()
+                rightMargin = (7 * density).toInt()
+            })
+        }
         grid.addView(card)
     }
     return ScrollView(this).apply {
@@ -1806,6 +1872,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadLyricsForRecord(record: OnlineMusicRecord, key: String = musicRecordKey(record)) {
+        currentTimedLyrics = emptyList()
+        currentLyricIndex = -1
         if (record.songId.isBlank()) {
             currentLyricsKey = key
             currentLyricsText = "本地歌曲暂无在线歌词"
@@ -1816,12 +1884,14 @@ class MainActivity : AppCompatActivity() {
         currentLyricsText = "正在加载歌词..."
         refreshLyricsView?.invoke(currentLyricsText)
         Thread {
-            val lines = runCatching { com.yuno.tools.util.MusicSearchHelper.fetchKuwoLyrics(record.songId) }.getOrElse { emptyList() }
-            val text = if (lines.isEmpty()) "暂无歌词，可稍后重试" else lines.take(20).joinToString("\n")
+            val lines = runCatching { com.yuno.tools.util.MusicSearchHelper.fetchKuwoTimedLyrics(record.songId) }.getOrElse { emptyList() }
             runOnUiThread {
                 if (currentLyricsKey == key) {
-                    currentLyricsText = text
-                    refreshLyricsView?.invoke(text)
+                    currentTimedLyrics = lines.map { TimedLyricLine(it.timeMs, it.text) }
+                    currentLyricIndex = -1
+                    currentLyricsText = if (lines.isEmpty()) "暂无歌词，可稍后重试" else lines.first().text
+                    refreshLyricsView?.invoke(currentLyricsText)
+                    updateFlowingLyrics()
                 }
             }
         }.start()
@@ -1888,6 +1958,9 @@ class MainActivity : AppCompatActivity() {
         private var phase = 0f
         private var colors: IntArray = intArrayOf(Color.parseColor("#007AFF"))
         private var animator: ValueAnimator? = null
+        private var amplitude = 0.46f
+        private var barCount = 4
+        private var levelProvider: (() -> Float)? = null
 
         fun setBarStyle(style: String) {
             colors = when (style) {
@@ -1900,10 +1973,24 @@ class MainActivity : AppCompatActivity() {
             invalidate()
         }
 
+        fun setAmplitude(value: Float) {
+            amplitude = value.coerceIn(0.12f, 0.72f)
+            invalidate()
+        }
+
+        fun setBarCount(value: Int) {
+            barCount = value.coerceIn(4, 28)
+            invalidate()
+        }
+
+        fun setLevelProvider(provider: (() -> Float)?) {
+            levelProvider = provider
+        }
+
         fun start() {
             if (animator?.isStarted == true) return
             animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 680L
+                duration = 520L
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.RESTART
                 addUpdateListener { phase = it.animatedFraction; invalidate() }
@@ -1918,15 +2005,21 @@ class MainActivity : AppCompatActivity() {
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            val count = 4
-            val gap = width / (count * 2.2f)
-            val barWidth = (gap * 0.62f).coerceAtLeast(3f)
-            val base = height * 0.78f
+            if (width <= 0 || height <= 0) return
+            val count = barCount
+            val gap = width / (count * 1.18f)
+            val barWidth = (gap * 0.44f).coerceAtLeast(2f)
+            val base = height * 0.82f
+            val dynamicLevel = (levelProvider?.invoke() ?: 0.65f).coerceIn(0.16f, 1f)
+            val maxHeight = height * amplitude * dynamicLevel
+            val minHeight = height * 0.16f
             for (i in 0 until count) {
-                val wave = kotlin.math.sin(((phase * 360f) + i * 58f) * Math.PI / 180f).toFloat()
-                val h = height * (0.28f + 0.46f * ((wave + 1f) / 2f))
+                val waveA = kotlin.math.sin(((phase * 360f) + i * 42f) * Math.PI / 180f).toFloat()
+                val waveB = kotlin.math.cos(((phase * 260f) + i * 73f) * Math.PI / 180f).toFloat()
+                val normalized = ((waveA + waveB + 2f) / 4f).coerceIn(0f, 1f)
+                val h = (minHeight + maxHeight * normalized).coerceAtMost(height * 0.86f)
                 paint.color = colors[i % colors.size]
-                val left = width / 2f - (count * gap) / 2f + i * gap + gap * 0.25f
+                val left = width / 2f - (count * gap) / 2f + i * gap + gap * 0.35f
                 canvas.drawRoundRect(left, base - h, left + barWidth, base, barWidth, barWidth, paint)
             }
         }
@@ -1937,7 +2030,7 @@ class MainActivity : AppCompatActivity() {
         val normalColor = Color.parseColor("#A0A7B3")
         val icon = runCatching { findViewById<ImageView>(R.id.ivNavMusicDisc) }.getOrNull() ?: return
         val text = runCatching { findViewById<TextView>(R.id.tvNavMusic) }.getOrNull()
-        val barSlot = runCatching { findViewById<FrameLayout>(R.id.tvNavMusicLyric) }.getOrNull()
+        val barSlot = runCatching { findViewById<FrameLayout>(R.id.navMusicBarsTop) }.getOrNull()
         val color = if (isPlaying) selectedColor else normalColor
         icon.imageTintList = ColorStateList.valueOf(color)
         text?.apply {
@@ -1951,6 +2044,9 @@ class MainActivity : AppCompatActivity() {
             if (isPlaying) {
                 addView(MiniBarsView(this@MainActivity).apply {
                     setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
+                    setAmplitude(0.56f)
+                    setBarCount(22)
+                    setLevelProvider { currentMusicDynamicLevel() }
                     start()
                 }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
                 visibility = View.VISIBLE
@@ -1960,6 +2056,37 @@ class MainActivity : AppCompatActivity() {
         }
         if (isPlaying) startMusicSpin(icon) else stopMusicSpin(icon)
         refreshPlayerPanelState?.invoke()
+    }
+
+    private fun currentMusicDynamicLevel(): Float {
+        val player = musicPlayer ?: return 0.28f
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val duration = player.duration.takeIf { it > 0 } ?: 180_000L
+        val titleSeed = currentMusicTitle.fold(0) { acc, ch -> acc + ch.code }
+        val progress = position.toFloat() / duration.toFloat()
+        val beat = kotlin.math.sin((position / 95.0) + titleSeed * 0.017).toFloat()
+        val tone = kotlin.math.sin((position / 430.0) + progress * 18.0 + titleSeed * 0.011).toFloat()
+        val pulse = kotlin.math.cos((position / 720.0) + titleSeed * 0.007).toFloat()
+        return (0.34f + 0.32f * kotlin.math.abs(beat) + 0.22f * kotlin.math.abs(tone) + 0.12f * kotlin.math.abs(pulse)).coerceIn(0.22f, 1f)
+    }
+
+    private fun updateFlowingLyrics() {
+        val lines = currentTimedLyrics
+        if (lines.isEmpty() || currentLyricsKey == null) return
+        val player = musicPlayer ?: return
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val index = lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
+        if (index == currentLyricIndex) return
+        currentLyricIndex = index
+        val previous = lines.getOrNull(index - 1)?.text
+        val current = lines.getOrNull(index)?.text.orEmpty()
+        val next = lines.getOrNull(index + 1)?.text
+        currentLyricsText = buildString {
+            if (!previous.isNullOrBlank()) append(previous).append("\n")
+            append("♪ ").append(current)
+            if (!next.isNullOrBlank()) append("\n").append(next)
+        }
+        refreshLyricsView?.invoke(currentLyricsText)
     }
 
     private fun startMusicSpin(icon: ImageView) {
@@ -2202,6 +2329,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        lyricsHandler.removeCallbacks(lyricsTicker)
         releaseAvatarPlayer()
         releaseMusicPlayer()
         super.onDestroy()

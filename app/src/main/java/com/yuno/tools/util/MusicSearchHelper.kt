@@ -13,6 +13,11 @@ object MusicSearchHelper {
         KUWO("酷我音乐")
     }
 
+    data class TimedLyric(
+        val timeMs: Long,
+        val text: String
+    )
+
     data class OnlineSong(
         val title: String,
         val artist: String,
@@ -71,19 +76,39 @@ object MusicSearchHelper {
         return OnlineSong(title, descArtist, OnlineSource.KUWO, pageUrl, playUrl.takeIf { isPublicAudioUrl(it) }, songId)
     }
 
-    fun fetchKuwoLyrics(songId: String): List<String> {
+    fun fetchKuwoLyrics(songId: String): List<String> = fetchKuwoTimedLyrics(songId).map { it.text }.distinct()
+
+    fun fetchKuwoTimedLyrics(songId: String): List<TimedLyric> {
         val cleanedId = songId.trim()
         if (cleanedId.isBlank()) return emptyList()
         val raw = requestText("https://kuwo.cn/openapi/v1/www/lyric/getlyric?musicId=$cleanedId")
         val root = JSONObject(raw.trim())
         val data = root.optJSONObject("data") ?: return emptyList()
         val arr = data.optJSONArray("lrclist") ?: return emptyList()
-        val lines = mutableListOf<String>()
+        val lines = mutableListOf<TimedLyric>()
         for (i in 0 until arr.length()) {
-            val lyric = arr.optJSONObject(i)?.optString("lineLyric").orEmpty().trim()
-            if (lyric.isNotBlank()) lines.add(lyric)
+            val obj = arr.optJSONObject(i) ?: continue
+            val lyric = obj.optString("lineLyric").trim()
+            if (lyric.isBlank()) continue
+            val timeMs = parseLyricTimeMs(obj.optString("time"))
+            lines.add(TimedLyric(timeMs, lyric))
         }
-        return lines.distinct()
+        return lines.distinctBy { it.timeMs to it.text }
+            .sortedBy { it.timeMs }
+    }
+
+    private fun parseLyricTimeMs(raw: String): Long {
+        val text = raw.trim()
+        if (text.isBlank()) return 0L
+        return if (text.contains(':')) {
+            val parts = text.split(':')
+            val minutes = parts.getOrNull(0)?.toLongOrNull() ?: 0L
+            val seconds = parts.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+            (minutes * 60_000L + (seconds * 1000.0).toLong()).coerceAtLeast(0L)
+        } else {
+            val value = text.toDoubleOrNull() ?: return 0L
+            if (value < 10_000) (value * 1000.0).toLong() else value.toLong()
+        }
     }
 
     private fun itemKey(song: OnlineSong): String = song.songId.ifBlank { song.title + "|" + song.artist + "|" + song.playUrl.orEmpty() }

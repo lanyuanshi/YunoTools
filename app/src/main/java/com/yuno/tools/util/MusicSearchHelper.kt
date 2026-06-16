@@ -159,7 +159,7 @@ object MusicSearchHelper {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.requestMethod = method
         conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.77")
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.79")
         conn.setRequestProperty("Accept", "application/json,text/plain,*/*")
         conn.setRequestProperty("Referer", "https://api.xcvts.cn/")
         conn.setRequestProperty("Origin", "https://api.xcvts.cn")
@@ -187,6 +187,8 @@ object MusicSearchHelper {
 
     private fun cleanTitle(text: String): String {
         return decodeHtmlEntities(text)
+            .takeUnless { it.equals("null", ignoreCase = true) || it.equals("undefined", ignoreCase = true) }
+            .orEmpty()
             .replace("咪咕音乐", "")
             .replace("在线试听", "")
             .replace("免费下载", "")
@@ -194,6 +196,11 @@ object MusicSearchHelper {
             .replace(Regex("\\s+"), " ")
             .trim(' ', '-', '_', '|', '·')
             .ifBlank { "未知歌曲" }
+    }
+
+    private fun cleanField(text: String): String {
+        val cleaned = decodeHtmlEntities(text)
+        return cleaned.takeUnless { it.equals("null", ignoreCase = true) || it.equals("undefined", ignoreCase = true) }.orEmpty()
     }
 
     private fun decodeHtmlEntities(text: String): String {
@@ -207,7 +214,7 @@ object MusicSearchHelper {
             .trim()
     }
 
-    private fun firstNotBlank(vararg values: String): String = values.firstOrNull { it.isNotBlank() }.orEmpty()
+    private fun firstNotBlank(vararg values: String): String = values.map(::cleanField).firstOrNull { it.isNotBlank() }.orEmpty()
 
     fun uriFromPublicUrl(url: String): Uri = Uri.parse(decodeHtmlEntities(url))
 }

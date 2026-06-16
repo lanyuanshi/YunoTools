@@ -1145,32 +1145,17 @@ class MainActivity : AppCompatActivity() {
                     })
                     return
                 }
-                val records = songs.map { s ->
-                    OnlineMusicRecord(
-                        title = s.title,
-                        artist = s.artist,
-                        sourceLabel = s.source.label,
-                        pageUrl = s.pageUrl,
-                        playUrl = s.playUrl.orEmpty(),
-                        savedAt = System.currentTimeMillis()
-                    )
+                val listArea = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                 }
-                val items = records.map { record ->
-                    Triple(record.title, record.artist.ifBlank { record.sourceLabel }) {
-                        if (record.playUrl.isBlank()) {
-                            Toast.makeText(this, "该歌曲暂无可用播放链接", Toast.LENGTH_SHORT).show()
-                        } else {
-                            loadingOnlinePlayKey = musicRecordKey(record)
-                            currentOnlinePlayKey = musicRecordKey(record)
-                            renderOnlineSongs(songs)
-                            playOnlineRecord(record)
-                            subTitle.text = currentMusicTitle
-                        }
-                    }
+                songs.forEach { song ->
+                    listArea.addView(makeOnlineSongRow(song) { renderOnlineSongs(songs) })
                 }
-                val loading = records.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
-                val current = records.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
-                replaceOnlineList(musicCardGrid(items, loading, current))
+                replaceOnlineList(ScrollView(this).apply {
+                    isFillViewport = true
+                    addView(listArea)
+                })
             }
 
             refreshOnlineMusicList = { renderOnlineSongs(onlineCachedSongs) }
@@ -1435,16 +1420,13 @@ class MainActivity : AppCompatActivity() {
         }
         val desc = record.sourceLabel + " · " + record.artist + status
         val actions = mutableListOf<Pair<String, () -> Unit>>()
-        val playLabel = when {
-            !canPlay -> "不可播"
-            isLoading -> "加载中…"
-            isCurrent && musicPlayer?.isPlaying == true -> "播放中"
-            else -> "播放"
-        }
-        actions += playLabel to {
-            if (!canPlay) {
-                Toast.makeText(this, "该歌曲暂无可用播放链接，不能播放或下载", Toast.LENGTH_SHORT).show()
-            } else {
+        if (canPlay) {
+            val playLabel = when {
+                isLoading -> "加载中…"
+                isCurrent && musicPlayer?.isPlaying == true -> "播放中"
+                else -> "播放"
+            }
+            actions += playLabel to {
                 loadingOnlinePlayKey = key
                 currentOnlinePlayKey = key
                 onChanged?.invoke()
@@ -1456,7 +1438,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, if (isMusicFavorite(record)) "已收藏：${record.title}" else "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
             onChanged?.invoke()
         }
-        actions += "下载" to { downloadOnlineSong(record) }
+        if (canPlay) actions += "下载" to { downloadOnlineSong(record) }
         return makeMusicActionRow(record.title, desc, actions)
     }
 
@@ -1470,7 +1452,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
             onChanged()
         }
-        if (showDownload) actions += "下载" to { downloadOnlineSong(record) }
+        if (showDownload && record.playUrl.isNotBlank()) actions += "下载" to { downloadOnlineSong(record) }
         return makeMusicActionRow(record.title, desc, actions)
     }
 

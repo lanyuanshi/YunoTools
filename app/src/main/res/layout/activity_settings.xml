@@ -238,6 +238,7 @@
 
                         <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumMirror" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="唱片包裹" android:checkable="true" />
                         <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumUp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="仅向上" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumWave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="光波线条" android:checkable="true" />
                     </com.google.android.material.chip.ChipGroup>
 
                     <View

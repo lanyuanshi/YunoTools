@@ -146,7 +146,8 @@ class SettingsActivity : AppCompatActivity() {
         val group = findViewById<ChipGroup>(R.id.chipMusicSpectrumStyle)
         val styles = listOf(
             R.id.chipMusicSpectrumMirror to UserSettingsStore.MUSIC_SPECTRUM_MIRROR,
-            R.id.chipMusicSpectrumUp to UserSettingsStore.MUSIC_SPECTRUM_UP
+            R.id.chipMusicSpectrumUp to UserSettingsStore.MUSIC_SPECTRUM_UP,
+            R.id.chipMusicSpectrumWave to UserSettingsStore.MUSIC_SPECTRUM_WAVE
         )
         styles.forEach { (id, style) ->
             findViewById<Chip>(id).setOnClickListener {
@@ -167,6 +168,7 @@ class SettingsActivity : AppCompatActivity() {
         val style = UserSettingsStore.getMusicSpectrumStyle(this)
         val checkedId = when (style) {
             UserSettingsStore.MUSIC_SPECTRUM_UP -> R.id.chipMusicSpectrumUp
+            UserSettingsStore.MUSIC_SPECTRUM_WAVE -> R.id.chipMusicSpectrumWave
             else -> R.id.chipMusicSpectrumMirror
         }
         findViewById<ChipGroup>(R.id.chipMusicSpectrumStyle).check(checkedId)
@@ -175,6 +177,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun musicSpectrumStyleName(style: String): String = when (style) {
         UserSettingsStore.MUSIC_SPECTRUM_UP -> "仅向上"
+        UserSettingsStore.MUSIC_SPECTRUM_WAVE -> "光波线条"
         else -> "唱片包裹"
     }
 

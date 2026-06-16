@@ -1984,7 +1984,7 @@ class MainActivity : AppCompatActivity() {
         private var barCount = 4
         private var levelProvider: (() -> Float)? = null
         private var spectrumStyle = false
-        private var mirrorSpectrum = true
+        private var spectrumMode = UserSettingsStore.MUSIC_SPECTRUM_MIRROR
 
         fun setBarStyle(style: String) {
             colors = when (style) {
@@ -2007,9 +2007,9 @@ class MainActivity : AppCompatActivity() {
             invalidate()
         }
 
-        fun setSpectrumStyle(enabled: Boolean, mirror: Boolean = true) {
+        fun setSpectrumStyle(enabled: Boolean, mode: String = UserSettingsStore.MUSIC_SPECTRUM_MIRROR) {
             spectrumStyle = enabled
-            mirrorSpectrum = mirror
+            spectrumMode = mode
             invalidate()
         }
 
@@ -2038,7 +2038,11 @@ class MainActivity : AppCompatActivity() {
             if (width <= 0 || height <= 0) return
             val count = barCount
             if (spectrumStyle) {
-                if (mirrorSpectrum) drawVinylWrapSpectrum(canvas, count) else drawUpSpectrum(canvas, count)
+                when (spectrumMode) {
+                    UserSettingsStore.MUSIC_SPECTRUM_UP -> drawUpSpectrum(canvas, count)
+                    UserSettingsStore.MUSIC_SPECTRUM_WAVE -> drawGlowWaveSpectrum(canvas)
+                    else -> drawVinylWrapSpectrum(canvas, count)
+                }
                 return
             }
             val gap = width / (count * 1.18f)
@@ -2113,6 +2117,58 @@ class MainActivity : AppCompatActivity() {
             canvas.drawLine(cx + cos * startRadius, cy + sin * startRadius, cx + cos * endRadius, cy + sin * endRadius, paint)
         }
 
+        private fun drawGlowWaveSpectrum(canvas: Canvas) {
+            val oldStyle = paint.style
+            val oldStroke = paint.strokeWidth
+            val oldAlpha = paint.alpha
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            val centerY = height * 0.54f
+            val dynamicLevel = (levelProvider?.invoke() ?: 0.68f).coerceIn(0.18f, 1f)
+            val points = 96
+            val leftPad = width * 0.04f
+            val usableWidth = width - leftPad * 2f
+            val colors = intArrayOf(Color.parseColor("#4B6CFF"), Color.parseColor("#7A5CFF"), Color.parseColor("#64F3FF"))
+            for (layer in 0 until 5) {
+                val stroke = when (layer) {
+                    0 -> 7.5f
+                    1 -> 5.2f
+                    2 -> 3.2f
+                    else -> 1.3f
+                }
+                paint.strokeWidth = stroke
+                paint.color = colors[layer % colors.size]
+                paint.alpha = when (layer) {
+                    0 -> 34
+                    1 -> 58
+                    2 -> 105
+                    else -> 210
+                }
+                var lastX = leftPad
+                var lastY = centerY
+                for (i in 0..points) {
+                    val t = i.toFloat() / points.toFloat()
+                    val x = leftPad + usableWidth * t
+                    val edgeFade = kotlin.math.sin(t * Math.PI).toFloat().coerceAtLeast(0f)
+                    val waveA = kotlin.math.sin((t * 7.0 * Math.PI + phase * Math.PI * 2.0 + layer * 0.7)).toFloat()
+                    val waveB = kotlin.math.sin((t * 17.0 * Math.PI - phase * Math.PI * 3.2 + layer * 0.45)).toFloat()
+                    val waveC = kotlin.math.cos((t * 11.0 * Math.PI + phase * Math.PI * 4.3)).toFloat()
+                    val amp = height * (0.10f + 0.35f * dynamicLevel) * edgeFade
+                    val y = centerY + (waveA * 0.58f + waveB * 0.30f + waveC * 0.12f) * amp * (1f - layer * 0.08f)
+                    if (i > 0) canvas.drawLine(lastX, lastY, x, y, paint)
+                    lastX = x
+                    lastY = y
+                }
+            }
+            paint.strokeWidth = 1.1f
+            paint.alpha = 230
+            paint.color = Color.parseColor("#D9F8FF")
+            canvas.drawLine(leftPad, centerY, width - leftPad, centerY, paint)
+            paint.alpha = oldAlpha
+            paint.strokeWidth = oldStroke
+            paint.style = oldStyle
+        }
+
         private fun drawUpSpectrum(canvas: Canvas, count: Int) {
             val baseY = height * 0.96f
             val gap = width / (count * 1.03f)
@@ -2158,12 +2214,21 @@ class MainActivity : AppCompatActivity() {
             removeAllViews()
             if (isPlaying) {
                 val spectrumStyle = UserSettingsStore.getMusicSpectrumStyle(this@MainActivity)
-                val isVinylWrap = spectrumStyle != UserSettingsStore.MUSIC_SPECTRUM_UP
+                val isVinylWrap = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_MIRROR
+                val isWave = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_WAVE
                 layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
                     width = if (isVinylWrap) dp(92) else FrameLayout.LayoutParams.MATCH_PARENT
-                    height = if (isVinylWrap) dp(78) else dp(40)
+                    height = when {
+                        isVinylWrap -> dp(78)
+                        isWave -> dp(54)
+                        else -> dp(40)
+                    }
                     gravity = if (isVinylWrap) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.TOP
-                    topMargin = if (isVinylWrap) -dp(22) else -dp(26)
+                    topMargin = when {
+                        isVinylWrap -> -dp(17)
+                        isWave -> -dp(34)
+                        else -> -dp(26)
+                    }
                     leftMargin = if (isVinylWrap) 0 else dp(10)
                     rightMargin = if (isVinylWrap) 0 else dp(10)
                 }
@@ -2171,7 +2236,7 @@ class MainActivity : AppCompatActivity() {
                     setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
                     setAmplitude(0.86f)
                     setBarCount(44)
-                    setSpectrumStyle(true, isVinylWrap)
+                    setSpectrumStyle(true, spectrumStyle)
                     setLevelProvider { currentMusicDynamicLevel() }
                     start()
                 }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))

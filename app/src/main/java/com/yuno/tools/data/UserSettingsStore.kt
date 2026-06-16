@@ -25,6 +25,7 @@ object UserSettingsStore {
     const val MUSIC_BAR_MULTI = "multi"
     const val MUSIC_SPECTRUM_MIRROR = "mirror"
     const val MUSIC_SPECTRUM_UP = "up"
+    const val MUSIC_SPECTRUM_WAVE = "wave"
     const val LYRIC_HIGHLIGHT_BLUE = "blue"
     const val LYRIC_HIGHLIGHT_RED = "red"
     const val LYRIC_HIGHLIGHT_GREEN = "green"

@@ -37,11 +37,12 @@ class SettingsActivity : AppCompatActivity() {
         }
         bindAiSettings()
         bindMusicBarSettings()
+        bindMusicSpectrumSettings()
         bindLyricHighlightSettings()
         refreshThemeState()
     }
 
-    override fun onResume() { super.onResume(); ThemeApplier.apply(this); refreshThemeState(); loadAiState(); refreshMusicBarState(); refreshLyricHighlightState() }
+    override fun onResume() { super.onResume(); ThemeApplier.apply(this); refreshThemeState(); loadAiState(); refreshMusicBarState(); refreshMusicSpectrumState(); refreshLyricHighlightState() }
 
     private fun bindAiSettings() {
         switchDefaultApi = findViewById(R.id.switchDefaultApi)
@@ -138,6 +139,43 @@ class SettingsActivity : AppCompatActivity() {
         UserSettingsStore.MUSIC_BAR_GREEN -> "绿色"
         UserSettingsStore.MUSIC_BAR_PURPLE -> "紫色"
         else -> "多彩"
+    }
+
+
+    private fun bindMusicSpectrumSettings() {
+        val group = findViewById<ChipGroup>(R.id.chipMusicSpectrumStyle)
+        val styles = listOf(
+            R.id.chipMusicSpectrumMirror to UserSettingsStore.MUSIC_SPECTRUM_MIRROR,
+            R.id.chipMusicSpectrumUp to UserSettingsStore.MUSIC_SPECTRUM_UP
+        )
+        styles.forEach { (id, style) ->
+            findViewById<Chip>(id).setOnClickListener {
+                UserSettingsStore.setMusicSpectrumStyle(this, style)
+                refreshMusicSpectrumState()
+                Toast.makeText(this, "频谱样式已切换：${musicSpectrumStyleName(style)}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        group.setOnCheckedStateChangeListener { _, checkedIds ->
+            val style = styles.firstOrNull { it.first == checkedIds.firstOrNull() }?.second ?: return@setOnCheckedStateChangeListener
+            UserSettingsStore.setMusicSpectrumStyle(this, style)
+            refreshMusicSpectrumState()
+        }
+        refreshMusicSpectrumState()
+    }
+
+    private fun refreshMusicSpectrumState() {
+        val style = UserSettingsStore.getMusicSpectrumStyle(this)
+        val checkedId = when (style) {
+            UserSettingsStore.MUSIC_SPECTRUM_UP -> R.id.chipMusicSpectrumUp
+            else -> R.id.chipMusicSpectrumMirror
+        }
+        findViewById<ChipGroup>(R.id.chipMusicSpectrumStyle).check(checkedId)
+        findViewById<TextView>(R.id.tvMusicSpectrumState).text = "当前：${musicSpectrumStyleName(style)}"
+    }
+
+    private fun musicSpectrumStyleName(style: String): String = when (style) {
+        UserSettingsStore.MUSIC_SPECTRUM_UP -> "仅向上"
+        else -> "镜像波形"
     }
 
     private fun bindLyricHighlightSettings() {

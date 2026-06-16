@@ -1984,6 +1984,7 @@ class MainActivity : AppCompatActivity() {
         private var barCount = 4
         private var levelProvider: (() -> Float)? = null
         private var spectrumStyle = false
+        private var mirrorSpectrum = true
 
         fun setBarStyle(style: String) {
             colors = when (style) {
@@ -2006,8 +2007,9 @@ class MainActivity : AppCompatActivity() {
             invalidate()
         }
 
-        fun setSpectrumStyle(enabled: Boolean) {
+        fun setSpectrumStyle(enabled: Boolean, mirror: Boolean = true) {
             spectrumStyle = enabled
+            mirrorSpectrum = mirror
             invalidate()
         }
 
@@ -2036,7 +2038,7 @@ class MainActivity : AppCompatActivity() {
             if (width <= 0 || height <= 0) return
             val count = barCount
             if (spectrumStyle) {
-                drawMirrorSpectrum(canvas, count)
+                if (mirrorSpectrum) drawMirrorSpectrum(canvas, count) else drawUpSpectrum(canvas, count)
                 return
             }
             val gap = width / (count * 1.18f)
@@ -2085,6 +2087,32 @@ class MainActivity : AppCompatActivity() {
                 canvas.drawRoundRect(left, centerY, right, centerY + bottomHeight, 1.2f, 1.2f, paint)
             }
         }
+
+        private fun drawUpSpectrum(canvas: Canvas, count: Int) {
+            val baseY = height * 0.96f
+            val gap = width / (count * 1.03f)
+            val barWidth = (gap * 0.48f).coerceAtLeast(2f)
+            val dynamicLevel = (levelProvider?.invoke() ?: 0.68f).coerceIn(0.18f, 1f)
+            val maxHeight = height * 0.78f * amplitude * dynamicLevel
+            val minHeight = height * 0.10f
+            val startX = width / 2f - (count * gap) / 2f
+            paint.color = Color.argb(105, 255, 255, 255)
+            canvas.drawRect(0f, baseY - 0.5f, width.toFloat(), baseY + 0.5f, paint)
+            for (i in 0 until count) {
+                val waveA = kotlin.math.sin(((phase * 360f) + i * 31f) * Math.PI / 180f).toFloat()
+                val waveB = kotlin.math.cos(((phase * 230f) + i * 67f) * Math.PI / 180f).toFloat()
+                val waveC = kotlin.math.sin(((phase * 520f) + i * 13f) * Math.PI / 180f).toFloat()
+                val normalized = (0.42f * kotlin.math.abs(waveA) + 0.34f * kotlin.math.abs(waveB) + 0.24f * kotlin.math.abs(waveC)).coerceIn(0f, 1f)
+                val envelope = (0.40f + 0.60f * kotlin.math.abs(kotlin.math.sin((i * 0.34f) + phase * Math.PI.toFloat()))).coerceIn(0f, 1f)
+                val topHeight = (minHeight + maxHeight * normalized * envelope).coerceIn(minHeight, baseY - 1f)
+                val left = startX + i * gap + gap * 0.28f
+                val right = left + barWidth
+                val color = colors[i % colors.size]
+                paint.color = if (colors.size == 1) Color.WHITE else color
+                canvas.drawRoundRect(left, baseY - topHeight, right, baseY, 1.2f, 1.2f, paint)
+            }
+        }
+
     }
 
     private fun updateMusicNavState(isPlaying: Boolean) {
@@ -2108,7 +2136,7 @@ class MainActivity : AppCompatActivity() {
                     setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
                     setAmplitude(0.86f)
                     setBarCount(44)
-                    setSpectrumStyle(true)
+                    setSpectrumStyle(true, UserSettingsStore.getMusicSpectrumStyle(this@MainActivity) != UserSettingsStore.MUSIC_SPECTRUM_UP)
                     setLevelProvider { currentMusicDynamicLevel() }
                     start()
                 }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))

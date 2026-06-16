@@ -211,6 +211,35 @@
                         <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarPurple" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="紫色" android:checkable="true" />
                     </com.google.android.material.chip.ChipGroup>
 
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="导航频谱样式"
+                        android:textColor="#111827"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvMusicSpectrumState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="当前：镜像波形"
+                        android:textColor="#8E8E93"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipMusicSpectrumStyle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumMirror" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="镜像波形" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicSpectrumUp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="仅向上" android:checkable="true" />
+                    </com.google.android.material.chip.ChipGroup>
+
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"

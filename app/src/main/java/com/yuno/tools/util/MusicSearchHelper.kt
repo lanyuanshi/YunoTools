@@ -38,37 +38,32 @@ object MusicSearchHelper {
 
     private fun searchMigu(keyword: String): List<OnlineSong> {
         val encoded = URLEncoder.encode(keyword, "UTF-8")
-        val candidates = listOf(
-            "$MIGU_API?name=$encoded",
-            "$MIGU_API?msg=$encoded",
-            "$MIGU_API?keyword=$encoded",
-            "$MIGU_API?search=$encoded",
-            "$MIGU_API?query=$encoded",
-            "$MIGU_API?key=$encoded"
-        )
+        val songs = mutableListOf<OnlineSong>()
         val errors = mutableListOf<Exception>()
-        for (url in candidates) {
+
+        for (index in 1..20) {
             try {
-                val raw = requestText(url)
-                val songs = parseMiguResponse(raw, keyword)
-                if (songs.isNotEmpty()) return songs
+                val raw = requestText("$MIGU_API?gm=$encoded&n=$index&num=20&type=json")
+                parseMiguResponse(raw, keyword).forEach { song ->
+                    if (songs.none { it.pageUrl == song.pageUrl && it.title == song.title }) songs.add(song)
+                }
             } catch (e: Exception) {
                 errors.add(e)
             }
         }
-        val postBodies = listOf(
-            "name=$encoded",
-            "msg=$encoded",
-            "keyword=$encoded",
-            "search=$encoded",
-            "query=$encoded",
-            "key=$encoded"
+        if (songs.isNotEmpty()) return songs
+
+        val candidates = listOf(
+            "$MIGU_API?gm=$encoded&type=json",
+            "$MIGU_API?name=$encoded",
+            "$MIGU_API?msg=$encoded",
+            "$MIGU_API?keyword=$encoded"
         )
-        for (body in postBodies) {
+        for (url in candidates) {
             try {
-                val raw = requestText(MIGU_API, method = "POST", body = body)
-                val songs = parseMiguResponse(raw, keyword)
-                if (songs.isNotEmpty()) return songs
+                val raw = requestText(url)
+                val parsed = parseMiguResponse(raw, keyword)
+                if (parsed.isNotEmpty()) return parsed
             } catch (e: Exception) {
                 errors.add(e)
             }
@@ -122,20 +117,32 @@ object MusicSearchHelper {
             obj.optString("playUrl"),
             obj.optString("play_url"),
             obj.optString("music"),
+            obj.optString("music_url"),
             obj.optString("musicUrl"),
             obj.optString("mp3"),
             obj.optString("songUrl"),
-            obj.optString("src")
+            obj.optString("src"),
+            obj.optString("listenUrl"),
+            obj.optString("streamUrl"),
+            obj.optString("downUrl"),
+            obj.optString("previewUrl")
         ).replace("\\/", "/")
-        if (!isPublicAudioUrl(playUrl)) return null
+        val pageUrl = firstNotBlank(
+            obj.optString("link"),
+            obj.optString("pageUrl"),
+            obj.optString("songLink"),
+            playUrl
+        ).replace("\\/", "/")
+        if (playUrl.isBlank() && pageUrl.isBlank()) return null
 
+        val songId = pageUrl.substringAfterLast('/').takeIf { it.isNotBlank() && it != pageUrl }
         val title = cleanTitle(firstNotBlank(
+            obj.optString("title"),
             obj.optString("name"),
             obj.optString("song"),
-            obj.optString("title"),
             obj.optString("songName"),
             obj.optString("musicName"),
-            keyword
+            if (!songId.isNullOrBlank()) "咪咕歌曲 $songId" else keyword
         ))
         val artist = cleanTitle(firstNotBlank(
             obj.optString("singer"),
@@ -145,13 +152,7 @@ object MusicSearchHelper {
             obj.optString("singerName"),
             "咪咕音乐"
         ))
-        val pageUrl = firstNotBlank(
-            obj.optString("link"),
-            obj.optString("pageUrl"),
-            obj.optString("songLink"),
-            playUrl
-        ).replace("\\/", "/")
-        return OnlineSong(title, artist, OnlineSource.MIGU, pageUrl, playUrl)
+        return OnlineSong(title, artist, OnlineSource.MIGU, pageUrl, playUrl.takeIf { isPublicAudioUrl(it) })
     }
 
     private fun requestText(urlStr: String, method: String = "GET", body: String? = null): String {

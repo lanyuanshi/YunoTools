@@ -1405,7 +1405,9 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#7B8494"))
         })
         row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(makeControlButton(buttonText) { action() })
+        if (buttonText.isNotBlank()) {
+            row.addView(makeControlButton(buttonText) { action() })
+        }
         row.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = (10 * density).toInt()
         }

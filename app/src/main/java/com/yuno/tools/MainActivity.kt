@@ -959,17 +959,17 @@ class MainActivity : AppCompatActivity() {
 
         val density = resources.displayMetrics.density
         val root = FrameLayout(this).apply {
-            setPadding((18 * density).toInt(), (28 * density).toInt(), (18 * density).toInt(), (28 * density).toInt())
-            setBackgroundColor(Color.argb(88, 12, 18, 28))
+            setPadding((16 * density).toInt(), (24 * density).toInt(), (16 * density).toInt(), (24 * density).toInt())
+            setBackgroundColor(Color.argb(72, 0, 0, 0))
         }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((18 * density).toInt(), (16 * density).toInt(), (18 * density).toInt(), (16 * density).toInt())
+            setPadding((18 * density).toInt(), (18 * density).toInt(), (18 * density).toInt(), (16 * density).toInt())
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 28f * density
-                setColor(Color.argb(224, 246, 250, 255))
-                setStroke((1.2f * density).toInt(), Color.argb(140, 255, 255, 255))
+                cornerRadius = 32f * density
+                setColor(Color.argb(244, 250, 250, 252))
+                setStroke((1f * density).toInt(), Color.argb(210, 255, 255, 255))
             }
         }
         root.addView(panel, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
@@ -980,15 +980,15 @@ class MainActivity : AppCompatActivity() {
         }
         val headerTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val title = TextView(this).apply {
-            text = "音乐播放器"
-            textSize = 20f
+            text = "音乐"
+            textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#182033"))
+            setTextColor(Color.parseColor("#111827"))
         }
         val subTitle = TextView(this).apply { tag = "music_sub_title"
             text = currentMusicTitle
             textSize = 12f
-            setTextColor(Color.parseColor("#6F7A8C"))
+            setTextColor(Color.parseColor("#8E8E93"))
             setPadding(0, (2 * density).toInt(), 0, (10 * density).toInt())
         }
         headerTexts.addView(title)
@@ -999,10 +999,10 @@ class MainActivity : AppCompatActivity() {
             textSize = 28f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#5D6677"))
+            setTextColor(Color.parseColor("#8E8E93"))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.argb(70, 30, 136, 229))
+                setColor(Color.argb(46, 118, 118, 128))
             }
             setOnClickListener { musicDialog?.dismiss() }
         }
@@ -1059,7 +1059,7 @@ class MainActivity : AppCompatActivity() {
             val favorites = loadMusicRecords(MUSIC_FAVORITES_KEY)
             if (favorites.isEmpty()) {
                 val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                list.addView(makeHintText("暂无咪咕音乐收藏。搜索歌曲或歌手后，点击“收藏”即可保存到这里。"))
+                list.addView(makeHintText("暂无酷我音乐收藏。搜索歌曲或歌手后，点击“收藏”即可保存到这里。"))
                 content.addView(ScrollView(this).apply { isFillViewport = true; addView(list) }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             } else {
                 val items = favorites.map { record ->
@@ -1113,13 +1113,13 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, 0, 0, (8 * density).toInt())
             }
             val input = android.widget.EditText(this).apply {
-                hint = "搜索咪咕音乐，输入歌曲或歌手..."
+                hint = "搜索酷我音乐，输入歌曲或歌手..."
                 setText(onlineLastKeyword)
                 textSize = 14f
                 isSingleLine = true
                 imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
                 inputType = android.text.InputType.TYPE_CLASS_TEXT
-                setTextColor(Color.parseColor("#182033"))
+                setTextColor(Color.parseColor("#111827"))
                 setHintTextColor(Color.parseColor("#A0A7B3"))
                 setPadding((12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt(), (8 * density).toInt())
                 background = GradientDrawable().apply {
@@ -1145,17 +1145,41 @@ class MainActivity : AppCompatActivity() {
                     })
                     return
                 }
-                val listArea = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+                val records = songs.map { song ->
+                    OnlineMusicRecord(
+                        title = song.title,
+                        artist = song.artist,
+                        sourceLabel = song.source.label,
+                        pageUrl = song.pageUrl,
+                        playUrl = song.playUrl.orEmpty()
+                    )
                 }
-                songs.forEach { song ->
-                    listArea.addView(makeOnlineSongRow(song) { renderOnlineSongs(songs) })
+                val items = records.map { record ->
+                    Triple(record.title, record.artist.ifBlank { record.sourceLabel }) {
+                        if (record.playUrl.isBlank()) {
+                            Toast.makeText(this, "该歌曲暂无可用播放链接", Toast.LENGTH_SHORT).show()
+                        } else {
+                            loadingOnlinePlayKey = musicRecordKey(record)
+                            currentOnlinePlayKey = musicRecordKey(record)
+                            playOnlineRecord(record)
+                            subTitle.text = currentMusicTitle
+                            renderOnlineSongs(songs)
+                        }
+                    }
                 }
-                replaceOnlineList(ScrollView(this).apply {
-                    isFillViewport = true
-                    addView(listArea)
-                })
+                val longActions = records.map { record ->
+                    buildList<Pair<String, () -> Unit>> {
+                        add((if (isMusicFavorite(record)) "取消收藏" else "收藏") to {
+                            toggleMusicFavorite(record)
+                            Toast.makeText(this@MainActivity, if (isMusicFavorite(record)) "已收藏：${record.title}" else "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
+                            renderOnlineSongs(songs)
+                        })
+                        if (record.playUrl.isNotBlank()) add("下载" to { downloadOnlineSong(record) })
+                    }
+                }
+                val loading = records.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                val current = records.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                replaceOnlineList(musicCardGrid(items, loading, current, longActions))
             }
 
             refreshOnlineMusicList = { renderOnlineSongs(onlineCachedSongs) }
@@ -1165,7 +1189,7 @@ class MainActivity : AppCompatActivity() {
                 onlineLastKeyword = keyword
                 if (keyword.isBlank()) {
                     onlineCachedSongs = emptyList()
-                    showOnlineHint("输入歌曲名或歌手名搜索咪咕音乐")
+                    showOnlineHint("输入歌曲名或歌手名搜索酷我音乐")
                     return@makeControlButton
                 }
 
@@ -1212,7 +1236,7 @@ class MainActivity : AppCompatActivity() {
             } else if (onlineLastKeyword.isNotBlank()) {
                 searchButton.performClick()
             } else {
-                showOnlineHint("输入歌曲名或歌手名搜索咪咕音乐")
+                showOnlineHint("输入歌曲名或歌手名搜索酷我音乐")
             }
         }
 
@@ -1250,7 +1274,7 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
     }
 
-    private fun musicCardGrid(items: List<Triple<String, String, () -> Unit>>, loadingKeys: List<String> = emptyList(), currentKeys: List<String> = emptyList()): ScrollView {
+    private fun musicCardGrid(items: List<Triple<String, String, () -> Unit>>, loadingKeys: List<String> = emptyList(), currentKeys: List<String> = emptyList(), longActions: List<List<Pair<String, () -> Unit>>> = emptyList()): ScrollView {
         val density = resources.displayMetrics.density
     val grid = GridLayout(this).apply {
         columnCount = 3
@@ -1275,11 +1299,22 @@ class MainActivity : AppCompatActivity() {
             }
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 10f * density
-                setColor(Color.argb(if (isCurrent) 220 else 185, 255, 255, 255))
-                if (isCurrent) setStroke((1.4f * density).toInt(), Color.parseColor("#1E88E5"))
+                cornerRadius = 16f * density
+                setColor(Color.argb(if (isCurrent) 255 else 238, 255, 255, 255))
+                if (isCurrent) setStroke((1.2f * density).toInt(), Color.parseColor("#007AFF"))
             }
             setOnClickListener { action() }
+            setOnLongClickListener {
+                val actions = longActions.getOrNull(index).orEmpty()
+                if (actions.isEmpty()) {
+                    false
+                } else {
+                    android.app.AlertDialog.Builder(this@MainActivity)
+                        .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions.getOrNull(which)?.second?.invoke() }
+                        .show()
+                    true
+                }
+            }
         }
         val inner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1290,14 +1325,14 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(coverSize, coverSize)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 9f * density
-                setColor(Color.argb(62, 30, 136, 229))
+                cornerRadius = 14f * density
+                setColor(Color.argb(38, 0, 122, 255))
             }
         }
         coverBox.addView(ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER
             setImageResource(R.drawable.ic_nav_music_disc)
-            imageTintList = ColorStateList.valueOf(Color.parseColor("#1E88E5"))
+            imageTintList = ColorStateList.valueOf(Color.parseColor("#007AFF"))
         }, FrameLayout.LayoutParams((coverSize * 0.58f).toInt(), (coverSize * 0.58f).toInt(), Gravity.CENTER))
         coverBox.addView(TextView(this).apply {
             text = when {
@@ -1311,7 +1346,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.argb(218, 30, 136, 229))
+                setColor(Color.parseColor("#007AFF"))
             }
             setOnClickListener { action() }
         }, FrameLayout.LayoutParams(playSize, playSize, Gravity.CENTER))
@@ -1320,7 +1355,7 @@ class MainActivity : AppCompatActivity() {
             text = titleText
             textSize = 10.5f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#182033"))
+            setTextColor(Color.parseColor("#111827"))
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             gravity = Gravity.CENTER
@@ -1329,7 +1364,7 @@ class MainActivity : AppCompatActivity() {
         inner.addView(TextView(this).apply {
             text = subText
             textSize = 9f
-            setTextColor(Color.parseColor("#6F7A8C"))
+            setTextColor(Color.parseColor("#8E8E93"))
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             gravity = Gravity.CENTER
@@ -1350,13 +1385,13 @@ class MainActivity : AppCompatActivity() {
             this.text = text
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#1E88E5"))
+            setTextColor(Color.parseColor("#007AFF"))
             gravity = Gravity.CENTER
             setPadding((14 * density).toInt(), (8 * density).toInt(), (14 * density).toInt(), (8 * density).toInt())
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 18f * density
-                setColor(Color.argb(42, 30, 136, 229))
+                setColor(Color.argb(34, 0, 122, 255))
             }
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             lp.marginEnd = (8 * density).toInt()
@@ -1382,7 +1417,7 @@ class MainActivity : AppCompatActivity() {
             text = title
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#182033"))
+            setTextColor(Color.parseColor("#111827"))
         })
         texts.addView(TextView(this).apply {
             text = desc
@@ -1472,7 +1507,7 @@ class MainActivity : AppCompatActivity() {
             text = title
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#182033"))
+            setTextColor(Color.parseColor("#111827"))
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
@@ -1521,7 +1556,7 @@ class MainActivity : AppCompatActivity() {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 18f * density
-                setColor(Color.parseColor("#1E88E5"))
+                setColor(Color.parseColor("#007AFF"))
             }
             minHeight = 0
             minimumHeight = 0

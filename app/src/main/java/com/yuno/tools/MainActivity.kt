@@ -25,7 +25,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.DragEvent
@@ -108,6 +111,7 @@ import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
 import com.yuno.tools.util.ThemeApplier
 import kotlin.math.roundToInt
+import kotlin.math.max
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
@@ -158,10 +162,11 @@ class MainActivity : AppCompatActivity() {
     private val lyricsTicker = object : Runnable {
         override fun run() {
             updateFlowingLyrics()
-            lyricsHandler.postDelayed(this, 600L)
+            lyricsHandler.postDelayed(this, 180L)
         }
     }
-    private var refreshLyricsView: ((String) -> Unit)? = null
+    private var refreshLyricsView: ((CharSequence) -> Unit)? = null
+    private var bounceLyricsView: (() -> Unit)? = null
     private var refreshPlayerPanelState: (() -> Unit)? = null
     private var refreshOnlineMusicList: (() -> Unit)? = null
     private var pickedLocalSongs: List<LocalSong> = emptyList()
@@ -1167,12 +1172,16 @@ class MainActivity : AppCompatActivity() {
             }
             val listContainer = FrameLayout(this)
 
-            fun replaceOnlineList(view: View) {
+            fun replaceOnlineList(view: View, keepScroll: Boolean = false) {
+                val previousScroll = if (keepScroll) (listContainer.getChildAt(0) as? ScrollView)?.scrollY ?: 0 else 0
                 listContainer.removeAllViews()
                 listContainer.addView(view, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT
                 ))
+                if (keepScroll && previousScroll > 0) {
+                    view.post { (view as? ScrollView)?.scrollTo(0, previousScroll) }
+                }
             }
 
             fun showOnlineHint(message: String) {
@@ -1215,7 +1224,7 @@ class MainActivity : AppCompatActivity() {
                 marginEnd = (8 * density).toInt()
             })
 
-            fun renderOnlineSongs(songs: List<com.yuno.tools.util.MusicSearchHelper.OnlineSong>) {
+            fun renderOnlineSongs(songs: List<com.yuno.tools.util.MusicSearchHelper.OnlineSong>, keepScroll: Boolean = false) {
                 if (songs.isEmpty()) {
                     val listArea = LinearLayout(this).apply {
                         orientation = LinearLayout.VERTICAL
@@ -1247,7 +1256,7 @@ class MainActivity : AppCompatActivity() {
                             currentOnlinePlayKey = musicRecordKey(record)
                             playOnlineRecord(record)
                             subTitle.text = currentMusicTitle
-                            renderOnlineSongs(songs)
+                            renderOnlineSongs(songs, keepScroll = true)
                         }
                     }
                 }
@@ -1256,7 +1265,7 @@ class MainActivity : AppCompatActivity() {
                         add((if (isMusicFavorite(record)) "取消收藏" else "收藏") to {
                             toggleMusicFavorite(record)
                             Toast.makeText(this@MainActivity, if (isMusicFavorite(record)) "已收藏：${record.title}" else "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
-                            renderOnlineSongs(songs)
+                            renderOnlineSongs(songs, keepScroll = true)
                         })
                         if (record.playUrl.isNotBlank()) add("下载" to { downloadOnlineSong(record) })
                     }
@@ -1265,16 +1274,16 @@ class MainActivity : AppCompatActivity() {
                     {
                         toggleMusicFavorite(record)
                         Toast.makeText(this@MainActivity, if (isMusicFavorite(record)) "已收藏：${record.title}" else "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
-                        renderOnlineSongs(songs)
+                        renderOnlineSongs(songs, keepScroll = true)
                     }
                 }
                 val loading = records.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
                 val current = records.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
                 val favorites = records.map { isMusicFavorite(it) }
-                replaceOnlineList(musicCardGrid(items, loading, current, longActions, favorites, favoriteActions))
+                replaceOnlineList(musicCardGrid(items, loading, current, longActions, favorites, favoriteActions), keepScroll = keepScroll)
             }
 
-            refreshOnlineMusicList = { renderOnlineSongs(onlineCachedSongs) }
+            refreshOnlineMusicList = { renderOnlineSongs(onlineCachedSongs, keepScroll = true) }
 
             val searchButton = makeControlButton("搜索") { _ ->
                 val keyword = input.text.toString().trim()
@@ -1295,7 +1304,7 @@ class MainActivity : AppCompatActivity() {
                 com.yuno.tools.util.MusicSearchHelper.searchOnline(keyword) { songs ->
                     runOnUiThread {
                         onlineCachedSongs = songs
-                        renderOnlineSongs(songs)
+                        renderOnlineSongs(songs, keepScroll = true)
                     }
                 }
             }
@@ -1410,9 +1419,22 @@ class MainActivity : AppCompatActivity() {
             randomBtn.background = pillBackground(musicShuffleEnabled)
             loopBtn.isSelected = musicRepeatMode == Player.REPEAT_MODE_ONE
             loopBtn.background = pillBackground(musicRepeatMode == Player.REPEAT_MODE_ONE)
-            lyricsText.text = currentLyricsText
+            lyricsText.text = buildLyricsDisplay()
         }
         refreshLyricsView = { text -> lyricsText.text = text }
+        bounceLyricsView = {
+            lyricsText.animate().cancel()
+            lyricsText.scaleX = 0.97f
+            lyricsText.scaleY = 0.97f
+            lyricsText.translationY = 3f * density
+            lyricsText.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationY(0f)
+                .setDuration(260L)
+                .setInterpolator(OvershootInterpolator(1.8f))
+                .start()
+        }
         refreshPlayerPanelState = { syncPanelState() }
         panel.addView(nowPlayingCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = (10 * density).toInt()
@@ -1961,6 +1983,7 @@ class MainActivity : AppCompatActivity() {
         private var amplitude = 0.46f
         private var barCount = 4
         private var levelProvider: (() -> Float)? = null
+        private var spectrumStyle = false
 
         fun setBarStyle(style: String) {
             colors = when (style) {
@@ -1974,12 +1997,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun setAmplitude(value: Float) {
-            amplitude = value.coerceIn(0.12f, 0.72f)
+            amplitude = value.coerceIn(0.12f, 0.86f)
             invalidate()
         }
 
         fun setBarCount(value: Int) {
-            barCount = value.coerceIn(4, 28)
+            barCount = value.coerceIn(4, 36)
+            invalidate()
+        }
+
+        fun setSpectrumStyle(enabled: Boolean) {
+            spectrumStyle = enabled
             invalidate()
         }
 
@@ -2007,17 +2035,17 @@ class MainActivity : AppCompatActivity() {
             super.onDraw(canvas)
             if (width <= 0 || height <= 0) return
             val count = barCount
-            val gap = width / (count * 1.18f)
-            val barWidth = (gap * 0.44f).coerceAtLeast(2f)
-            val base = height * 0.82f
+            val gap = width / (count * if (spectrumStyle) 1.08f else 1.18f)
+            val barWidth = (gap * if (spectrumStyle) 0.52f else 0.44f).coerceAtLeast(2f)
+            val base = height * if (spectrumStyle) 0.96f else 0.82f
             val dynamicLevel = (levelProvider?.invoke() ?: 0.65f).coerceIn(0.16f, 1f)
             val maxHeight = height * amplitude * dynamicLevel
-            val minHeight = height * 0.16f
+            val minHeight = height * if (spectrumStyle) 0.18f else 0.16f
             for (i in 0 until count) {
                 val waveA = kotlin.math.sin(((phase * 360f) + i * 42f) * Math.PI / 180f).toFloat()
                 val waveB = kotlin.math.cos(((phase * 260f) + i * 73f) * Math.PI / 180f).toFloat()
                 val normalized = ((waveA + waveB + 2f) / 4f).coerceIn(0f, 1f)
-                val h = (minHeight + maxHeight * normalized).coerceAtMost(height * 0.86f)
+                val h = (minHeight + maxHeight * normalized).coerceAtMost(height * if (spectrumStyle) 0.95f else 0.86f)
                 paint.color = colors[i % colors.size]
                 val left = width / 2f - (count * gap) / 2f + i * gap + gap * 0.35f
                 canvas.drawRoundRect(left, base - h, left + barWidth, base, barWidth, barWidth, paint)
@@ -2044,8 +2072,9 @@ class MainActivity : AppCompatActivity() {
             if (isPlaying) {
                 addView(MiniBarsView(this@MainActivity).apply {
                     setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
-                    setAmplitude(0.56f)
-                    setBarCount(22)
+                    setAmplitude(0.72f)
+                    setBarCount(28)
+                    setSpectrumStyle(true)
                     setLevelProvider { currentMusicDynamicLevel() }
                     start()
                 }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -2076,17 +2105,47 @@ class MainActivity : AppCompatActivity() {
         val player = musicPlayer ?: return
         val position = player.currentPosition.coerceAtLeast(0L)
         val index = lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
-        if (index == currentLyricIndex) return
-        currentLyricIndex = index
-        val previous = lines.getOrNull(index - 1)?.text
-        val current = lines.getOrNull(index)?.text.orEmpty()
-        val next = lines.getOrNull(index + 1)?.text
-        currentLyricsText = buildString {
+        val changedLine = index != currentLyricIndex
+        if (changedLine) currentLyricIndex = index
+        refreshLyricsView?.invoke(buildLyricsDisplay(position, index))
+        if (changedLine) bounceLyricsView?.invoke()
+    }
+
+    private fun buildLyricsDisplay(
+        position: Long = musicPlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L,
+        lineIndex: Int = currentLyricIndex.coerceAtLeast(0)
+    ): CharSequence {
+        val lines = currentTimedLyrics
+        if (lines.isEmpty()) return currentLyricsText
+        val safeIndex = lineIndex.coerceIn(0, lines.lastIndex)
+        val previous = lines.getOrNull(safeIndex - 1)?.text
+        val current = lines.getOrNull(safeIndex)?.text.orEmpty()
+        val next = lines.getOrNull(safeIndex + 1)?.text
+        val full = buildString {
             if (!previous.isNullOrBlank()) append(previous).append("\n")
             append("♪ ").append(current)
             if (!next.isNullOrBlank()) append("\n").append(next)
         }
-        refreshLyricsView?.invoke(currentLyricsText)
+        currentLyricsText = full
+        val currentStart = (if (!previous.isNullOrBlank()) previous.length + 1 else 0) + 2
+        val currentEnd = (currentStart + current.length).coerceAtMost(full.length)
+        if (current.isBlank() || currentStart >= currentEnd) return full
+        val lineStartMs = lines[safeIndex].timeMs
+        val lineEndMs = lines.getOrNull(safeIndex + 1)?.timeMs ?: (lineStartMs + 3200L)
+        val duration = (lineEndMs - lineStartMs).coerceAtLeast(900L)
+        val progress = ((position - lineStartMs).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+        val highlightEnd = (currentStart + max(1, (current.length * progress).roundToInt())).coerceAtMost(currentEnd)
+        return SpannableString(full).apply {
+            setSpan(ForegroundColorSpan(lyricHighlightColor()), currentStart, highlightEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    private fun lyricHighlightColor(): Int = when (UserSettingsStore.getLyricHighlightStyle(this)) {
+        UserSettingsStore.LYRIC_HIGHLIGHT_RED -> Color.parseColor("#FF2D55")
+        UserSettingsStore.LYRIC_HIGHLIGHT_GREEN -> Color.parseColor("#34C759")
+        UserSettingsStore.LYRIC_HIGHLIGHT_PURPLE -> Color.parseColor("#AF52DE")
+        UserSettingsStore.LYRIC_HIGHLIGHT_ORANGE -> Color.parseColor("#FF9500")
+        else -> Color.parseColor("#007AFF")
     }
 
     private fun startMusicSpin(icon: ImageView) {

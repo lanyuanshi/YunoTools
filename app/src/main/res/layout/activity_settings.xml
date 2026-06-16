@@ -210,6 +210,44 @@
                         <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarGreen" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="绿色" android:checkable="true" />
                         <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarPurple" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="紫色" android:checkable="true" />
                     </com.google.android.material.chip.ChipGroup>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:background="#EEF0F4" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="歌词流动颜色"
+                        android:textColor="#111827"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvLyricHighlightState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="当前：蓝色"
+                        android:textColor="#8E8E93"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipLyricHighlightStyle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip android:id="@+id/chipLyricHighlightBlue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="蓝色" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipLyricHighlightRed" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="红色" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipLyricHighlightGreen" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="绿色" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipLyricHighlightPurple" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="紫色" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipLyricHighlightOrange" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="橙色" android:checkable="true" />
+                    </com.google.android.material.chip.ChipGroup>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

@@ -952,11 +952,11 @@
             <FrameLayout
                 android:id="@+id/navMusicBarsTop"
                 android:layout_width="match_parent"
-                android:layout_height="18dp"
+                android:layout_height="34dp"
                 android:layout_gravity="top"
                 android:layout_marginStart="10dp"
                 android:layout_marginEnd="10dp"
-                android:layout_marginTop="-6dp"
+                android:layout_marginTop="-18dp"
                 android:visibility="invisible" />
 
             <LinearLayout

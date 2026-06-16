@@ -2002,7 +2002,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun setBarCount(value: Int) {
-            barCount = value.coerceIn(4, 36)
+            barCount = value.coerceIn(4, 52)
             invalidate()
         }
 
@@ -2035,20 +2035,54 @@ class MainActivity : AppCompatActivity() {
             super.onDraw(canvas)
             if (width <= 0 || height <= 0) return
             val count = barCount
-            val gap = width / (count * if (spectrumStyle) 1.08f else 1.18f)
-            val barWidth = (gap * if (spectrumStyle) 0.52f else 0.44f).coerceAtLeast(2f)
-            val base = height * if (spectrumStyle) 0.96f else 0.82f
+            if (spectrumStyle) {
+                drawMirrorSpectrum(canvas, count)
+                return
+            }
+            val gap = width / (count * 1.18f)
+            val barWidth = (gap * 0.44f).coerceAtLeast(2f)
+            val base = height * 0.82f
             val dynamicLevel = (levelProvider?.invoke() ?: 0.65f).coerceIn(0.16f, 1f)
             val maxHeight = height * amplitude * dynamicLevel
-            val minHeight = height * if (spectrumStyle) 0.18f else 0.16f
+            val minHeight = height * 0.16f
             for (i in 0 until count) {
                 val waveA = kotlin.math.sin(((phase * 360f) + i * 42f) * Math.PI / 180f).toFloat()
                 val waveB = kotlin.math.cos(((phase * 260f) + i * 73f) * Math.PI / 180f).toFloat()
                 val normalized = ((waveA + waveB + 2f) / 4f).coerceIn(0f, 1f)
-                val h = (minHeight + maxHeight * normalized).coerceAtMost(height * if (spectrumStyle) 0.95f else 0.86f)
+                val h = (minHeight + maxHeight * normalized).coerceAtMost(height * 0.86f)
                 paint.color = colors[i % colors.size]
                 val left = width / 2f - (count * gap) / 2f + i * gap + gap * 0.35f
                 canvas.drawRoundRect(left, base - h, left + barWidth, base, barWidth, barWidth, paint)
+            }
+        }
+
+        private fun drawMirrorSpectrum(canvas: Canvas, count: Int) {
+            val centerY = height * 0.56f
+            val gap = width / (count * 1.03f)
+            val barWidth = (gap * 0.48f).coerceAtLeast(2f)
+            val dynamicLevel = (levelProvider?.invoke() ?: 0.68f).coerceIn(0.18f, 1f)
+            val maxTopHeight = height * 0.50f * amplitude * dynamicLevel
+            val maxBottomHeight = height * 0.27f * amplitude * dynamicLevel
+            val minTopHeight = height * 0.08f
+            val minBottomHeight = height * 0.04f
+            val startX = width / 2f - (count * gap) / 2f
+            paint.color = Color.argb(105, 255, 255, 255)
+            canvas.drawRect(0f, centerY - 0.5f, width.toFloat(), centerY + 0.5f, paint)
+            for (i in 0 until count) {
+                val waveA = kotlin.math.sin(((phase * 360f) + i * 31f) * Math.PI / 180f).toFloat()
+                val waveB = kotlin.math.cos(((phase * 230f) + i * 67f) * Math.PI / 180f).toFloat()
+                val waveC = kotlin.math.sin(((phase * 520f) + i * 13f) * Math.PI / 180f).toFloat()
+                val normalized = (0.42f * kotlin.math.abs(waveA) + 0.34f * kotlin.math.abs(waveB) + 0.24f * kotlin.math.abs(waveC)).coerceIn(0f, 1f)
+                val envelope = (0.40f + 0.60f * kotlin.math.abs(kotlin.math.sin((i * 0.34f) + phase * Math.PI.toFloat()))).coerceIn(0f, 1f)
+                val topHeight = (minTopHeight + maxTopHeight * normalized * envelope).coerceIn(minTopHeight, centerY - 1f)
+                val bottomHeight = (minBottomHeight + maxBottomHeight * normalized * (0.78f + 0.22f * envelope)).coerceIn(minBottomHeight, height - centerY - 1f)
+                val left = startX + i * gap + gap * 0.28f
+                val right = left + barWidth
+                val color = colors[i % colors.size]
+                paint.color = if (colors.size == 1) Color.WHITE else color
+                canvas.drawRoundRect(left, centerY - topHeight, right, centerY, 1.2f, 1.2f, paint)
+                paint.color = Color.argb(88, Color.red(color), Color.green(color), Color.blue(color))
+                canvas.drawRoundRect(left, centerY, right, centerY + bottomHeight, 1.2f, 1.2f, paint)
             }
         }
     }
@@ -2072,8 +2106,8 @@ class MainActivity : AppCompatActivity() {
             if (isPlaying) {
                 addView(MiniBarsView(this@MainActivity).apply {
                     setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
-                    setAmplitude(0.72f)
-                    setBarCount(28)
+                    setAmplitude(0.86f)
+                    setBarCount(44)
                     setSpectrumStyle(true)
                     setLevelProvider { currentMusicDynamicLevel() }
                     start()

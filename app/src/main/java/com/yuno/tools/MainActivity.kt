@@ -124,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         val sourceLabel: String,
         val pageUrl: String,
         val playUrl: String,
+        val songId: String = "",
         val localPath: String = "",
         val savedAt: Long = System.currentTimeMillis()
     )
@@ -142,6 +143,9 @@ class MainActivity : AppCompatActivity() {
     private var onlineCachedSongs: List<com.yuno.tools.util.MusicSearchHelper.OnlineSong> = emptyList()
     private var currentOnlinePlayKey: String? = null
     private var loadingOnlinePlayKey: String? = null
+    private var currentLyricsKey: String? = null
+    private var currentLyricsText = "歌词将在播放酷我歌曲后显示"
+    private var refreshLyricsView: ((String) -> Unit)? = null
     private var refreshOnlineMusicList: (() -> Unit)? = null
     private var pickedLocalSongs: List<LocalSong> = emptyList()
     private var homeRandomBannerUrl: String? = null
@@ -823,7 +827,8 @@ class MainActivity : AppCompatActivity() {
                     artist = song.artist,
                     sourceLabel = "本地添加",
                     pageUrl = song.uri.toString(),
-                    playUrl = song.uri.toString()
+                    playUrl = song.uri.toString(),
+                    songId = ""
                 )
             }
             MusicPanelTab.ONLINE -> onlineCachedSongs.map { song ->
@@ -833,6 +838,7 @@ class MainActivity : AppCompatActivity() {
                     sourceLabel = song.source.label,
                     pageUrl = song.pageUrl,
                     playUrl = song.playUrl.orEmpty(),
+                    songId = song.songId,
                     savedAt = System.currentTimeMillis()
                 )
             }
@@ -1201,7 +1207,8 @@ class MainActivity : AppCompatActivity() {
                         artist = song.artist,
                         sourceLabel = song.source.label,
                         pageUrl = song.pageUrl,
-                        playUrl = song.playUrl.orEmpty()
+                        playUrl = song.playUrl.orEmpty(),
+                        songId = song.songId
                     )
                 }
                 val items = records.map { record ->
@@ -1299,6 +1306,38 @@ class MainActivity : AppCompatActivity() {
             MusicPanelTab.ONLINE -> showOnlineMusicTab()
         }
 
+        val lyricsCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 22f * density
+                setColor(Color.argb(120, 255, 255, 255))
+                setStroke((1f * density).toInt(), Color.argb(90, 209, 213, 219))
+            }
+        }
+        val lyricsTitle = TextView(this).apply {
+            text = "歌词"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#111827"))
+        }
+        val lyricsText = TextView(this).apply {
+            text = currentLyricsText
+            textSize = 12f
+            setLineSpacing(2f * density, 1.05f)
+            maxLines = 5
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(Color.parseColor("#5F6673"))
+            setPadding(0, (6 * density).toInt(), 0, 0)
+        }
+        refreshLyricsView = { text -> lyricsText.text = text }
+        lyricsCard.addView(lyricsTitle)
+        lyricsCard.addView(lyricsText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        panel.addView(lyricsCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = (8 * density).toInt()
+        })
+
         val nowPlayingCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((16 * density).toInt(), (12 * density).toInt(), (16 * density).toInt(), (14 * density).toInt())
@@ -1328,6 +1367,7 @@ class MainActivity : AppCompatActivity() {
             playPreviousMusic()
             subTitle.text = currentMusicTitle
             playingTitle.text = currentMusicTitle
+            lyricsText.text = currentLyricsText
         }
         val playPauseBtn = makeCircleControlButton(if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶", true) { view ->
             toggleCurrentMusicPlayback()
@@ -1339,6 +1379,7 @@ class MainActivity : AppCompatActivity() {
             playNextMusic()
             subTitle.text = currentMusicTitle
             playingTitle.text = currentMusicTitle
+            lyricsText.text = currentLyricsText
         }
         transportRow.addView(previousBtn)
         transportRow.addView(playPauseBtn)
@@ -1540,7 +1581,8 @@ class MainActivity : AppCompatActivity() {
             artist = song.artist,
             sourceLabel = song.source.label,
             pageUrl = song.pageUrl,
-            playUrl = song.playUrl.orEmpty()
+            playUrl = song.playUrl.orEmpty(),
+            songId = song.songId
         )
         val canPlay = record.playUrl.isNotBlank()
         val key = musicRecordKey(record)
@@ -1703,6 +1745,7 @@ class MainActivity : AppCompatActivity() {
                     sourceLabel = obj.optString("sourceLabel"),
                     pageUrl = obj.optString("pageUrl"),
                     playUrl = obj.optString("playUrl"),
+                    songId = obj.optString("songId"),
                     localPath = obj.optString("localPath"),
                     savedAt = obj.optLong("savedAt", System.currentTimeMillis())
                 )
@@ -1719,6 +1762,7 @@ class MainActivity : AppCompatActivity() {
                 put("sourceLabel", r.sourceLabel)
                 put("pageUrl", r.pageUrl)
                 put("playUrl", r.playUrl)
+                put("songId", r.songId)
                 put("localPath", r.localPath)
                 put("savedAt", r.savedAt)
             })
@@ -1744,14 +1788,38 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun musicRecordKey(record: OnlineMusicRecord): String {
-        return record.sourceLabel + "|" + record.pageUrl + "|" + record.title + "|" + record.artist
+        return record.sourceLabel + "|" + record.songId + "|" + record.pageUrl + "|" + record.title + "|" + record.artist
     }
 
     private fun playOnlineRecord(record: OnlineMusicRecord) {
         val target = if (record.localPath.isNotBlank()) Uri.fromFile(File(record.localPath)) else com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(record.playUrl)
         updateMusicPlaylist()
         currentMusicIndex = musicPlaylist.indexOfFirst { sameMusicRecord(it, record) }
-        playSelectedMusic(record.sourceLabel + " · " + record.title, target, musicRecordKey(record))
+        val key = musicRecordKey(record)
+        playSelectedMusic(record.sourceLabel + " · " + record.title, target, key)
+        loadLyricsForRecord(record, key)
+    }
+
+    private fun loadLyricsForRecord(record: OnlineMusicRecord, key: String = musicRecordKey(record)) {
+        if (record.songId.isBlank()) {
+            currentLyricsKey = key
+            currentLyricsText = "本地歌曲暂无在线歌词"
+            refreshLyricsView?.invoke(currentLyricsText)
+            return
+        }
+        currentLyricsKey = key
+        currentLyricsText = "正在加载歌词..."
+        refreshLyricsView?.invoke(currentLyricsText)
+        Thread {
+            val lines = runCatching { com.yuno.tools.util.MusicSearchHelper.fetchKuwoLyrics(record.songId) }.getOrElse { emptyList() }
+            val text = if (lines.isEmpty()) "暂无歌词，可稍后重试" else lines.take(20).joinToString("\n")
+            runOnUiThread {
+                if (currentLyricsKey == key) {
+                    currentLyricsText = text
+                    refreshLyricsView?.invoke(text)
+                }
+            }
+        }.start()
     }
 
     private fun downloadOnlineSong(record: OnlineMusicRecord) {

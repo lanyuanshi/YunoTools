@@ -18,7 +18,8 @@ object MusicSearchHelper {
         val artist: String,
         val source: OnlineSource,
         val pageUrl: String,
-        val playUrl: String?
+        val playUrl: String?,
+        val songId: String = ""
     )
 
     fun searchOnline(keyword: String, callback: (List<OnlineSong>) -> Unit) {
@@ -67,16 +68,31 @@ object MusicSearchHelper {
         )
         if (title.isBlank() || (playUrl.isBlank() && pageUrl.isBlank())) return null
         val descArtist = listOf(artist, album, duration).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "酷我音乐" }
-        return OnlineSong(title, descArtist, OnlineSource.KUWO, pageUrl, playUrl.takeIf { isPublicAudioUrl(it) })
+        return OnlineSong(title, descArtist, OnlineSource.KUWO, pageUrl, playUrl.takeIf { isPublicAudioUrl(it) }, songId)
     }
 
-    private fun itemKey(song: OnlineSong): String = song.title + "|" + song.artist + "|" + song.playUrl.orEmpty()
+    fun fetchKuwoLyrics(songId: String): List<String> {
+        val cleanedId = songId.trim()
+        if (cleanedId.isBlank()) return emptyList()
+        val raw = requestText("https://kuwo.cn/openapi/v1/www/lyric/getlyric?musicId=$cleanedId")
+        val root = JSONObject(raw.trim())
+        val data = root.optJSONObject("data") ?: return emptyList()
+        val arr = data.optJSONArray("lrclist") ?: return emptyList()
+        val lines = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            val lyric = arr.optJSONObject(i)?.optString("lineLyric").orEmpty().trim()
+            if (lyric.isNotBlank()) lines.add(lyric)
+        }
+        return lines.distinct()
+    }
+
+    private fun itemKey(song: OnlineSong): String = song.songId.ifBlank { song.title + "|" + song.artist + "|" + song.playUrl.orEmpty() }
 
     private fun requestText(urlStr: String): String {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.82")
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.84")
         conn.setRequestProperty("Accept", "application/json,text/plain,*/*")
         conn.setRequestProperty("Referer", "https://api.mmp.cc/")
         conn.connectTimeout = 8000

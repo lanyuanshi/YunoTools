@@ -14,7 +14,9 @@ import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.net.Uri
@@ -133,6 +135,8 @@ class MainActivity : AppCompatActivity() {
     private var avatarPlayer: ExoPlayer? = null
     private var musicPlayer: ExoPlayer? = null
     private var musicSpinAnimator: ObjectAnimator? = null
+    private var navBarsAnimator: ValueAnimator? = null
+    private var cardBarsAnimator: ValueAnimator? = null
     private var musicDialog: Dialog? = null
     private var musicShuffleEnabled = false
     private var musicRepeatMode = Player.REPEAT_MODE_ONE
@@ -146,6 +150,7 @@ class MainActivity : AppCompatActivity() {
     private var currentLyricsKey: String? = null
     private var currentLyricsText = "歌词将在播放酷我歌曲后显示"
     private var refreshLyricsView: ((String) -> Unit)? = null
+    private var refreshPlayerPanelState: (() -> Unit)? = null
     private var refreshOnlineMusicList: (() -> Unit)? = null
     private var pickedLocalSongs: List<LocalSong> = emptyList()
     private var homeRandomBannerUrl: String? = null
@@ -865,6 +870,7 @@ class MainActivity : AppCompatActivity() {
             created.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     updateMusicNavState(isPlaying)
+                    refreshPlayerPanelState?.invoke()
                     if (isPlaying && loadingOnlinePlayKey != null) {
                         loadingOnlinePlayKey = null
                         refreshOnlineMusicList?.invoke()
@@ -872,6 +878,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
+                    refreshPlayerPanelState?.invoke()
                     if (playbackState == Player.STATE_READY) {
                         if (loadingOnlinePlayKey != null) {
                             loadingOnlinePlayKey = null
@@ -920,6 +927,7 @@ class MainActivity : AppCompatActivity() {
         player.play()
         updateMusicNavState(true)
         updateMusicNotification(true)
+        refreshPlayerPanelState?.invoke()
         refreshOnlineMusicList?.invoke()
     }
 
@@ -1072,7 +1080,7 @@ class MainActivity : AppCompatActivity() {
         panel.addView(tabScroll)
 
         val content = FrameLayout(this)
-        val contentHeight = (resources.displayMetrics.heightPixels * 0.52f).toInt().coerceAtLeast((420 * density).toInt())
+        val contentHeight = (resources.displayMetrics.heightPixels * 0.43f).toInt().coerceAtLeast((320 * density).toInt())
         panel.addView(content, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, contentHeight).apply {
             topMargin = (12 * density).toInt()
         })
@@ -1083,21 +1091,13 @@ class MainActivity : AppCompatActivity() {
             if (!hasAudioPermission()) {
                 val items = listOf(
                     Triple("添加歌曲", "选择音频文件") { addLocalMusicFromPicker() },
-                    Triple("授权音乐", "读取手机歌曲") { requestAudioPermissionIfNeeded() },
-                    Triple("用户歌曲", "APP内置音乐") {
-                        playSelectedMusic("内置音乐 · 用户歌曲", defaultLocalSongUri())
-                        subTitle.text = currentMusicTitle
-                    }
+                    Triple("授权音乐", "读取手机歌曲") { requestAudioPermissionIfNeeded() }
                 )
                 content.addView(musicCardGrid(items), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             } else {
                 val songs = pickedLocalSongs + loadLocalSongs().filterNot { scanned -> pickedLocalSongs.any { it.uri == scanned.uri } }
                 val baseItems = listOf(
-                    Triple("添加歌曲", "选择音频文件") { addLocalMusicFromPicker() },
-                    Triple("用户歌曲", "APP内置音乐") {
-                        playSelectedMusic("内置音乐 · 用户歌曲", defaultLocalSongUri())
-                        subTitle.text = currentMusicTitle
-                    }
+                    Triple("添加歌曲", "选择音频文件") { addLocalMusicFromPicker() }
                 )
                 val items = baseItems + songs.map { song ->
                     Triple(song.title, "${song.artist} · ${formatDuration(song.durationMs)}") {
@@ -1306,45 +1306,13 @@ class MainActivity : AppCompatActivity() {
             MusicPanelTab.ONLINE -> showOnlineMusicTab()
         }
 
-        val lyricsCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 22f * density
-                setColor(Color.argb(120, 255, 255, 255))
-                setStroke((1f * density).toInt(), Color.argb(90, 209, 213, 219))
-            }
-        }
-        val lyricsTitle = TextView(this).apply {
-            text = "歌词"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#111827"))
-        }
-        val lyricsText = TextView(this).apply {
-            text = currentLyricsText
-            textSize = 12f
-            setLineSpacing(2f * density, 1.05f)
-            maxLines = 5
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(Color.parseColor("#5F6673"))
-            setPadding(0, (6 * density).toInt(), 0, 0)
-        }
-        refreshLyricsView = { text -> lyricsText.text = text }
-        lyricsCard.addView(lyricsTitle)
-        lyricsCard.addView(lyricsText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        panel.addView(lyricsCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (8 * density).toInt()
-        })
-
         val nowPlayingCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((16 * density).toInt(), (12 * density).toInt(), (16 * density).toInt(), (14 * density).toInt())
+            setPadding((16 * density).toInt(), (12 * density).toInt(), (16 * density).toInt(), (12 * density).toInt())
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 26f * density
-                setColor(Color.argb(185, 255, 255, 255))
+                setColor(Color.argb(190, 255, 255, 255))
                 setStroke((1f * density).toInt(), Color.argb(115, 209, 213, 219))
             }
         }
@@ -1361,26 +1329,11 @@ class MainActivity : AppCompatActivity() {
         val transportRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, (12 * density).toInt(), 0, 0)
+            setPadding(0, (10 * density).toInt(), 0, 0)
         }
-        val previousBtn = makeCircleControlButton("‹‹", false) {
-            playPreviousMusic()
-            subTitle.text = currentMusicTitle
-            playingTitle.text = currentMusicTitle
-            lyricsText.text = currentLyricsText
-        }
-        val playPauseBtn = makeCircleControlButton(if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶", true) { view ->
-            toggleCurrentMusicPlayback()
-            (view as TextView).text = if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶"
-            subTitle.text = currentMusicTitle
-            playingTitle.text = currentMusicTitle
-        }
-        val nextBtn = makeCircleControlButton("››", false) {
-            playNextMusic()
-            subTitle.text = currentMusicTitle
-            playingTitle.text = currentMusicTitle
-            lyricsText.text = currentLyricsText
-        }
+        val previousBtn = makeCircleControlButton("‹‹", false) { playPreviousMusic() }
+        val playPauseBtn = makeCircleControlButton(if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶", true) { toggleCurrentMusicPlayback() }
+        val nextBtn = makeCircleControlButton("››", false) { playNextMusic() }
         transportRow.addView(previousBtn)
         transportRow.addView(playPauseBtn)
         transportRow.addView(nextBtn)
@@ -1388,25 +1341,46 @@ class MainActivity : AppCompatActivity() {
         val optionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, (10 * density).toInt(), 0, 0)
+            setPadding(0, (8 * density).toInt(), 0, 0)
         }
-        val addBtn = makeControlButton("添加歌曲") { addLocalMusicFromPicker() }
-        val randomBtn = makeControlButton(if (musicShuffleEnabled) "随机开" else "随机关") {
+        val randomBtn = makeIconPillButton("⤨", musicShuffleEnabled) {
             musicShuffleEnabled = !musicShuffleEnabled
             musicPlayer?.shuffleModeEnabled = musicShuffleEnabled
-            (it as Button).text = if (musicShuffleEnabled) "随机开" else "随机关"
+            refreshPlayerPanelState?.invoke()
         }
-        val loopBtn = makeControlButton(if (musicRepeatMode == Player.REPEAT_MODE_ONE) "循环开" else "循环关") {
+        val loopBtn = makeIconPillButton("↻", musicRepeatMode == Player.REPEAT_MODE_ONE) {
             musicRepeatMode = if (musicRepeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
             musicPlayer?.repeatMode = musicRepeatMode
-            (it as Button).text = if (musicRepeatMode == Player.REPEAT_MODE_ONE) "循环开" else "循环关"
+            refreshPlayerPanelState?.invoke()
         }
-        optionRow.addView(addBtn)
         optionRow.addView(randomBtn)
         optionRow.addView(loopBtn)
         nowPlayingCard.addView(optionRow)
+        val lyricsText = TextView(this).apply {
+            text = currentLyricsText
+            textSize = 12f
+            setLineSpacing(2f * density, 1.05f)
+            maxLines = 3
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(Color.parseColor("#5F6673"))
+            gravity = Gravity.CENTER
+            setPadding((10 * density).toInt(), (8 * density).toInt(), (10 * density).toInt(), 0)
+        }
+        nowPlayingCard.addView(lyricsText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        fun syncPanelState() {
+            subTitle.text = currentMusicTitle
+            playingTitle.text = currentMusicTitle
+            playPauseBtn.text = if (musicPlayer?.isPlaying == true) "Ⅱ" else "▶"
+            randomBtn.isSelected = musicShuffleEnabled
+            randomBtn.background = pillBackground(musicShuffleEnabled)
+            loopBtn.isSelected = musicRepeatMode == Player.REPEAT_MODE_ONE
+            loopBtn.background = pillBackground(musicRepeatMode == Player.REPEAT_MODE_ONE)
+            lyricsText.text = currentLyricsText
+        }
+        refreshLyricsView = { text -> lyricsText.text = text }
+        refreshPlayerPanelState = { syncPanelState() }
         panel.addView(nowPlayingCard, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = (12 * density).toInt()
+            topMargin = (10 * density).toInt()
         })
 
         dialog.setContentView(root)
@@ -1418,13 +1392,13 @@ class MainActivity : AppCompatActivity() {
     private fun musicCardGrid(items: List<Triple<String, String, () -> Unit>>, loadingKeys: List<String> = emptyList(), currentKeys: List<String> = emptyList(), longActions: List<List<Pair<String, () -> Unit>>> = emptyList()): ScrollView {
         val density = resources.displayMetrics.density
     val grid = GridLayout(this).apply {
-        columnCount = 3
+        columnCount = 2
         setPadding((2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt(), (2 * density).toInt())
     }
     val dialogSafeWidth = (resources.displayMetrics.widthPixels - 64 * density).toInt().coerceAtLeast((300 * density).toInt())
     val gap = (4 * density).toInt()
-    val cardSize = ((dialogSafeWidth - gap * 6) / 3).coerceAtMost((104 * density).toInt()).coerceAtLeast((82 * density).toInt())
-    val coverSize = (cardSize * 0.58f).toInt()
+    val cardSize = ((dialogSafeWidth - gap * 4) / 2).coerceAtMost((156 * density).toInt()).coerceAtLeast((132 * density).toInt())
+    val coverSize = (cardSize * 0.54f).toInt()
     val playSize = (30 * density).toInt()
     items.forEachIndexed { index, item ->
         val titleText = item.first
@@ -1435,7 +1409,7 @@ class MainActivity : AppCompatActivity() {
         val card = FrameLayout(this).apply {
             layoutParams = GridLayout.LayoutParams().apply {
                 width = cardSize
-                height = (cardSize * 1.12f).toInt()
+                height = (cardSize * 1.04f).toInt()
                 setMargins(gap, gap, gap, gap)
             }
             background = GradientDrawable().apply {
@@ -1475,36 +1449,41 @@ class MainActivity : AppCompatActivity() {
             setImageResource(R.drawable.ic_nav_music_disc)
             imageTintList = ColorStateList.valueOf(Color.parseColor("#007AFF"))
         }, FrameLayout.LayoutParams((coverSize * 0.58f).toInt(), (coverSize * 0.58f).toInt(), Gravity.CENTER))
-        coverBox.addView(TextView(this).apply {
-            text = when {
-                isLoading -> "…"
-                isCurrent && musicPlayer?.isPlaying == true -> "Ⅱ"
-                else -> "▶"
+        val playIndicator: View = if (isCurrent && musicPlayer?.isPlaying == true) {
+            MiniBarsView(this).apply {
+                setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
+                setOnClickListener { action() }
+                start()
             }
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#007AFF"))
+        } else {
+            TextView(this).apply {
+                text = if (isLoading) "…" else "▶"
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.parseColor("#007AFF"))
+                }
+                setOnClickListener { action() }
             }
-            setOnClickListener { action() }
-        }, FrameLayout.LayoutParams(playSize, playSize, Gravity.CENTER))
+        }
+        coverBox.addView(playIndicator, FrameLayout.LayoutParams(playSize, playSize, Gravity.CENTER))
         inner.addView(coverBox)
         inner.addView(TextView(this).apply {
             text = titleText
-            textSize = 10.5f
+            textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#111827"))
-            maxLines = 1
+            maxLines = 2
             ellipsize = TextUtils.TruncateAt.END
             gravity = Gravity.CENTER
-            setPadding(0, (4 * density).toInt(), 0, 0)
+            setPadding(0, (5 * density).toInt(), 0, 0)
         })
         inner.addView(TextView(this).apply {
             text = subText
-            textSize = 9f
+            textSize = 10f
             setTextColor(Color.parseColor("#8E8E93"))
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -1709,6 +1688,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun makeIconPillButton(text: String, selected: Boolean, action: (View) -> Unit): TextView {
+        val density = resources.displayMetrics.density
+        return TextView(this).apply {
+            this.text = text
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(if (selected) Color.WHITE else Color.parseColor("#007AFF"))
+            background = pillBackground(selected)
+            layoutParams = LinearLayout.LayoutParams((46 * density).toInt(), (34 * density).toInt()).apply {
+                marginStart = (7 * density).toInt()
+                marginEnd = (7 * density).toInt()
+            }
+            setOnClickListener { action(it) }
+        }
+    }
+
+    private fun pillBackground(selected: Boolean): GradientDrawable {
+        val density = resources.displayMetrics.density
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 17f * density
+            setColor(if (selected) Color.parseColor("#007AFF") else Color.argb(235, 242, 242, 247))
+        }
+    }
+
     private fun makeControlButton(text: String, action: (View) -> Unit): Button {
         val density = resources.displayMetrics.density
         return Button(this).apply {
@@ -1870,9 +1875,61 @@ class MainActivity : AppCompatActivity() {
         return name.replace(Regex("[\\\\/:*?\"<>|\\r\\n]+"), "_").trim().take(60).ifBlank { "online_music" }
     }
 
-    private fun miniNavLyricText(): String {
-        val title = currentMusicTitle.substringAfter(" · ", currentMusicTitle).ifBlank { "正在播放" }
-        return "♪ $title   ♪ $title   ♪ $title"
+    private fun musicBarColors(style: String): IntArray = when (style) {
+        UserSettingsStore.MUSIC_BAR_RED -> intArrayOf(Color.parseColor("#FF3B30"), Color.parseColor("#FF6B5F"))
+        UserSettingsStore.MUSIC_BAR_GREEN -> intArrayOf(Color.parseColor("#34C759"), Color.parseColor("#77D98A"))
+        UserSettingsStore.MUSIC_BAR_PURPLE -> intArrayOf(Color.parseColor("#AF52DE"), Color.parseColor("#BF7AF0"))
+        UserSettingsStore.MUSIC_BAR_BLUE -> intArrayOf(Color.parseColor("#007AFF"), Color.parseColor("#64D2FF"))
+        else -> intArrayOf(Color.parseColor("#FF3B30"), Color.parseColor("#FFCC00"), Color.parseColor("#34C759"), Color.parseColor("#007AFF"), Color.parseColor("#AF52DE"))
+    }
+
+    private class MiniBarsView(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private var phase = 0f
+        private var colors: IntArray = intArrayOf(Color.parseColor("#007AFF"))
+        private var animator: ValueAnimator? = null
+
+        fun setBarStyle(style: String) {
+            colors = when (style) {
+                UserSettingsStore.MUSIC_BAR_RED -> intArrayOf(Color.parseColor("#FF3B30"), Color.parseColor("#FF6B5F"))
+                UserSettingsStore.MUSIC_BAR_GREEN -> intArrayOf(Color.parseColor("#34C759"), Color.parseColor("#77D98A"))
+                UserSettingsStore.MUSIC_BAR_PURPLE -> intArrayOf(Color.parseColor("#AF52DE"), Color.parseColor("#BF7AF0"))
+                UserSettingsStore.MUSIC_BAR_BLUE -> intArrayOf(Color.parseColor("#007AFF"), Color.parseColor("#64D2FF"))
+                else -> intArrayOf(Color.parseColor("#FF3B30"), Color.parseColor("#FFCC00"), Color.parseColor("#34C759"), Color.parseColor("#007AFF"), Color.parseColor("#AF52DE"))
+            }
+            invalidate()
+        }
+
+        fun start() {
+            if (animator?.isStarted == true) return
+            animator = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 680L
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.RESTART
+                addUpdateListener { phase = it.animatedFraction; invalidate() }
+                start()
+            }
+        }
+
+        override fun onDetachedFromWindow() {
+            animator?.cancel()
+            super.onDetachedFromWindow()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val count = 4
+            val gap = width / (count * 2.2f)
+            val barWidth = (gap * 0.62f).coerceAtLeast(3f)
+            val base = height * 0.78f
+            for (i in 0 until count) {
+                val wave = kotlin.math.sin(((phase * 360f) + i * 58f) * Math.PI / 180f).toFloat()
+                val h = height * (0.28f + 0.46f * ((wave + 1f) / 2f))
+                paint.color = colors[i % colors.size]
+                val left = width / 2f - (count * gap) / 2f + i * gap + gap * 0.25f
+                canvas.drawRoundRect(left, base - h, left + barWidth, base, barWidth, barWidth, paint)
+            }
+        }
     }
 
     private fun updateMusicNavState(isPlaying: Boolean) {
@@ -1880,27 +1937,29 @@ class MainActivity : AppCompatActivity() {
         val normalColor = Color.parseColor("#A0A7B3")
         val icon = runCatching { findViewById<ImageView>(R.id.ivNavMusicDisc) }.getOrNull() ?: return
         val text = runCatching { findViewById<TextView>(R.id.tvNavMusic) }.getOrNull()
-        val lyric = runCatching { findViewById<TextView>(R.id.tvNavMusicLyric) }.getOrNull()
+        val barSlot = runCatching { findViewById<FrameLayout>(R.id.tvNavMusicLyric) }.getOrNull()
         val color = if (isPlaying) selectedColor else normalColor
         icon.imageTintList = ColorStateList.valueOf(color)
         text?.apply {
             setTextColor(color)
-            this.text = if (isPlaying) "播放中" else "播放"
+            this.text = if (isPlaying) currentMusicTitle.substringAfter(" · ", currentMusicTitle).take(5).ifBlank { "播放中" } else "播放"
             setTypeface(null, if (isPlaying) Typeface.BOLD else Typeface.NORMAL)
             animate().alpha(if (isPlaying) 1f else 0.72f).setDuration(160L).start()
         }
-        lyric?.apply {
-            this.text = if (isPlaying) miniNavLyricText() else ""
-            isSelected = isPlaying
-            ellipsize = TextUtils.TruncateAt.MARQUEE
-            marqueeRepeatLimit = -1
-            setTextColor(if (isPlaying) Color.parseColor("#6F7DFF") else Color.TRANSPARENT)
+        barSlot?.apply {
+            removeAllViews()
+            if (isPlaying) {
+                addView(MiniBarsView(this@MainActivity).apply {
+                    setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
+                    start()
+                }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                visibility = View.VISIBLE
+            } else {
+                visibility = View.INVISIBLE
+            }
         }
-        if (isPlaying) {
-            startMusicSpin(icon)
-        } else {
-            stopMusicSpin(icon)
-        }
+        if (isPlaying) startMusicSpin(icon) else stopMusicSpin(icon)
+        refreshPlayerPanelState?.invoke()
     }
 
     private fun startMusicSpin(icon: ImageView) {
@@ -1918,6 +1977,10 @@ class MainActivity : AppCompatActivity() {
     private fun stopMusicSpin(icon: ImageView) {
         musicSpinAnimator?.cancel()
         musicSpinAnimator = null
+        navBarsAnimator?.cancel()
+        navBarsAnimator = null
+        cardBarsAnimator?.cancel()
+        cardBarsAnimator = null
         icon.animate().rotation(0f).setDuration(180L).start()
     }
 
@@ -1926,6 +1989,10 @@ class MainActivity : AppCompatActivity() {
         musicDialog = null
         musicSpinAnimator?.cancel()
         musicSpinAnimator = null
+        navBarsAnimator?.cancel()
+        navBarsAnimator = null
+        cardBarsAnimator?.cancel()
+        cardBarsAnimator = null
         musicPlayer?.release()
         musicPlayer = null
         runCatching {

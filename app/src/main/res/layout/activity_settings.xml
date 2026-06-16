@@ -161,6 +161,62 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
+                android:text="音乐特效"
+                android:textColor="#111827"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="#FFFFFF"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="导航音条特效"
+                        android:textColor="#111827"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvMusicBarState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="当前：多彩"
+                        android:textColor="#8E8E93"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipMusicBarStyle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarMulti" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="多彩" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarBlue" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="蓝色" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarRed" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="红色" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarGreen" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="绿色" android:checkable="true" />
+                        <com.google.android.material.chip.Chip android:id="@+id/chipMusicBarPurple" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="紫色" android:checkable="true" />
+                    </com.google.android.material.chip.ChipGroup>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
                 android:text="主题"
                 android:textColor="#111827"
                 android:textSize="18sp"

@@ -965,8 +965,8 @@
                     android:layout_marginHorizontal="6dp"
                     android:layout_weight="1"
                     android:clickable="true"
-                    android:clipChildren="true"
-                    android:clipToPadding="true"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:focusable="true"
                     android:background="@android:color/transparent"
                     android:gravity="center"
@@ -998,8 +998,8 @@
                     android:layout_weight="1"
                     android:background="@android:color/transparent"
                     android:clickable="true"
-                    android:clipChildren="true"
-                    android:clipToPadding="true"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:focusable="true"
                     android:gravity="center"
                     android:orientation="vertical">
@@ -1021,20 +1021,12 @@
                         android:textSize="10sp"
                         android:textStyle="bold" />
 
-                    <TextView
+                    <FrameLayout
                         android:id="@+id/tvNavMusicLyric"
                         android:layout_width="58dp"
-                        android:layout_height="10dp"
+                        android:layout_height="12dp"
                         android:layout_marginTop="-1dp"
-                        android:ellipsize="marquee"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:gravity="center"
-                        android:marqueeRepeatLimit="marquee_forever"
-                        android:singleLine="true"
-                        android:text=""
-                        android:textColor="#7C8BFF"
-                        android:textSize="7sp" />
+                        android:visibility="invisible" />
                 </LinearLayout>
 
                 <LinearLayout

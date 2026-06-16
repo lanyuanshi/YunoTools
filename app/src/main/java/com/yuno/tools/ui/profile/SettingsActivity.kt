@@ -10,6 +10,8 @@ import android.widget.ImageButton
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.yuno.tools.R
@@ -34,10 +36,11 @@ class SettingsActivity : AppCompatActivity() {
             overridePendingTransition(R.anim.profile_slide_up_in, R.anim.profile_stay)
         }
         bindAiSettings()
+        bindMusicBarSettings()
         refreshThemeState()
     }
 
-    override fun onResume() { super.onResume(); ThemeApplier.apply(this); refreshThemeState(); loadAiState() }
+    override fun onResume() { super.onResume(); ThemeApplier.apply(this); refreshThemeState(); loadAiState(); refreshMusicBarState() }
 
     private fun bindAiSettings() {
         switchDefaultApi = findViewById(R.id.switchDefaultApi)
@@ -88,6 +91,52 @@ class SettingsActivity : AppCompatActivity() {
             .apply()
         Toast.makeText(this, "AI设置已保存", Toast.LENGTH_SHORT).show()
         loadAiState()
+    }
+
+
+    private fun bindMusicBarSettings() {
+        val group = findViewById<ChipGroup>(R.id.chipMusicBarStyle)
+        val styles = listOf(
+            R.id.chipMusicBarMulti to UserSettingsStore.MUSIC_BAR_MULTI,
+            R.id.chipMusicBarBlue to UserSettingsStore.MUSIC_BAR_BLUE,
+            R.id.chipMusicBarRed to UserSettingsStore.MUSIC_BAR_RED,
+            R.id.chipMusicBarGreen to UserSettingsStore.MUSIC_BAR_GREEN,
+            R.id.chipMusicBarPurple to UserSettingsStore.MUSIC_BAR_PURPLE
+        )
+        styles.forEach { (id, style) ->
+            findViewById<Chip>(id).setOnClickListener {
+                UserSettingsStore.setMusicBarStyle(this, style)
+                refreshMusicBarState()
+                Toast.makeText(this, "音条特效已切换：${musicBarStyleName(style)}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        group.setOnCheckedStateChangeListener { _, checkedIds ->
+            val style = styles.firstOrNull { it.first == checkedIds.firstOrNull() }?.second ?: return@setOnCheckedStateChangeListener
+            UserSettingsStore.setMusicBarStyle(this, style)
+            refreshMusicBarState()
+        }
+        refreshMusicBarState()
+    }
+
+    private fun refreshMusicBarState() {
+        val style = UserSettingsStore.getMusicBarStyle(this)
+        val checkedId = when (style) {
+            UserSettingsStore.MUSIC_BAR_BLUE -> R.id.chipMusicBarBlue
+            UserSettingsStore.MUSIC_BAR_RED -> R.id.chipMusicBarRed
+            UserSettingsStore.MUSIC_BAR_GREEN -> R.id.chipMusicBarGreen
+            UserSettingsStore.MUSIC_BAR_PURPLE -> R.id.chipMusicBarPurple
+            else -> R.id.chipMusicBarMulti
+        }
+        findViewById<ChipGroup>(R.id.chipMusicBarStyle).check(checkedId)
+        findViewById<TextView>(R.id.tvMusicBarState).text = "当前：${musicBarStyleName(style)}"
+    }
+
+    private fun musicBarStyleName(style: String): String = when (style) {
+        UserSettingsStore.MUSIC_BAR_BLUE -> "蓝色"
+        UserSettingsStore.MUSIC_BAR_RED -> "红色"
+        UserSettingsStore.MUSIC_BAR_GREEN -> "绿色"
+        UserSettingsStore.MUSIC_BAR_PURPLE -> "紫色"
+        else -> "多彩"
     }
 
     private fun refreshThemeState() {

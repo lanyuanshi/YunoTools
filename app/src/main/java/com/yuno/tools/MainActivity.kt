@@ -2062,11 +2062,7 @@ class MainActivity : AppCompatActivity() {
             val cx = width / 2f
             val cy = height * 0.54f
             val frameSize = (height * 0.58f).coerceAtMost(width * 0.58f)
-            val half = frameSize / 2f
-            val left = cx - half
-            val top = cy - half
-            val right = cx + half
-            val bottom = cy + half
+            val radius = frameSize / 2f
             val dynamicLevel = (levelProvider?.invoke() ?: 0.68f).coerceIn(0.18f, 1f)
             val color = colors.firstOrNull() ?: Color.WHITE
             val accent = if (colors.size == 1) Color.WHITE else color
@@ -2074,9 +2070,9 @@ class MainActivity : AppCompatActivity() {
             val oldStroke = paint.strokeWidth
 
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 1.4f
-            paint.color = Color.argb(210, Color.red(accent), Color.green(accent), Color.blue(accent))
-            canvas.drawRoundRect(left, top, right, bottom, 10f, 10f, paint)
+            paint.strokeWidth = 1.7f
+            paint.color = Color.argb(220, Color.red(accent), Color.green(accent), Color.blue(accent))
+            canvas.drawCircle(cx, cy, radius, paint)
 
             paint.strokeWidth = 1.2f
             paint.color = Color.argb(190, 255, 255, 255)
@@ -2087,33 +2083,34 @@ class MainActivity : AppCompatActivity() {
             paint.style = Paint.Style.FILL
             paint.color = Color.argb(200, Color.red(accent), Color.green(accent), Color.blue(accent))
             val dot = frameSize * 0.035f
-            canvas.drawCircle(left + frameSize * 0.18f, top + frameSize * 0.18f, dot, paint)
-            canvas.drawCircle(right - frameSize * 0.18f, top + frameSize * 0.18f, dot, paint)
-            canvas.drawCircle(left + frameSize * 0.18f, bottom - frameSize * 0.18f, dot, paint)
-            canvas.drawCircle(right - frameSize * 0.18f, bottom - frameSize * 0.18f, dot, paint)
+            canvas.drawCircle(cx + kotlin.math.cos(45.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, cy + kotlin.math.sin(45.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, dot, paint)
+            canvas.drawCircle(cx + kotlin.math.cos(135.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, cy + kotlin.math.sin(135.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, dot, paint)
+            canvas.drawCircle(cx + kotlin.math.cos(225.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, cy + kotlin.math.sin(225.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, dot, paint)
+            canvas.drawCircle(cx + kotlin.math.cos(315.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, cy + kotlin.math.sin(315.0 * Math.PI / 180.0).toFloat() * radius * 0.72f, dot, paint)
 
-            val barsPerSide = (count / 4).coerceAtLeast(8)
+            val radialBars = count.coerceAtLeast(36)
             paint.strokeWidth = 1.1f
             paint.strokeCap = Paint.Cap.ROUND
-            for (i in 0 until barsPerSide) {
-                val t = (i + 0.5f) / barsPerSide
-                drawWrapBar(canvas, left + frameSize * t, top, 0f, -1f, i, dynamicLevel, accent)
-                drawWrapBar(canvas, left + frameSize * t, bottom, 0f, 1f, i + barsPerSide, dynamicLevel, accent)
-                drawWrapBar(canvas, left, top + frameSize * t, -1f, 0f, i + barsPerSide * 2, dynamicLevel, accent)
-                drawWrapBar(canvas, right, top + frameSize * t, 1f, 0f, i + barsPerSide * 3, dynamicLevel, accent)
+            for (i in 0 until radialBars) {
+                val angle = ((i.toFloat() / radialBars) * 360f - 90f) * Math.PI.toFloat() / 180f
+                drawRadialWrapBar(canvas, cx, cy, radius, angle, i, dynamicLevel, accent)
             }
             paint.strokeCap = Paint.Cap.BUTT
             paint.strokeWidth = oldStroke
             paint.style = oldStyle
         }
 
-        private fun drawWrapBar(canvas: Canvas, x: Float, y: Float, dx: Float, dy: Float, index: Int, dynamicLevel: Float, accent: Int) {
+        private fun drawRadialWrapBar(canvas: Canvas, cx: Float, cy: Float, radius: Float, angle: Float, index: Int, dynamicLevel: Float, accent: Int) {
             val waveA = kotlin.math.sin(((phase * 360f) + index * 31f) * Math.PI / 180f).toFloat()
             val waveB = kotlin.math.cos(((phase * 240f) + index * 57f) * Math.PI / 180f).toFloat()
             val normalized = (0.52f * kotlin.math.abs(waveA) + 0.48f * kotlin.math.abs(waveB)).coerceIn(0f, 1f)
-            val length = (height * (0.05f + 0.17f * amplitude * dynamicLevel * normalized)).coerceAtLeast(2f)
+            val length = (height * (0.035f + 0.13f * amplitude * dynamicLevel * normalized)).coerceAtLeast(2f)
+            val startRadius = radius + 2f
+            val endRadius = radius + 2f + length
+            val cos = kotlin.math.cos(angle)
+            val sin = kotlin.math.sin(angle)
             paint.color = Color.argb(205, Color.red(accent), Color.green(accent), Color.blue(accent))
-            canvas.drawLine(x + dx * 2f, y + dy * 2f, x + dx * (2f + length), y + dy * (2f + length), paint)
+            canvas.drawLine(cx + cos * startRadius, cy + sin * startRadius, cx + cos * endRadius, cy + sin * endRadius, paint)
         }
 
         private fun drawUpSpectrum(canvas: Canvas, count: Int) {
@@ -2160,11 +2157,21 @@ class MainActivity : AppCompatActivity() {
         barSlot?.apply {
             removeAllViews()
             if (isPlaying) {
+                val spectrumStyle = UserSettingsStore.getMusicSpectrumStyle(this@MainActivity)
+                val isVinylWrap = spectrumStyle != UserSettingsStore.MUSIC_SPECTRUM_UP
+                layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                    width = if (isVinylWrap) dp(92) else FrameLayout.LayoutParams.MATCH_PARENT
+                    height = if (isVinylWrap) dp(78) else dp(40)
+                    gravity = if (isVinylWrap) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.TOP
+                    topMargin = if (isVinylWrap) -dp(22) else -dp(26)
+                    leftMargin = if (isVinylWrap) 0 else dp(10)
+                    rightMargin = if (isVinylWrap) 0 else dp(10)
+                }
                 addView(MiniBarsView(this@MainActivity).apply {
                     setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
                     setAmplitude(0.86f)
                     setBarCount(44)
-                    setSpectrumStyle(true, UserSettingsStore.getMusicSpectrumStyle(this@MainActivity) != UserSettingsStore.MUSIC_SPECTRUM_UP)
+                    setSpectrumStyle(true, isVinylWrap)
                     setLevelProvider { currentMusicDynamicLevel() }
                     start()
                 }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))

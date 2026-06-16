@@ -1,5 +1,6 @@
 package com.yuno.tools.ui.tools
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -14,13 +15,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
 class NovelReaderPageActivity : AppCompatActivity() {
-    private val primaryDomain = "https://dynic.2otea.com"
-    private val fallbackDomain = "https://shuapi.jiaston.com"
+    private val fanqieApi = "https://api.xcvts.cn/api/xiaoshuo/fanqie"
     private var bookId = ""
     private var chapterId = ""
     private var title = ""
@@ -51,13 +52,13 @@ class NovelReaderPageActivity : AppCompatActivity() {
         setLoading(true)
         CoroutineScope(Dispatchers.IO).launch {
             val result = runCatching {
-                val list = requestJson("/book/$bookId/")
+                val list = requestJson("mulu=${Uri.encode(bookId)}&pretty=1")
                 parseChapterIds(list)
-                requestJson("/book/$bookId/$chapterId.html")
+                requestJson("content=${Uri.encode(chapterId)}&pretty=1")
             }
             withContext(Dispatchers.Main) {
                 result.onSuccess { renderOnlineChapter(it) }.onFailure {
-                    renderBody(title.ifBlank { bookTitle.ifBlank { "备用章节" } }, "在线章节暂时加载失败。\n\n可能原因：书源接口不可达、网络超时、JS 跳转未解析成功，或该章节不存在。\n\n你可以返回重试、刷新章节列表，或等待接口恢复。")
+                    renderBody(title.ifBlank { bookTitle.ifBlank { "备用章节" } }, "在线章节暂时加载失败。\n\n可能原因：番茄正文接口超时、上游返回错误，或该章节暂无可读内容。\n\n你可以返回重试、刷新目录，或稍后再试。")
                     toast("在线章节加载失败")
                 }
                 setLoading(false)
@@ -66,19 +67,14 @@ class NovelReaderPageActivity : AppCompatActivity() {
     }
 
     private fun parseChapterIds(json: JSONObject) {
-        val data = json.optJSONObject("data") ?: json
-        val groups = data.optJSONArray("list") ?: JSONArraySafe()
+        val arr = json.optJSONArray("data") ?: json.optJSONObject("data")?.optJSONArray("list") ?: JSONArray()
         chapterIds.clear()
-        for (i in 0 until groups.length()) {
-            val group = groups.optJSONObject(i) ?: continue
-            val chapters = group.optJSONArray("list") ?: JSONArraySafe()
-            for (j in 0 until chapters.length()) {
-                val c = chapters.optJSONObject(j) ?: continue
-                val id = firstNotBlank(c.optString("id"), c.optString("Id"))
-                if (id.isNotBlank()) {
-                    chapterIds.add(id)
-                    if (id == chapterId) currentIndex = chapterIds.lastIndex
-                }
+        for (i in 0 until arr.length()) {
+            val c = arr.optJSONObject(i) ?: continue
+            val id = firstNotBlank(c.optString("item_id"), c.optString("chapter_id"), c.optString("id"), c.optString("Id"))
+            if (id.isNotBlank()) {
+                chapterIds.add(id)
+                if (id == chapterId) currentIndex = chapterIds.lastIndex
             }
         }
     }
@@ -96,7 +92,7 @@ class NovelReaderPageActivity : AppCompatActivity() {
     private fun loadChapterBody() {
         setLoading(true)
         CoroutineScope(Dispatchers.IO).launch {
-            val result = runCatching { requestJson("/book/$bookId/$chapterId.html") }
+            val result = runCatching { requestJson("content=${Uri.encode(chapterId)}&pretty=1") }
             withContext(Dispatchers.Main) {
                 result.onSuccess { renderOnlineChapter(it) }.onFailure { toast("切换章节失败") }
                 setLoading(false)
@@ -105,18 +101,32 @@ class NovelReaderPageActivity : AppCompatActivity() {
     }
 
     private fun renderOnlineChapter(json: JSONObject) {
+        if (json.has("error")) {
+            val error = firstNotBlank(json.optString("error"), "正文加载失败")
+            val details = firstNotBlank(json.optString("details"), json.optString("response"))
+            renderBody(title.ifBlank { bookTitle.ifBlank { "阅读" } }, listOf(error, details).filter { it.isNotBlank() }.joinToString("\n\n"))
+            return
+        }
         val data = json.optJSONObject("data") ?: json
         val chapter = data.optJSONObject("chapter") ?: data
-        val body = firstNotBlank(chapter.optString("content"), chapter.optString("body"), data.optString("content"), "暂无内容")
+        val body = firstNotBlank(
+            chapter.optString("content"),
+            chapter.optString("body"),
+            chapter.optString("text"),
+            data.optString("content"),
+            data.optString("body"),
+            data.optString("text"),
+            "暂无内容"
+        )
         val chapterTitle = firstNotBlank(chapter.optString("title"), chapter.optString("name"), title.ifBlank { bookTitle.ifBlank { "阅读" } })
         renderBody(chapterTitle, normalizeText(body))
     }
 
     private fun loadLocalChapter() {
         val body = when {
-            chapterId.endsWith("1") -> "这是内置示例章节，用来保证书源接口不可用时页面仍能正常打开，不会闪退。\n\n在线接口恢复后，搜索和章节会优先展示真实书源内容。"
+            chapterId.endsWith("1") -> "这是内置示例章节，用来保证番茄接口不可用时页面仍能正常打开，不会闪退。\n\n在线接口恢复后，搜索和章节会优先展示真实番茄内容。"
             chapterId.endsWith("2") -> "阅读页已加入空 ID、防异常响应、防网络失败保护。\n\n上一章/下一章仅对在线章节列表生效，示例章节会提示不支持翻页。"
-            else -> "当前版本已改为笔趣阁接口体系，并支持服务端 HTML 跳转解析。\n\n如果设备网络无法访问书源，则会回退到示例章节显示。"
+            else -> "当前版本已改为 xcvts 番茄小说接口。\n\n如果上游正文接口超时，页面会显示错误信息，不会闪退或空白。"
         }
         renderBody(title.ifBlank { "示例章节" }, body)
     }
@@ -126,39 +136,29 @@ class NovelReaderPageActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tvBody).text = bodyText
     }
 
-    private fun requestJson(path: String): JSONObject {
-        val normalized = if (path.startsWith("http")) path else primaryDomain + path
-        return runCatching { JSONObject(readUrl(normalized)) }.getOrElse {
-            val fallback = if (path.startsWith("http")) path.replace(primaryDomain, fallbackDomain) else fallbackDomain + path
-            JSONObject(readUrl(fallback))
-        }
-    }
+    private fun requestJson(query: String): JSONObject = JSONObject(readUrl("$fanqieApi?$query"))
 
     private fun readUrl(url: String): String {
-        var current = url
-        repeat(2) {
-            val conn = (URL(current).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = 8000
-                readTimeout = 12000
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.74")
-                setRequestProperty("Accept", "application/json,text/html,*/*")
-                setRequestProperty("Connection", "close")
-            }
-            try {
-                val stream = if (conn.responseCode in 200..399) conn.inputStream else conn.errorStream
-                val body = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val jump = Regex("window\\.location\\.replace\\('([^']+)'\\)").find(body)?.groupValues?.getOrNull(1)
-                if (!jump.isNullOrBlank()) current = jump else return body.replace("},]", "}]")
-            } finally { conn.disconnect() }
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            instanceFollowRedirects = true
+            connectTimeout = 8000
+            readTimeout = 30000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.81")
+            setRequestProperty("Accept", "application/json,text/plain,*/*")
+            setRequestProperty("Referer", "https://api.xcvts.cn/")
+            setRequestProperty("Connection", "close")
         }
-        throw IllegalStateException("redirect loop")
+        return try {
+            val stream = if (conn.responseCode in 200..399) conn.inputStream else conn.errorStream
+            stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally { conn.disconnect() }
     }
 
     private fun normalizeText(text: String): String = text
         .replace("\r\n　　\r\n", "\n")
         .replace("\r\n", "\n")
+        .replace("\\n", "\n")
         .replace("“", "")
         .replace("”", "")
         .trim()
@@ -166,7 +166,4 @@ class NovelReaderPageActivity : AppCompatActivity() {
     private fun firstNotBlank(vararg values: String) = values.firstOrNull { it.isNotBlank() }.orEmpty()
     private fun setLoading(loading: Boolean) { findViewById<ProgressBar>(R.id.progress).visibility = if (loading) View.VISIBLE else View.GONE }
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-
-    private class JSONArraySafe : org.json.JSONArray()
-
 }

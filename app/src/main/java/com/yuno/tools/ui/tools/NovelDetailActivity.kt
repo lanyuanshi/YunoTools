@@ -1,6 +1,7 @@
 package com.yuno.tools.ui.tools
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -26,9 +27,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class NovelDetailActivity : AppCompatActivity() {
-    private val primaryDomain = "https://dynic.2otea.com"
-    private val fallbackDomain = "https://shuapi.jiaston.com"
-    private val imageBase = "https://appbdimg.cdn.bcebos.com/BookFiles/BookImages/"
+    private val fanqieApi = "https://api.xcvts.cn/api/xiaoshuo/fanqie"
     private lateinit var adapter: ChapterAdapter
     private var bookId = ""
     private var fallbackTitle = ""
@@ -68,17 +67,20 @@ class NovelDetailActivity : AppCompatActivity() {
         if (bookId.startsWith("local_")) { adapter.submit(localChapters(bookId)); return }
         setLoading(true)
         CoroutineScope(Dispatchers.IO).launch {
-            val result = runCatching { requestJson("/info/$bookId.html") to requestJson("/book/$bookId/") }
+            val result = runCatching {
+                val detail = runCatching { requestJson("xq=${Uri.encode(bookId)}&pretty=1") }.getOrNull()
+                val chapters = requestJson("mulu=${Uri.encode(bookId)}&pretty=1")
+                detail to chapters
+            }
             withContext(Dispatchers.Main) {
                 result.onSuccess { (bookJson, chaptersJson) ->
-                    val book = bookJson.optJSONObject("data") ?: bookJson
-                    renderOnlineBook(book)
+                    bookJson?.let { renderOnlineBook(it) }
                     val chapters = parseChapters(chaptersJson)
-                    adapter.submit(chapters)
-                    if (chapters.isEmpty()) toast("暂无章节")
+                    adapter.submit(chapters.ifEmpty { localChapters(bookId) })
+                    if (chapters.isEmpty()) toast("番茄目录暂不可用，已显示备用章节")
                 }.onFailure {
                     adapter.submit(localChapters(bookId))
-                    toast("笔趣阁详情暂不可用，已显示备用章节")
+                    toast("番茄详情暂不可用，已显示备用章节")
                 }
                 setLoading(false)
             }
@@ -92,33 +94,34 @@ class NovelDetailActivity : AppCompatActivity() {
         Glide.with(this).load(fallbackCover.ifBlank { R.drawable.bg_banner_random }).placeholder(R.drawable.bg_banner_random).error(R.drawable.bg_banner_random).diskCacheStrategy(DiskCacheStrategy.AUTOMATIC).into(findViewById(R.id.ivCover))
     }
 
-    private fun renderOnlineBook(book: JSONObject) {
-        val title = firstNotBlank(book.optString("Name"), fallbackTitle, "小说详情")
-        val author = firstNotBlank(book.optString("Author"), fallbackAuthor)
-        val cat = firstNotBlank(book.optString("CName"), fallbackCat)
-        val status = firstNotBlank(book.optString("BookStatus"), fallbackStatus)
-        val last = book.optString("LastChapter")
+    private fun renderOnlineBook(json: JSONObject) {
+        if (json.has("error")) return
+        val book = json.optJSONObject("data") ?: json
+        val title = firstNotBlank(book.optString("title"), book.optString("Name"), fallbackTitle, "小说详情")
+        val author = firstNotBlank(book.optString("author"), book.optString("Author"), fallbackAuthor)
+        val cat = firstNotBlank(book.optString("category"), book.optString("CName"), fallbackCat)
+        val status = firstNotBlank(book.optString("status"), book.optString("BookStatus"), fallbackStatus)
         findViewById<TextView>(R.id.tvTitle).text = title
-        findViewById<TextView>(R.id.tvMeta).text = listOf(author, cat, status, last).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "书籍信息" }
-        findViewById<TextView>(R.id.tvIntro).text = firstNotBlank(book.optString("Desc"), fallbackIntro, "暂无简介")
-        Glide.with(this).load(normalizeCover(firstNotBlank(book.optString("Img"), fallbackCover))).placeholder(R.drawable.bg_banner_random).error(R.drawable.bg_banner_random).diskCacheStrategy(DiskCacheStrategy.AUTOMATIC).into(findViewById(R.id.ivCover))
+        findViewById<TextView>(R.id.tvMeta).text = listOf(author, cat, status).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "书籍信息" }
+        findViewById<TextView>(R.id.tvIntro).text = firstNotBlank(book.optString("abstract"), book.optString("Desc"), fallbackIntro, "暂无简介")
+        Glide.with(this).load(normalizeCover(firstNotBlank(book.optString("thumb_url"), book.optString("cover"), book.optString("Img"), fallbackCover))).placeholder(R.drawable.bg_banner_random).error(R.drawable.bg_banner_random).diskCacheStrategy(DiskCacheStrategy.AUTOMATIC).into(findViewById(R.id.ivCover))
     }
 
     private fun parseChapters(json: JSONObject): List<ChapterItem> {
-        val data = json.optJSONObject("data") ?: json
-        val groups = data.optJSONArray("list") ?: json.optJSONArray("data") ?: JSONArray()
+        if (json.has("error")) return emptyList()
+        val data = json.optJSONArray("data") ?: json.optJSONObject("data")?.optJSONArray("list") ?: JSONArray()
         val list = mutableListOf<ChapterItem>()
-        for (i in 0 until groups.length()) {
-            val group = groups.optJSONObject(i) ?: continue
-            val groupName = group.optString("name")
-            if (groupName.isNotBlank()) list.add(ChapterItem("【$groupName】", "group_$i", false))
-            val chapters = group.optJSONArray("list") ?: JSONArray()
-            for (j in 0 until chapters.length()) {
-                val chapter = chapters.optJSONObject(j) ?: continue
-                val id = firstNotBlank(chapter.optString("id"), chapter.optString("Id"))
-                val name = firstNotBlank(chapter.optString("name"), chapter.optString("Name"), "第${j + 1}章")
-                if (id.isNotBlank()) list.add(ChapterItem(name, id, true))
+        var lastVolume = ""
+        for (i in 0 until data.length()) {
+            val chapter = data.optJSONObject(i) ?: continue
+            val volume = chapter.optString("volume_name")
+            if (volume.isNotBlank() && volume != lastVolume) {
+                list.add(ChapterItem("【$volume】", "group_$i", false))
+                lastVolume = volume
             }
+            val id = firstNotBlank(chapter.optString("item_id"), chapter.optString("chapter_id"), chapter.optString("id"), chapter.optString("Id"))
+            val name = firstNotBlank(chapter.optString("title"), chapter.optString("name"), chapter.optString("Name"), "第${i + 1}章")
+            if (id.isNotBlank()) list.add(ChapterItem(name, id, true))
         }
         return list
     }
@@ -134,34 +137,23 @@ class NovelDetailActivity : AppCompatActivity() {
         })
     }
 
-    private fun requestJson(path: String): JSONObject {
-        val normalized = if (path.startsWith("http")) path else primaryDomain + path
-        return runCatching { JSONObject(readUrl(normalized)) }.getOrElse {
-            val fallback = if (path.startsWith("http")) path.replace(primaryDomain, fallbackDomain) else fallbackDomain + path
-            JSONObject(readUrl(fallback))
-        }
-    }
+    private fun requestJson(query: String): JSONObject = JSONObject(readUrl("$fanqieApi?$query"))
 
     private fun readUrl(url: String): String {
-        var current = url
-        repeat(2) {
-            val conn = (URL(current).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = 8000
-                readTimeout = 12000
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.74")
-                setRequestProperty("Accept", "application/json,text/html,*/*")
-                setRequestProperty("Connection", "close")
-            }
-            try {
-                val stream = if (conn.responseCode in 200..399) conn.inputStream else conn.errorStream
-                val body = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val jump = Regex("window\\.location\\.replace\\('([^']+)'\\)").find(body)?.groupValues?.getOrNull(1)
-                if (!jump.isNullOrBlank()) current = jump else return body.replace("},]", "}]")
-            } finally { conn.disconnect() }
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            instanceFollowRedirects = true
+            connectTimeout = 8000
+            readTimeout = 25000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.81")
+            setRequestProperty("Accept", "application/json,text/plain,*/*")
+            setRequestProperty("Referer", "https://api.xcvts.cn/")
+            setRequestProperty("Connection", "close")
         }
-        throw IllegalStateException("redirect loop")
+        return try {
+            val stream = if (conn.responseCode in 200..399) conn.inputStream else conn.errorStream
+            stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally { conn.disconnect() }
     }
 
     private fun localChapters(id: String): List<ChapterItem> {
@@ -178,8 +170,8 @@ class NovelDetailActivity : AppCompatActivity() {
         return when {
             value.isBlank() -> ""
             value.startsWith("http://") || value.startsWith("https://") -> value
-            value.startsWith("/") -> imageBase + value.removePrefix("/")
-            else -> imageBase + value
+            value.startsWith("//") -> "https:$value"
+            else -> value
         }
     }
 

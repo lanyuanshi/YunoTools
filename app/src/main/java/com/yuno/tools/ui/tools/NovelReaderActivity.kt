@@ -28,13 +28,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class NovelReaderActivity : AppCompatActivity() {
-    private val primaryDomain = "https://dynic.2otea.com"
-    private val fallbackDomain = "https://shuapi.jiaston.com"
-    private val imageBase = "https://appbdimg.cdn.bcebos.com/BookFiles/BookImages/"
+    private val fanqieApi = "https://api.xcvts.cn/api/xiaoshuo/fanqie"
     private lateinit var adapter: BookAdapter
     private val filterButtons = mutableListOf<Button>()
-    private var currentType = "hot"
-    private var currentGender = "man"
+    private var currentKeyword = "热门"
 
     data class BookItem(
         val id: String,
@@ -67,28 +64,21 @@ class NovelReaderActivity : AppCompatActivity() {
 
     private fun setupFilters() {
         val row = findViewById<android.widget.LinearLayout>(R.id.filterRow)
-        if (filterButtons.isNotEmpty()) {
-            updateFilterStyles()
-            return
-        }
+        if (filterButtons.isNotEmpty()) { updateFilterStyles(); return }
         listOf(
-            "man:hot" to "男频最热",
-            "lady:hot" to "女频最热",
-            "man:new" to "新书",
-            "man:over" to "完结",
-            "man:vote" to "评分"
-        ).forEach { (key, label) ->
-            val parts = key.split(':')
-            val gender = parts[0]
-            val type = parts[1]
+            "热门" to "热门",
+            "玄幻" to "玄幻",
+            "都市" to "都市",
+            "爱情" to "爱情",
+            "科幻" to "科幻"
+        ).forEach { (keyword, label) ->
             val button = Button(this).apply {
                 text = label
-                tag = key
+                tag = keyword
                 setTextColor(resources.getColor(android.R.color.white, theme))
                 setOnClickListener {
-                    if (currentGender == gender && currentType == type) return@setOnClickListener
-                    currentGender = gender
-                    currentType = type
+                    if (currentKeyword == keyword) return@setOnClickListener
+                    currentKeyword = keyword
                     findViewById<EditText>(R.id.etKeyword).setText("")
                     updateFilterStyles()
                     loadBooks()
@@ -104,25 +94,24 @@ class NovelReaderActivity : AppCompatActivity() {
     }
 
     private fun updateFilterStyles() {
-        val selectedKey = "$currentGender:$currentType"
         filterButtons.forEach { button ->
-            val selected = button.tag == selectedKey
+            val selected = button.tag == currentKeyword
             button.isSelected = selected
             button.backgroundTintList = android.content.res.ColorStateList.valueOf(if (selected) 0xFF7C3AED.toInt() else 0xFF8E8E93.toInt())
         }
     }
 
     private fun loadBooks() {
-        setLoading(true, "加载榜单中...")
+        setLoading(true, "加载番茄推荐中...")
         CoroutineScope(Dispatchers.IO).launch {
-            val online = runCatching { fetchTopBooks(currentGender, currentType) }.getOrElse { emptyList() }
+            val online = runCatching { searchBookList(currentKeyword) }.getOrElse { emptyList() }
             val list = online.ifEmpty { fallbackBooks() }
             withContext(Dispatchers.Main) {
                 adapter.submit(list)
                 findViewById<TextView>(R.id.tvState).text = if (online.isEmpty()) {
-                    "笔趣阁接口暂不可用，已显示内置示例书库"
+                    "番茄接口暂不可用，已显示内置示例书库"
                 } else {
-                    "榜单共 ${list.size} 本，点击进入详情"
+                    "番茄推荐 ${list.size} 本，点击进入详情"
                 }
                 setLoading(false, "")
             }
@@ -132,7 +121,7 @@ class NovelReaderActivity : AppCompatActivity() {
     private fun searchBooks() {
         val keyword = findViewById<EditText>(R.id.etKeyword).text.toString().trim()
         if (keyword.isBlank()) { loadBooks(); return }
-        setLoading(true, "搜索中...")
+        setLoading(true, "搜索番茄小说中...")
         CoroutineScope(Dispatchers.IO).launch {
             val online = runCatching { searchBookList(keyword) }.getOrElse { emptyList() }
             val local = fallbackBooks().filter { it.title.contains(keyword, true) || it.author.contains(keyword, true) }
@@ -140,26 +129,18 @@ class NovelReaderActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 adapter.submit(list)
                 findViewById<TextView>(R.id.tvState).text = when {
-                    online.isNotEmpty() -> "搜索到 ${list.size} 本"
+                    online.isNotEmpty() -> "搜索到 ${list.size} 本番茄小说"
                     local.isNotEmpty() -> "在线搜索不可用，已从内置书库找到 ${local.size} 本"
-                    else -> "没有找到相关书籍，笔趣阁接口可能暂不可用"
+                    else -> "没有找到相关书籍，番茄接口可能暂不可用"
                 }
                 setLoading(false, "")
             }
         }
     }
 
-    private fun fetchTopBooks(gender: String, type: String): List<BookItem> {
-        val path = "/top/$gender/top/$type/week/1.html"
-        val json = requestJson(path)
-        val data = json.optJSONObject("data") ?: json
-        val arr = data.optJSONArray("BookList") ?: data.optJSONArray("data") ?: JSONArray()
-        return parseBooks(arr)
-    }
-
     private fun searchBookList(keyword: String): List<BookItem> {
-        val json = requestJson("/search.aspx?key=${Uri.encode(keyword)}&page=1&siteid=app2")
-        val arr = json.optJSONArray("data") ?: json.optJSONObject("data")?.optJSONArray("BookList") ?: JSONArray()
+        val json = requestJson("q=${Uri.encode(keyword)}&pretty=1")
+        val arr = json.optJSONArray("data") ?: json.optJSONObject("data")?.optJSONArray("list") ?: JSONArray()
         return parseBooks(arr)
     }
 
@@ -169,21 +150,21 @@ class NovelReaderActivity : AppCompatActivity() {
             val item = bookFrom(arr.optJSONObject(i))
             if (item != null && item.id.isNotBlank() && item.title.isNotBlank()) list.add(item)
         }
-        return list
+        return list.distinctBy { it.id }.take(60)
     }
 
     private fun bookFrom(o: JSONObject?): BookItem? {
         o ?: return null
-        val id = firstNotBlank(o.optString("Id"), o.optString("id"), o.optString("BookId"))
+        val id = firstNotBlank(o.optString("book_id"), o.optString("bookId"), o.optString("id"), o.optString("Id"))
         return BookItem(
             id = id,
-            title = firstNotBlank(o.optString("Name"), o.optString("title"), o.optString("name")),
-            author = firstNotBlank(o.optString("Author"), o.optString("author"), "佚名"),
-            intro = firstNotBlank(o.optString("Desc"), o.optString("desc"), o.optString("intro"), "暂无简介"),
-            cover = normalizeCover(firstNotBlank(o.optString("Img"), o.optString("cover"))),
-            cat = firstNotBlank(o.optString("CName"), o.optString("cat"), "小说"),
-            zt = firstNotBlank(o.optString("BookStatus"), o.optString("status"), "连载/完结"),
-            last = firstNotBlank(o.optString("LastChapter"), o.optString("lastChapter"), "点击查看详情")
+            title = firstNotBlank(o.optString("title"), o.optString("Name"), o.optString("name")),
+            author = firstNotBlank(o.optString("author"), o.optString("Author"), "佚名"),
+            intro = firstNotBlank(o.optString("abstract"), o.optString("Desc"), o.optString("desc"), o.optString("intro"), "暂无简介"),
+            cover = normalizeCover(firstNotBlank(o.optString("thumb_url"), o.optString("cover"), o.optString("Img"))),
+            cat = firstNotBlank(o.optString("category"), o.optString("cat"), "番茄小说"),
+            zt = firstNotBlank(o.optString("status"), o.optString("BookStatus"), "连载/完结"),
+            last = firstNotBlank(o.optString("lastChapter"), o.optString("LastChapter"), "点击查看详情")
         )
     }
 
@@ -200,40 +181,23 @@ class NovelReaderActivity : AppCompatActivity() {
         })
     }
 
-    private fun requestJson(path: String): JSONObject {
-        val normalized = if (path.startsWith("http")) path else primaryDomain + path
-        return runCatching { JSONObject(readUrl(normalized)) }.getOrElse {
-            val fallback = if (path.startsWith("http")) path.replace(primaryDomain, fallbackDomain) else fallbackDomain + path
-            JSONObject(readUrl(fallback))
-        }
-    }
+    private fun requestJson(query: String): JSONObject = JSONObject(readUrl("$fanqieApi?$query"))
 
     private fun readUrl(url: String): String {
-        var current = url
-        repeat(2) {
-            val conn = (URL(current).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = 8000
-                readTimeout = 12000
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.74")
-                setRequestProperty("Accept", "application/json,text/html,*/*")
-                setRequestProperty("Connection", "close")
-            }
-            try {
-                val stream = if (conn.responseCode in 200..399) conn.inputStream else conn.errorStream
-                val body = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val jump = Regex("window\\.location\\.replace\\('([^']+)'\\)").find(body)?.groupValues?.getOrNull(1)
-                if (!jump.isNullOrBlank()) {
-                    current = jump
-                } else {
-                    return body.replace("},]", "}]")
-                }
-            } finally {
-                conn.disconnect()
-            }
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            instanceFollowRedirects = true
+            connectTimeout = 8000
+            readTimeout = 25000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.81")
+            setRequestProperty("Accept", "application/json,text/plain,*/*")
+            setRequestProperty("Referer", "https://api.xcvts.cn/")
+            setRequestProperty("Connection", "close")
         }
-        throw IllegalStateException("redirect loop")
+        return try {
+            val stream = if (conn.responseCode in 200..399) conn.inputStream else conn.errorStream
+            stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally { conn.disconnect() }
     }
 
     private fun normalizeCover(raw: String): String {
@@ -241,8 +205,8 @@ class NovelReaderActivity : AppCompatActivity() {
         return when {
             value.isBlank() -> ""
             value.startsWith("http://") || value.startsWith("https://") -> value
-            value.startsWith("/") -> imageBase + value.removePrefix("/")
-            else -> imageBase + value
+            value.startsWith("//") -> "https:$value"
+            else -> value
         }
     }
 

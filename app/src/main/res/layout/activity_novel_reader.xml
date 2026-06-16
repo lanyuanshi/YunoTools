@@ -41,7 +41,7 @@
                     android:id="@+id/tvTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="笔趣阁小说"
+                    android:text="番茄小说"
                     android:textColor="#1C1C1E"
                     android:textSize="22sp"
                     android:textStyle="bold" />

@@ -955,6 +955,8 @@
                 android:layout_height="78dp"
                 android:layout_gravity="top|center_horizontal"
                 android:layout_marginTop="-22dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:visibility="invisible" />
 
             <LinearLayout

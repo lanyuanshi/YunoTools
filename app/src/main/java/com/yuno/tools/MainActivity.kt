@@ -2220,17 +2220,25 @@ class MainActivity : AppCompatActivity() {
                     width = if (isVinylWrap) dp(92) else FrameLayout.LayoutParams.MATCH_PARENT
                     height = when {
                         isVinylWrap -> dp(78)
-                        isWave -> dp(54)
+                        isWave -> dp(78)
                         else -> dp(40)
                     }
                     gravity = if (isVinylWrap) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.TOP
                     topMargin = when {
                         isVinylWrap -> -dp(17)
-                        isWave -> -dp(34)
+                        isWave -> -dp(50)
                         else -> -dp(26)
                     }
-                    leftMargin = if (isVinylWrap) 0 else dp(10)
-                    rightMargin = if (isVinylWrap) 0 else dp(10)
+                    leftMargin = when {
+                        isVinylWrap -> 0
+                        isWave -> -dp(18)
+                        else -> dp(10)
+                    }
+                    rightMargin = when {
+                        isVinylWrap -> 0
+                        isWave -> -dp(18)
+                        else -> dp(10)
+                    }
                 }
                 addView(MiniBarsView(this@MainActivity).apply {
                     setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))

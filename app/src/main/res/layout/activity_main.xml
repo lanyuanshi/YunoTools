@@ -5,8 +5,9 @@
     android:id="@+id/mainRoot"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#F2F2F7">
-
+    android:background="#F2F2F7"
+    android:clipChildren="false"
+    android:clipToPadding="false">
     <!-- 状态栏占位 -->
     <View
         android:id="@+id/statusBarPlaceholder"
@@ -1065,6 +1066,18 @@
                 </LinearLayout>
             </LinearLayout>
         </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/navMusicWaveOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="98dp"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginStart="-18dp"
+            android:layout_marginTop="-56dp"
+            android:layout_marginEnd="-18dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:visibility="invisible" />
     </FrameLayout>
 
 </LinearLayout>

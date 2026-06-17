@@ -2202,6 +2202,7 @@ class MainActivity : AppCompatActivity() {
         val icon = runCatching { findViewById<ImageView>(R.id.ivNavMusicDisc) }.getOrNull() ?: return
         val text = runCatching { findViewById<TextView>(R.id.tvNavMusic) }.getOrNull()
         val barSlot = runCatching { findViewById<FrameLayout>(R.id.navMusicBarsTop) }.getOrNull()
+        val waveOverlay = runCatching { findViewById<FrameLayout>(R.id.navMusicWaveOverlay) }.getOrNull()
         val color = if (isPlaying) selectedColor else normalColor
         icon.imageTintList = ColorStateList.valueOf(color)
         text?.apply {
@@ -2210,47 +2211,67 @@ class MainActivity : AppCompatActivity() {
             setTypeface(null, if (isPlaying) Typeface.BOLD else Typeface.NORMAL)
             animate().alpha(if (isPlaying) 1f else 0.72f).setDuration(160L).start()
         }
-        barSlot?.apply {
-            removeAllViews()
-            if (isPlaying) {
-                val spectrumStyle = UserSettingsStore.getMusicSpectrumStyle(this@MainActivity)
-                val isVinylWrap = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_MIRROR
-                val isWave = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_WAVE
-                layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
-                    width = if (isVinylWrap) dp(92) else FrameLayout.LayoutParams.MATCH_PARENT
-                    height = when {
-                        isVinylWrap -> dp(78)
-                        isWave -> dp(78)
-                        else -> dp(40)
-                    }
-                    gravity = if (isVinylWrap) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.TOP
-                    topMargin = when {
-                        isVinylWrap -> -dp(17)
-                        isWave -> -dp(50)
-                        else -> -dp(26)
-                    }
-                    leftMargin = when {
-                        isVinylWrap -> 0
-                        isWave -> -dp(18)
-                        else -> dp(10)
-                    }
-                    rightMargin = when {
-                        isVinylWrap -> 0
-                        isWave -> -dp(18)
-                        else -> dp(10)
-                    }
-                }
-                addView(MiniBarsView(this@MainActivity).apply {
-                    setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
-                    setAmplitude(0.86f)
-                    setBarCount(44)
-                    setSpectrumStyle(true, spectrumStyle)
-                    setLevelProvider { currentMusicDynamicLevel() }
-                    start()
-                }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-                visibility = View.VISIBLE
-            } else {
+        val spectrumStyle = UserSettingsStore.getMusicSpectrumStyle(this@MainActivity)
+        val isVinylWrap = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_MIRROR
+        val isWave = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_WAVE
+        if (isWave) {
+            barSlot?.apply {
+                removeAllViews()
                 visibility = View.INVISIBLE
+            }
+            waveOverlay?.apply {
+                removeAllViews()
+                if (isPlaying) {
+                    layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                        width = FrameLayout.LayoutParams.MATCH_PARENT
+                        height = dp(98)
+                        gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                        topMargin = -dp(56)
+                        leftMargin = -dp(18)
+                        rightMargin = -dp(18)
+                    }
+                    addView(MiniBarsView(this@MainActivity).apply {
+                        setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
+                        setAmplitude(0.92f)
+                        setBarCount(44)
+                        setSpectrumStyle(true, spectrumStyle)
+                        setLevelProvider { currentMusicDynamicLevel() }
+                        start()
+                    }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                    bringToFront()
+                    visibility = View.VISIBLE
+                } else {
+                    visibility = View.INVISIBLE
+                }
+            }
+        } else {
+            waveOverlay?.apply {
+                removeAllViews()
+                visibility = View.INVISIBLE
+            }
+            barSlot?.apply {
+                removeAllViews()
+                if (isPlaying) {
+                    layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                        width = if (isVinylWrap) dp(92) else FrameLayout.LayoutParams.MATCH_PARENT
+                        height = if (isVinylWrap) dp(78) else dp(40)
+                        gravity = if (isVinylWrap) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.TOP
+                        topMargin = if (isVinylWrap) -dp(17) else -dp(26)
+                        leftMargin = if (isVinylWrap) 0 else dp(10)
+                        rightMargin = if (isVinylWrap) 0 else dp(10)
+                    }
+                    addView(MiniBarsView(this@MainActivity).apply {
+                        setBarStyle(UserSettingsStore.getMusicBarStyle(this@MainActivity))
+                        setAmplitude(0.86f)
+                        setBarCount(44)
+                        setSpectrumStyle(true, spectrumStyle)
+                        setLevelProvider { currentMusicDynamicLevel() }
+                        start()
+                    }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                    visibility = View.VISIBLE
+                } else {
+                    visibility = View.INVISIBLE
+                }
             }
         }
         if (isPlaying) startMusicSpin(icon) else stopMusicSpin(icon)

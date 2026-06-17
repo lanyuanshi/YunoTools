@@ -117,7 +117,7 @@ object MusicSearchHelper {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.84")
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.95")
         conn.setRequestProperty("Accept", "application/json,text/plain,*/*")
         conn.setRequestProperty("Referer", "https://api.mmp.cc/")
         conn.connectTimeout = 8000
@@ -133,7 +133,7 @@ object MusicSearchHelper {
     private fun isPublicAudioUrl(url: String): Boolean {
         val cleaned = decodeHtmlEntities(url).trim()
         return cleaned.startsWith("http", ignoreCase = true) &&
-            Regex("\\.(mp3|m4a|aac|wav|flac)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
+            Regex("\\.(mp3|m4a|aac|wav|flac|ogg|opus|mflac)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
     }
 
     private fun cleanField(text: String): String {

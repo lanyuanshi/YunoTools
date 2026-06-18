@@ -109,6 +109,7 @@ import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.MemberCenterActivity
+import com.yuno.tools.ui.profile.MemberZoneActivity
 import com.yuno.tools.ui.profile.ProfileActivity
 import com.yuno.tools.ui.profile.ParseHistoryActivity
 import com.yuno.tools.ui.profile.SettingsActivity
@@ -315,8 +316,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardWallpaperTool).setOnClickListener {
             startActivity(Intent(this, WallpaperToolActivity::class.java))
         }
-        findViewById<MaterialCardView>(R.id.cardExpressQuery).setOnClickListener {
-            startActivity(Intent(this, ExpressQueryActivity::class.java))
+        findViewById<MaterialCardView>(R.id.cardMemberZone).setOnClickListener {
+            startActivity(Intent(this, MemberZoneActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardLevelTool).setOnClickListener {
             startActivity(Intent(this, LevelToolActivity::class.java))

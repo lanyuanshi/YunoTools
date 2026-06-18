@@ -302,6 +302,61 @@
                             </LinearLayout>
                         </com.google.android.material.card.MaterialCardView>
 
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/cardRedeemCode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            app:cardBackgroundColor="#F7EFFF"
+                            app:cardCornerRadius="24dp"
+                            app:cardElevation="0dp"
+                            app:strokeColor="#BFA7FF"
+                            app:strokeWidth="1dp">
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="16dp">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="兑换码"
+                                    android:textColor="#3B2463"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="输入兑换码可开通会员权益，永久会员会同步解锁会员专区工具。"
+                                    android:textColor="#7C6A91"
+                                    android:textSize="13sp" />
+                                <EditText
+                                    android:id="@+id/etProfileRedeemCode"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="52dp"
+                                    android:layout_marginTop="12dp"
+                                    android:background="#EFFFFFFF"
+                                    android:hint="请输入兑换码"
+                                    android:paddingHorizontal="16dp"
+                                    android:singleLine="true"
+                                    android:textColor="#241723"
+                                    android:textColorHint="#9A86A8"
+                                    android:textSize="15sp" />
+                                <Button
+                                    android:id="@+id/btnProfileRedeemCode"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="54dp"
+                                    android:layout_marginTop="10dp"
+                                    android:backgroundTint="#7C3AED"
+                                    android:text="兑换会员"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+
                         <Button
                             android:id="@+id/btnProfileLogout"
                             android:layout_width="match_parent"

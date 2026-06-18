@@ -65,7 +65,6 @@ class MemberCenterActivity : AppCompatActivity() {
             addStats(state)
             addCheckin(state)
             addVipPanel(state)
-            addMemberTools(state)
             addAccountActions(state)
         } else {
             addLoginPanel()

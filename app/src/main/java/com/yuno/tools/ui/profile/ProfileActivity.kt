@@ -63,6 +63,16 @@ class ProfileActivity : AppCompatActivity() {
             toast(r.message)
             refreshAccountPanel()
         }
+        findViewById<Button>(R.id.btnProfileRedeemCode).setOnClickListener {
+            val code = findViewById<EditText>(R.id.etProfileRedeemCode).text.toString()
+            AccountStore.redeemCode(this, code)
+                .onSuccess {
+                    findViewById<EditText>(R.id.etProfileRedeemCode).setText("")
+                    toast("兑换成功，已开通永久会员")
+                    refreshAccountPanel()
+                }
+                .onFailure { toast(it.message ?: "兑换失败") }
+        }
         findViewById<Button>(R.id.btnProfileLogout).setOnClickListener {
             AccountStore.logout(this)
             toast("已退出登录")

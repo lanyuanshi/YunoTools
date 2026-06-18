@@ -478,7 +478,6 @@
             
                 <com.google.android.material.card.MaterialCardView android:id="@+id/cardHeisiTool" android:layout_width="0dp" android:layout_height="120dp" android:layout_columnWeight="1" android:layout_margin="4dp" app:cardBackgroundColor="@android:color/white" app:cardCornerRadius="16dp" app:cardElevation="0dp" app:strokeWidth="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="12dp"><FrameLayout android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_circle_purple_light"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="丝" android:textColor="#111827" android:textSize="22sp" android:textStyle="bold" /></FrameLayout><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="黑丝" android:textColor="#1C1C1E" android:textSize="13sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
                 <com.google.android.material.card.MaterialCardView android:id="@+id/cardTranslateTool" android:layout_width="0dp" android:layout_height="120dp" android:layout_columnWeight="1" android:layout_margin="4dp" app:cardBackgroundColor="@android:color/white" app:cardCornerRadius="16dp" app:cardElevation="0dp" app:strokeWidth="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="12dp"><FrameLayout android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_circle_purple_light"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="译" android:textColor="#4F46E5" android:textSize="22sp" android:textStyle="bold" /></FrameLayout><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="翻译" android:textColor="#1C1C1E" android:textSize="13sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
-                <com.google.android.material.card.MaterialCardView android:id="@+id/cardWeatherTool" android:layout_width="0dp" android:layout_height="120dp" android:layout_columnWeight="1" android:layout_margin="4dp" app:cardBackgroundColor="@android:color/white" app:cardCornerRadius="16dp" app:cardElevation="0dp" app:strokeWidth="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="12dp"><FrameLayout android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_circle_blue_light"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="☁" android:textColor="#2563EB" android:textSize="24sp" android:textStyle="bold" /></FrameLayout><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="天气" android:textColor="#1C1C1E" android:textSize="13sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
 
             </GridLayout>
 
@@ -541,7 +540,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:columnCount="3">
-                <com.google.android.material.card.MaterialCardView android:id="@+id/cardNovelReader" android:layout_width="0dp" android:layout_height="120dp" android:layout_columnWeight="1" android:layout_margin="4dp" app:cardBackgroundColor="@android:color/white" app:cardCornerRadius="16dp" app:cardElevation="0dp" app:strokeWidth="0dp"><LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="12dp"><FrameLayout android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_circle_blue_light"><TextView android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="书" android:textColor="#2563EB" android:textSize="22sp" android:textStyle="bold" /></FrameLayout><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="番茄小说" android:textColor="#1C1C1E" android:textSize="13sp" /></LinearLayout></com.google.android.material.card.MaterialCardView>
 
 
                 <com.google.android.material.card.MaterialCardView
@@ -744,47 +742,6 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:text="获取订阅"
-                            android:textColor="#1C1C1E"
-                            android:textSize="13sp" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardTinyReader"
-                    android:layout_width="0dp"
-                    android:layout_height="120dp"
-                    android:layout_columnWeight="1"
-                    android:layout_margin="4dp"
-                    app:cardBackgroundColor="@android:color/white"
-                    app:cardCornerRadius="16dp"
-                    app:cardElevation="0dp"
-                    app:strokeWidth="0dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <FrameLayout
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:background="@drawable/bg_circle_cyan_light">
-
-                            <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:layout_gravity="center"
-                                android:src="@drawable/ic_book"
-                                app:tint="#32ADE6" />
-                        </FrameLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="小小漫画"
                             android:textColor="#1C1C1E"
                             android:textSize="13sp" />
                     </LinearLayout>

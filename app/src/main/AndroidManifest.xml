@@ -117,9 +117,6 @@
             android:name=".ui.tools.TranslateActivity"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".ui.tools.WeatherActivity"
-            android:screenOrientation="portrait" />
-        <activity
             android:name=".ui.tools.HeisiImageActivity"
             android:screenOrientation="portrait" />
         <activity
@@ -140,18 +137,6 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity
             android:name=".ui.tools.SubscriptionActivity"
-            android:screenOrientation="portrait" />
-        <activity
-            android:name=".ui.tools.TinyReaderActivity"
-            android:screenOrientation="portrait" />
-        <activity
-            android:name=".ui.tools.NovelReaderActivity"
-            android:screenOrientation="portrait" />
-        <activity
-            android:name=".ui.tools.NovelDetailActivity"
-            android:screenOrientation="portrait" />
-        <activity
-            android:name=".ui.tools.NovelReaderPageActivity"
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.FlashPhotoActivity"

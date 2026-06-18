@@ -93,8 +93,6 @@ import com.yuno.tools.ui.tools.Base64ToolActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
 import com.yuno.tools.ui.tools.SubscriptionActivity
-import com.yuno.tools.ui.tools.TinyReaderActivity
-import com.yuno.tools.ui.tools.NovelReaderActivity
 import com.yuno.tools.ui.tools.LevelToolActivity
 import com.yuno.tools.ui.tools.CompassToolActivity
 import com.yuno.tools.ui.tools.VibratorToolActivity
@@ -104,7 +102,6 @@ import com.yuno.tools.ui.tools.MagicCubeActivity
 import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
-import com.yuno.tools.ui.tools.WeatherActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ProfileActivity
@@ -297,12 +294,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardSubscription).setOnClickListener {
             startActivity(Intent(this, SubscriptionActivity::class.java))
         }
-        findViewById<MaterialCardView>(R.id.cardTinyReader).setOnClickListener {
-            startActivity(Intent(this, TinyReaderActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.cardNovelReader).setOnClickListener {
-            startActivity(Intent(this, NovelReaderActivity::class.java))
-        }
         findViewById<MaterialCardView>(R.id.cardBase64Tool).setOnClickListener {
             startActivity(Intent(this, Base64ToolActivity::class.java))
         }
@@ -332,9 +323,6 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardTranslateTool).setOnClickListener {
             startActivity(Intent(this, TranslateActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.cardWeatherTool).setOnClickListener {
-            startActivity(Intent(this, WeatherActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardMagicCube).setOnClickListener {
             startActivity(Intent(this, MagicCubeActivity::class.java))

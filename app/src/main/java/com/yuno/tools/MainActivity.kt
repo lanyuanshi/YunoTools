@@ -14,9 +14,12 @@ import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.net.Uri
@@ -55,6 +58,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import java.io.InputStream
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.activity.result.contract.ActivityResultContracts
@@ -120,6 +124,7 @@ class MainActivity : AppCompatActivity() {
         private const val MUSIC_FAVORITES_KEY = "online_favorites"
         private const val MUSIC_DOWNLOADS_KEY = "online_downloads"
         private const val GRID_ORDER_PREFS = "yuno_grid_order"
+        private const val LYRIC_SYNC_LEAD_MS = 500L
     }
     private enum class MainTab { HOME, PROFILE }
     private enum class MusicPanelTab { LOCAL, FAVORITE, ONLINE }
@@ -166,6 +171,14 @@ class MainActivity : AppCompatActivity() {
     private var refreshLyricsView: ((CharSequence) -> Unit)? = null
     private var bounceLyricsView: (() -> Unit)? = null
     private var refreshPlayerPanelState: (() -> Unit)? = null
+    private var refreshMusicProgressView: (() -> Unit)? = null
+    private val musicProgressHandler = Handler(Looper.getMainLooper())
+    private val musicProgressTicker = object : Runnable {
+        override fun run() {
+            refreshMusicProgressView?.invoke()
+            musicProgressHandler.postDelayed(this, 250L)
+        }
+    }
     private var refreshOnlineMusicList: (() -> Unit)? = null
     private var pickedLocalSongs: List<LocalSong> = emptyList()
     private var homeRandomBannerUrl: String? = null
@@ -206,6 +219,7 @@ class MainActivity : AppCompatActivity() {
         bindProfilePage()
         bindBottomNav()
         lyricsHandler.post(lyricsTicker)
+        musicProgressHandler.post(musicProgressTicker)
         showHome(animate = false)
     }
 
@@ -1391,6 +1405,36 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#111827"))
         }
         nowPlayingCard.addView(playingTitle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val progressRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, (9 * density).toInt(), 0, (2 * density).toInt())
+        }
+        val currentTimeText = TextView(this).apply {
+            text = "0:00"
+            textSize = 11f
+            setTextColor(Color.parseColor("#64748B"))
+            gravity = Gravity.CENTER
+        }
+        val totalTimeText = TextView(this).apply {
+            text = "--:--"
+            textSize = 11f
+            setTextColor(Color.parseColor("#64748B"))
+            gravity = Gravity.CENTER
+        }
+        val progressView = AvatarMusicProgressView(this).apply {
+            setAvatarUriText(UserSettingsStore.getAvatarUri(this@MainActivity))
+            setOnSeek { fraction ->
+                val player = musicPlayer ?: return@setOnSeek
+                val duration = player.duration.takeIf { it > 0 } ?: return@setOnSeek
+                player.seekTo((duration * fraction).toLong().coerceIn(0L, duration))
+                updateFlowingLyrics()
+            }
+        }
+        progressRow.addView(currentTimeText, LinearLayout.LayoutParams((42 * density).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+        progressRow.addView(progressView, LinearLayout.LayoutParams(0, (34 * density).toInt(), 1f))
+        progressRow.addView(totalTimeText, LinearLayout.LayoutParams((42 * density).toInt(), LinearLayout.LayoutParams.WRAP_CONTENT))
+        nowPlayingCard.addView(progressRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val transportRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -1441,7 +1485,9 @@ class MainActivity : AppCompatActivity() {
             loopBtn.isSelected = musicRepeatMode == Player.REPEAT_MODE_ONE
             loopBtn.background = pillBackground(musicRepeatMode == Player.REPEAT_MODE_ONE)
             lyricsText.text = buildLyricsDisplay()
+            syncMusicProgress(progressView, currentTimeText, totalTimeText)
         }
+        refreshMusicProgressView = { syncMusicProgress(progressView, currentTimeText, totalTimeText) }
         refreshLyricsView = { text -> lyricsText.text = text }
         bounceLyricsView = {
             lyricsText.animate().cancel()
@@ -1461,10 +1507,29 @@ class MainActivity : AppCompatActivity() {
             topMargin = (10 * density).toInt()
         })
 
+        dialog.setOnDismissListener {
+            if (musicDialog === dialog) {
+                refreshMusicProgressView = null
+                refreshPlayerPanelState = null
+                refreshLyricsView = null
+                bounceLyricsView = null
+            }
+        }
         dialog.setContentView(root)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.show()
         dialog.window?.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
+    }
+
+
+    private fun syncMusicProgress(progressView: AvatarMusicProgressView, currentTimeText: TextView, totalTimeText: TextView) {
+        val player = musicPlayer
+        val duration = player?.duration?.takeIf { it > 0 } ?: 0L
+        val position = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
+        val safePosition = if (duration > 0) position.coerceAtMost(duration) else 0L
+        progressView.setProgress(if (duration > 0) safePosition.toFloat() / duration.toFloat() else 0f)
+        currentTimeText.text = formatDuration(safePosition)
+        totalTimeText.text = formatDuration(duration)
     }
 
     private fun musicCardGrid(
@@ -1996,6 +2061,92 @@ class MainActivity : AppCompatActivity() {
         else -> intArrayOf(Color.parseColor("#FF3B30"), Color.parseColor("#FFCC00"), Color.parseColor("#34C759"), Color.parseColor("#007AFF"), Color.parseColor("#AF52DE"))
     }
 
+
+    private class AvatarMusicProgressView(context: Context) : View(context) {
+        private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val clipPath = Path()
+        private var progress = 0f
+        private var avatarBitmap: Bitmap? = null
+        private var onSeek: ((Float) -> Unit)? = null
+
+        init {
+            trackPaint.strokeCap = Paint.Cap.ROUND
+            fillPaint.strokeCap = Paint.Cap.ROUND
+            ringPaint.style = Paint.Style.STROKE
+            ringPaint.color = Color.WHITE
+            setLayerType(LAYER_TYPE_SOFTWARE, null)
+        }
+
+        fun setProgress(value: Float) {
+            val next = value.coerceIn(0f, 1f)
+            if (kotlin.math.abs(next - progress) > 0.002f) {
+                progress = next
+                invalidate()
+            }
+        }
+
+        fun setOnSeek(listener: (Float) -> Unit) { onSeek = listener }
+
+        fun setAvatarUriText(uriText: String?) {
+            avatarBitmap = runCatching {
+                val stream: InputStream? = if (!uriText.isNullOrBlank()) context.contentResolver.openInputStream(Uri.parse(uriText)) else null
+                stream?.use { BitmapFactory.decodeStream(it) }
+            }.getOrNull() ?: BitmapFactory.decodeResource(resources, R.drawable.ic_profile)
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val centerY = height / 2f
+            val thumbRadius = minOf(height * 0.42f, dp(13f))
+            val startX = thumbRadius + dp(3f)
+            val endX = width - thumbRadius - dp(3f)
+            val currentX = startX + (endX - startX) * progress
+            trackPaint.strokeWidth = dp(6f)
+            trackPaint.color = Color.argb(80, 15, 23, 42)
+            canvas.drawLine(startX, centerY, endX, centerY, trackPaint)
+            fillPaint.strokeWidth = dp(6f)
+            fillPaint.color = Color.parseColor("#007AFF")
+            canvas.drawLine(startX, centerY, currentX, centerY, fillPaint)
+            fillPaint.color = Color.argb(70, 0, 122, 255)
+            canvas.drawCircle(currentX, centerY, thumbRadius + dp(4f), fillPaint)
+            canvas.save()
+            clipPath.reset()
+            clipPath.addCircle(currentX, centerY, thumbRadius, Path.Direction.CW)
+            canvas.clipPath(clipPath)
+            avatarBitmap?.let { bitmap ->
+                val side = thumbRadius * 2f
+                val src = android.graphics.Rect(0, 0, bitmap.width, bitmap.height)
+                val dst = android.graphics.RectF(currentX - thumbRadius, centerY - thumbRadius, currentX + thumbRadius, centerY + thumbRadius)
+                canvas.drawBitmap(bitmap, src, dst, null)
+            }
+            canvas.restore()
+            ringPaint.strokeWidth = dp(2f)
+            canvas.drawCircle(currentX, centerY, thumbRadius, ringPaint)
+        }
+
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            val thumbRadius = minOf(height * 0.42f, dp(13f))
+            val startX = thumbRadius + dp(3f)
+            val endX = width - thumbRadius - dp(3f)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
+                    val fraction = ((event.x - startX) / (endX - startX).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                    progress = fraction
+                    invalidate()
+                    onSeek?.invoke(fraction)
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    return true
+                }
+            }
+            return true
+        }
+
+        private fun dp(v: Float) = v * resources.displayMetrics.density
+    }
+
     private class MiniBarsView(context: Context) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private var phase = 0f
@@ -2315,7 +2466,7 @@ class MainActivity : AppCompatActivity() {
         val lines = currentTimedLyrics
         if (lines.isEmpty() || currentLyricsKey == null) return
         val player = musicPlayer ?: return
-        val position = player.currentPosition.coerceAtLeast(0L)
+        val position = (player.currentPosition + LYRIC_SYNC_LEAD_MS).coerceAtLeast(0L)
         val index = lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
         val changedLine = index != currentLyricIndex
         if (changedLine) currentLyricIndex = index
@@ -2324,7 +2475,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildLyricsDisplay(
-        position: Long = musicPlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L,
+        position: Long = ((musicPlayer?.currentPosition ?: 0L) + LYRIC_SYNC_LEAD_MS).coerceAtLeast(0L),
         lineIndex: Int = currentLyricIndex.coerceAtLeast(0)
     ): CharSequence {
         val lines = currentTimedLyrics

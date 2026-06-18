@@ -1,6 +1,7 @@
 package com.yuno.tools.util
 
 import android.net.Uri
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -44,14 +45,15 @@ object MusicSearchHelper {
         val encoded = URLEncoder.encode(keyword, "UTF-8")
         val raw = requestText("$KUWO_API?action=search_song&msg=$encoded")
         val root = JSONObject(raw.trim())
-        if (root.optInt("code", 200) != 200) return emptyList()
-        val arr = root.optJSONArray("data") ?: return emptyList()
+        val code = root.optInt("code", 200)
+        if (code != 200 && code != 1) return emptyList()
+        val arr = kuwoDataArray(root) ?: return emptyList()
         val songs = mutableListOf<OnlineSong>()
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
             parseKuwoSong(obj)?.let(songs::add)
         }
-        return songs
+        return songs.distinctBy { itemKey(it) }
     }
 
     private fun parseKuwoSong(obj: JSONObject): OnlineSong? {
@@ -74,6 +76,12 @@ object MusicSearchHelper {
         if (title.isBlank() || (playUrl.isBlank() && pageUrl.isBlank())) return null
         val descArtist = listOf(artist, album, duration).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "酷我音乐" }
         return OnlineSong(title, descArtist, OnlineSource.KUWO, pageUrl, playUrl.takeIf { isPublicAudioUrl(it) }, songId)
+    }
+
+    private fun kuwoDataArray(root: JSONObject): JSONArray? {
+        root.optJSONArray("data")?.let { return it }
+        val data = root.optJSONObject("data") ?: return null
+        return data.optJSONArray("list") ?: data.optJSONArray("songs") ?: data.optJSONArray("items") ?: data.optJSONArray("data")
     }
 
     fun fetchKuwoLyrics(songId: String): List<String> = fetchKuwoTimedLyrics(songId).map { it.text }.distinct()
@@ -117,7 +125,7 @@ object MusicSearchHelper {
         val conn = URL(urlStr).openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
         conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.1.95")
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) YunoTools/1.2.00")
         conn.setRequestProperty("Accept", "application/json,text/plain,*/*")
         conn.setRequestProperty("Referer", "https://api.mmp.cc/")
         conn.connectTimeout = 8000

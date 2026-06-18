@@ -78,7 +78,7 @@ class MemberZoneActivity : AppCompatActivity() {
         val card = card(Color.WHITE)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18)) }
         box.addView(TextView(this).apply { text = "快递查询"; textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#111827")) })
-        box.addView(TextView(this).apply { text = "会员专属工具，支持自动识别快递公司、多候选重试、轨迹复制和状态展示。"; textSize = 14f; setLineSpacing(dp(4).toFloat(), 1f); setTextColor(Color.parseColor("#64748B")) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        box.addView(TextView(this).apply { text = "会员专属工具，接入 UAPI，支持自动识别快递公司、手机尾号验证、轨迹复制和状态展示。"; textSize = 14f; setLineSpacing(dp(4).toFloat(), 1f); setTextColor(Color.parseColor("#64748B")) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         val btn = Button(this).apply {
             text = if (state.isVip) "进入快递查询" else "未解锁 · 去我的页面兑换"
             textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)

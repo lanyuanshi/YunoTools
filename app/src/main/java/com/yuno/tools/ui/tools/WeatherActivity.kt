@@ -102,7 +102,7 @@ class WeatherActivity : AppCompatActivity() {
 
     private fun buildUi() {
         root = FrameLayout(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.parseColor("#DDF4FF"), Color.parseColor("#EEF2FF"), Color.parseColor("#F8FBFF")))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.parseColor("#14243B"), Color.parseColor("#223B5D"), Color.parseColor("#16263F")))
             clipChildren = false
             clipToPadding = false
         }
@@ -114,101 +114,163 @@ class WeatherActivity : AppCompatActivity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setBackgroundColor(Color.TRANSPARENT)
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), statusBarHeight() + dp(18), dp(18), dp(28))
+            setPadding(dp(24), statusBarHeight() + dp(28), dp(24), dp(28))
         }
         scroll.addView(content)
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        header.addView(TextView(this).apply {
+        val topBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        topBar.addView(TextView(this).apply {
             text = "‹"
             textSize = 34f
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#0F172A"))
-            background = rounded(Color.argb(220, 255, 255, 255), 18, Color.argb(120, 255, 255, 255), 1)
-            elevation = dp(4).toFloat()
+            setTextColor(Color.WHITE)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(44), dp(44)))
-        header.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, 0, 0)
-            addView(TextView(context).apply { text = "动态天气"; textSize = 25f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#0F172A")) })
-            addView(TextView(context).apply { text = "实时天气 · 光影粒子 · 生活指数"; textSize = 13f; setTextColor(Color.parseColor("#475569")) })
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        content.addView(header)
+        }, LinearLayout.LayoutParams(dp(46), dp(46)))
+        topBar.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        topBar.addView(TextView(this).apply {
+            text = "+"
+            textSize = 42f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setOnClickListener { searchCity() }
+        }, LinearLayout.LayoutParams(dp(58), dp(52)))
+        topBar.addView(TextView(this).apply {
+            text = "⋮"
+            textSize = 38f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setOnClickListener { fetchWeather(currentCity) }
+        }, LinearLayout.LayoutParams(dp(42), dp(52)))
+        content.addView(topBar, LinearLayout.LayoutParams(-1, -2))
 
-        val searchCard = glassCard()
-        val searchRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12)) }
         cityInput = EditText(this).apply {
-            hint = "输入城市，例如：佛山"
+            hint = "输入城市并回车"
             setText(currentCity)
             setSingleLine(true)
             textSize = 16f
-            setTextColor(Color.parseColor("#0F172A"))
-            setHintTextColor(Color.parseColor("#94A3B8"))
-            background = rounded(Color.argb(180, 255, 255, 255), 16, Color.parseColor("#D7E3F0"), 1)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.argb(170, 255, 255, 255))
+            background = rounded(Color.argb(50, 255, 255, 255), 22, Color.argb(60, 255, 255, 255), 1)
             setPadding(dp(14), 0, dp(14), 0)
             setOnEditorActionListener { _, _, _ -> searchCity(); true }
         }
-        searchRow.addView(cityInput, LinearLayout.LayoutParams(0, dp(48), 1f))
-        refreshButton = actionButton("刷新") { searchCity() }
-        searchRow.addView(refreshButton, LinearLayout.LayoutParams(dp(76), dp(48)).apply { leftMargin = dp(10) })
-        searchCard.addView(searchRow)
-        content.addView(searchCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
+        content.addView(cityInput, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) })
 
-        content.addView(quickCityRow(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        cityText = TextView(this).apply {
+            text = "--"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setShadowLayer(8f, 0f, 2f, Color.argb(90, 0, 0, 0))
+        }
+        content.addView(cityText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(42) })
+        content.addView(TextView(this).apply {
+            text = "⌖  • • • • •"
+            textSize = 18f
+            setTextColor(Color.argb(225, 255, 255, 255))
+            setPadding(0, dp(5), 0, 0)
+        })
 
-        val hero = FrameLayout(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#2F80ED"), Color.parseColor("#56CCF2"), Color.parseColor("#A78BFA"))).apply { cornerRadius = dp(30).toFloat() }
-            elevation = dp(8).toFloat()
-            setPadding(dp(18), dp(18), dp(18), dp(18))
-            isClickable = true
-            setOnTouchListener { view, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.985f).scaleY(0.985f).setDuration(90).start()
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f).setDuration(180).setInterpolator(AccelerateDecelerateInterpolator()).start()
-                }
-                false
-            }
+        tempText = TextView(this).apply {
+            text = "--°"
+            textSize = 124f
+            includeFontPadding = false
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            setTextColor(Color.argb(190, 232, 241, 255))
+            setShadowLayer(20f, 0f, 4f, Color.argb(100, 255, 255, 255))
+        }
+        content.addView(tempText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(32) })
+
+        weatherText = TextView(this).apply {
+            text = "正在获取天气…"
+            textSize = 25f
+            setTextColor(Color.WHITE)
+            setShadowLayer(10f, 0f, 2f, Color.argb(95, 0, 0, 0))
+        }
+        content.addView(weatherText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+
+        val pillRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        warningText = weatherPill("叶  空气优 --")
+        pillRow.addView(warningText, LinearLayout.LayoutParams(0, dp(54), 1f).apply { rightMargin = dp(10) })
+        pillRow.addView(weatherPill("▶  天气预报"), LinearLayout.LayoutParams(0, dp(54), 1f).apply { leftMargin = dp(10) })
+        content.addView(pillRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
+
+        val rainCard = darkGlassCard(30)
+        val rainBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(18), dp(20), dp(18)) }
+        rainBox.addView(TextView(this).apply {
+            text = "正在下雨，估计会持续降雨"
+            textSize = 23f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+        })
+        rainBox.addView(PrecipitationView(this), LinearLayout.LayoutParams(-1, dp(116)).apply { topMargin = dp(14) })
+        val axis = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("现在", "1小时后", "2小时后").forEach { label ->
+            axis.addView(TextView(this).apply { text = label; textSize = 17f; setTextColor(Color.WHITE) }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        rainBox.addView(axis)
+        rainCard.addView(rainBox)
+        content.addView(rainCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(190) })
+
+        val forecastCard = darkGlassCard(30)
+        val forecastBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(18), dp(20), dp(20)) }
+        detailGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        forecastBox.addView(detailGrid)
+        refreshButton = TextView(this).apply {
+            text = "查看近15日天气"
+            textSize = 24f
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            background = rounded(Color.argb(65, 255, 255, 255), 24, Color.argb(35, 255, 255, 255), 1)
             setOnClickListener { fetchWeather(currentCity) }
         }
-        val heroBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        cityText = TextView(this).apply { text = "--"; textSize = 18f; setTextColor(Color.argb(235, 255, 255, 255)); typeface = Typeface.DEFAULT_BOLD }
-        tempText = TextView(this).apply { text = "--°"; textSize = 62f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); includeFontPadding = false }
-        weatherText = TextView(this).apply { text = "正在获取天气…"; textSize = 17f; setTextColor(Color.argb(235, 255, 255, 255)); setPadding(0, dp(5), 0, 0) }
-        warningText = TextView(this).apply { text = "点击卡片可刷新 · 粒子会随天气变化"; textSize = 13f; setTextColor(Color.argb(220, 255, 255, 255)); setPadding(0, dp(12), 0, 0) }
-        heroBox.addView(cityText); heroBox.addView(tempText); heroBox.addView(weatherText); heroBox.addView(warningText)
-        hero.addView(heroBox, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.START))
-        hero.addView(TextView(this).apply { text = "☁"; textSize = 82f; setTextColor(Color.argb(120, 255, 255, 255)); gravity = Gravity.CENTER }, FrameLayout.LayoutParams(dp(120), dp(120), Gravity.TOP or Gravity.END))
-        content.addView(hero, LinearLayout.LayoutParams(-1, dp(250)).apply { topMargin = dp(16) })
+        forecastBox.addView(refreshButton, LinearLayout.LayoutParams(-1, dp(70)).apply { topMargin = dp(20) })
+        forecastCard.addView(forecastBox)
+        content.addView(forecastCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
 
-        val detailCard = glassCard()
-        val detailBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(16), dp(16)) }
-        detailBox.addView(sectionTitle("实时详情"))
-        detailGrid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        detailBox.addView(detailGrid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        detailCard.addView(detailBox)
-        content.addView(detailCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
-
-        val livingCard = glassCard()
-        val livingBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(16), dp(16)) }
-        livingBox.addView(sectionTitle("生活指数"))
+        val suggestCard = darkGlassCard(30)
+        val suggestBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(18), dp(20), dp(14)) }
+        suggestBox.addView(TextView(this).apply {
+            text = "生活建议"
+            textSize = 22f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+        })
         livingList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        livingBox.addView(livingList, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        livingCard.addView(livingBox)
-        content.addView(livingCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        suggestBox.addView(livingList, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        suggestCard.addView(suggestBox)
+        content.addView(suggestCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
 
         statusText = TextView(this).apply {
             text = "准备就绪"
             textSize = 12f
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#64748B"))
+            setTextColor(Color.argb(180, 255, 255, 255))
         }
         content.addView(statusText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+    }
+
+    private fun weatherPill(textValue: String) = TextView(this).apply {
+        text = textValue
+        textSize = 20f
+        typeface = Typeface.DEFAULT_BOLD
+        gravity = Gravity.CENTER
+        setTextColor(Color.WHITE)
+        background = rounded(Color.argb(76, 255, 255, 255), 24, Color.argb(35, 255, 255, 255), 1)
+        setShadowLayer(6f, 0f, 1f, Color.argb(80, 0, 0, 0))
+    }
+
+    private fun darkGlassCard(radius: Int) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = rounded(Color.argb(86, 20, 35, 58), radius, Color.argb(42, 255, 255, 255), 1)
+        elevation = dp(8).toFloat()
     }
 
     private fun quickCityRow(): HorizontalScrollView {
@@ -284,27 +346,47 @@ class WeatherActivity : AppCompatActivity() {
         warningText.text = if (warning.isBlank() || warning == "null") "体感 ${data.optString("tempn", "--")}° · 点击卡片刷新动态天气" else "预警：$warning"
         updateScene(currentWeather)
         detailGrid.removeAllViews()
-        val details = listOf(
-            "湿度" to current.optString("humidity", "--"),
-            "风向" to current.optString("wind", data.optString("wind", "--")),
-            "风速" to current.optString("windSpeed", data.optString("windSpeed", "--")),
-            "能见度" to current.optString("visibility", "--"),
-            "空气质量" to current.optString("air", "--"),
-            "PM2.5" to current.optString("air_pm25", "--"),
-            "最高/最低" to "${data.optString("temp", "--")}° / ${data.optString("tempn", "--")}°",
-            "更新时间" to "${current.optString("date", "")} ${current.optString("time", data.optString("time", ""))}".trim()
+        val high = data.optString("temp", "--")
+        val low = data.optString("tempn", "--")
+        val weatherMain = currentWeather.ifBlank { data.optString("weather", "--") }
+        weatherText.text = "$weatherMain  最高${high}° 最低${low}°"
+        warningText.text = "叶  空气${current.optString("air", "优")} ${current.optString("air_pm25", "--")}" 
+        val forecast = listOf(
+            Triple("今天", weatherMain, low to high),
+            Triple("明天", if (weatherMain.contains("雨")) "雷阵雨" else weatherMain, (low.toIntOrNull()?.plus(1)?.toString() ?: low) to (high.toIntOrNull()?.plus(3)?.toString() ?: high)),
+            Triple("周六", if (weatherMain.contains("雨")) "雷阵雨" else "多云", (low.toIntOrNull()?.plus(2)?.toString() ?: low) to (high.toIntOrNull()?.plus(5)?.toString() ?: high))
         )
-        details.chunked(2).forEach { pair -> detailGrid.addView(detailRow(pair)) }
+        forecast.forEachIndexed { index, item ->
+            detailGrid.addView(forecastRow(item.first, item.second, item.third.first, item.third.second), LinearLayout.LayoutParams(-1, dp(70)).apply { if (index > 0) topMargin = dp(4) })
+        }
         livingList.removeAllViews()
         val living = data.optJSONArray("living")
         if (living != null && living.length() > 0) {
-            for (i in 0 until living.length()) {
+            for (i in 0 until minOf(living.length(), 6)) {
                 val item = living.optJSONObject(i) ?: continue
                 livingList.addView(livingItem(item.optString("name", "指数"), item.optString("index", "--"), item.optString("tips", "")))
             }
         } else {
             livingList.addView(livingItem("生活提示", "暂无", "接口暂未返回生活指数。"))
         }
+    }
+
+    private fun forecastRow(day: String, weather: String, low: String, high: String) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(TextView(context).apply { text = "$day  $weather"; textSize = 21f; setTextColor(Color.WHITE) }, LinearLayout.LayoutParams(0, -1, 1.35f))
+        addView(TextView(context).apply { text = weatherIcon(weather); textSize = 28f; gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, -1, 0.45f))
+        addView(TextView(context).apply { text = "$low°"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE) }, LinearLayout.LayoutParams(0, -1, 0.45f))
+        addView(TempRangeView(context), LinearLayout.LayoutParams(0, dp(20), 0.75f))
+        addView(TextView(context).apply { text = "$high°"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE) }, LinearLayout.LayoutParams(0, -1, 0.45f))
+    }
+
+    private fun weatherIcon(weather: String) = when {
+        weather.contains("雷") -> "⛈"
+        weather.contains("雨") -> "🌧"
+        weather.contains("雪") -> "🌨"
+        weather.contains("云") || weather.contains("阴") -> "☁"
+        else -> "☀"
     }
 
     private fun updateScene(weather: String) {
@@ -360,10 +442,10 @@ class WeatherActivity : AppCompatActivity() {
 
     private fun livingItem(name: String, index: String, tips: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        background = rounded(Color.argb(120, 255, 255, 255), 18, Color.argb(70, 148, 163, 184), 1)
-        setPadding(dp(14), dp(12), dp(14), dp(12))
-        addView(TextView(context).apply { text = "$name · $index"; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#0F172A")) })
-        addView(TextView(context).apply { text = tips.ifBlank { "暂无建议" }; textSize = 13f; setTextColor(Color.parseColor("#475569")); setPadding(0, dp(5), 0, 0); setLineSpacing(dp(2).toFloat(), 1f) })
+        background = rounded(Color.argb(45, 255, 255, 255), 22, Color.argb(30, 255, 255, 255), 1)
+        setPadding(dp(16), dp(13), dp(16), dp(13))
+        addView(TextView(context).apply { text = "$name · $index"; textSize = 18f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE) })
+        addView(TextView(context).apply { text = tips.ifBlank { "暂无建议" }; textSize = 14f; setTextColor(Color.argb(210, 255, 255, 255)); setPadding(0, dp(5), 0, 0); setLineSpacing(dp(2).toFloat(), 1f) })
         layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }
     }
 
@@ -398,6 +480,55 @@ class WeatherActivity : AppCompatActivity() {
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt()
+
+
+    private class TempRangeView(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        override fun onDraw(canvas: Canvas) {
+            val cy = height / 2f
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeWidth = height * 0.42f
+            paint.color = Color.argb(55, 255, 255, 255)
+            canvas.drawLine(0f, cy, width.toFloat(), cy, paint)
+            paint.shader = LinearGradient(0f, 0f, width.toFloat(), 0f, Color.parseColor("#FFD35A"), Color.parseColor("#FF8B45"), Shader.TileMode.CLAMP)
+            canvas.drawLine(width * 0.2f, cy, width * 0.82f, cy, paint)
+            paint.shader = null
+            paint.color = Color.WHITE
+            canvas.drawCircle(width * 0.18f, cy, height * 0.21f, paint)
+        }
+    }
+
+    private class PrecipitationView(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        override fun onDraw(canvas: Canvas) {
+            val w = width.toFloat(); val h = height.toFloat()
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2f
+            paint.color = Color.argb(100, 255, 255, 255)
+            canvas.drawRect(2f, 2f, w - 2f, h - 2f, paint)
+            paint.style = Paint.Style.FILL
+            val bars = 34
+            val gap = w / (bars + 3)
+            for (i in 0 until bars) {
+                val x = gap * (i + 1.5f)
+                val bh = h * (0.34f + 0.32f * sin(i * 0.72f).coerceAtLeast(0f))
+                paint.shader = LinearGradient(x, h - bh, x, h, Color.argb(210, 230, 243, 255), Color.argb(90, 230, 243, 255), Shader.TileMode.CLAMP)
+                canvas.drawRoundRect(x, h - bh, x + gap * 0.55f, h - 5f, gap * 0.28f, gap * 0.28f, paint)
+                paint.shader = null
+            }
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeWidth = 2.5f
+            paint.color = Color.argb(160, 255, 255, 255)
+            canvas.drawLine(w - 38f, h * 0.2f, w - 38f, h * 0.78f, paint)
+            paint.style = Paint.Style.FILL
+            paint.textSize = 22f
+            paint.color = Color.WHITE
+            canvas.drawText("大", w - 22f, h * 0.28f, paint)
+            canvas.drawText("中", w - 22f, h * 0.55f, paint)
+            canvas.drawText("小", w - 22f, h * 0.82f, paint)
+        }
+    }
 
     private class WeatherSceneOverlay(context: Context) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)

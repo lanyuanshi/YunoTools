@@ -12,6 +12,7 @@ import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -59,6 +60,7 @@ class WeatherActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableFullscreenRendering(lightStatusBar = true)
         buildUi()
         fetchWeather(currentCity)
     }
@@ -80,6 +82,24 @@ class WeatherActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    private fun enableFullscreenRendering(lightStatusBar: Boolean) {
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        var flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        if (lightStatusBar && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        }
+        if (lightStatusBar && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
+        window.decorView.systemUiVisibility = flags
+    }
+
+    private fun statusBarHeight(): Int {
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else dp(24)
+    }
+
     private fun buildUi() {
         root = FrameLayout(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.parseColor("#DDF4FF"), Color.parseColor("#EEF2FF"), Color.parseColor("#F8FBFF")))
@@ -97,7 +117,7 @@ class WeatherActivity : AppCompatActivity() {
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(28))
+            setPadding(dp(18), statusBarHeight() + dp(18), dp(18), dp(28))
         }
         scroll.addView(content)
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
@@ -389,9 +409,30 @@ class WeatherActivity : AppCompatActivity() {
         fun stop() { removeCallbacks(ticker) }
         override fun onDraw(canvas: Canvas) {
             val w = width.toFloat(); val h = height.toFloat()
-            paint.shader = RadialGradient(w * (0.22f + 0.08f * sin(shift)), h * 0.18f, w * 0.55f, Color.argb(if (mode == WeatherParticleView.Mode.RAIN) 80 else 125, 255, 255, 255), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-            canvas.drawCircle(w * (0.22f + 0.08f * sin(shift)), h * 0.18f, w * 0.55f, paint)
-            paint.shader = RadialGradient(w * 0.82f, h * (0.22f + 0.05f * cos(shift * 1.4f)), w * 0.42f, Color.argb(95, 125, 211, 252), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            if (mode == WeatherParticleView.Mode.SUN) {
+                val sx = w * (0.18f + 0.035f * sin(shift * 1.2f))
+                val sy = h * 0.16f
+                paint.shader = RadialGradient(sx, sy, w * 0.42f, intArrayOf(Color.argb(245, 255, 236, 150), Color.argb(145, 255, 196, 87), Color.TRANSPARENT), floatArrayOf(0f, 0.34f, 1f), Shader.TileMode.CLAMP)
+                canvas.drawCircle(sx, sy, w * 0.42f, paint)
+                paint.shader = null
+                paint.style = Paint.Style.STROKE
+                paint.strokeCap = Paint.Cap.ROUND
+                paint.strokeWidth = w * 0.012f
+                paint.color = Color.argb(105, 255, 244, 180)
+                for (i in 0 until 14) {
+                    val a = (i / 14f) * Math.PI * 2 + shift
+                    val x1 = sx + cos(a).toFloat() * w * 0.13f
+                    val y1 = sy + sin(a).toFloat() * w * 0.13f
+                    val x2 = sx + cos(a).toFloat() * w * (0.25f + 0.025f * sin(shift * 2f + i))
+                    val y2 = sy + sin(a).toFloat() * w * (0.25f + 0.025f * sin(shift * 2f + i))
+                    canvas.drawLine(x1, y1, x2, y2, paint)
+                }
+                paint.style = Paint.Style.FILL
+            } else {
+                paint.shader = RadialGradient(w * (0.22f + 0.08f * sin(shift)), h * 0.18f, w * 0.55f, Color.argb(if (mode == WeatherParticleView.Mode.RAIN) 115 else 150, 255, 255, 255), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+                canvas.drawCircle(w * (0.22f + 0.08f * sin(shift)), h * 0.18f, w * 0.55f, paint)
+            }
+            paint.shader = RadialGradient(w * 0.82f, h * (0.22f + 0.05f * cos(shift * 1.4f)), w * 0.42f, Color.argb(if (mode == WeatherParticleView.Mode.RAIN) 135 else 105, 125, 211, 252), Color.TRANSPARENT, Shader.TileMode.CLAMP)
             canvas.drawCircle(w * 0.82f, h * (0.22f + 0.05f * cos(shift * 1.4f)), w * 0.42f, paint)
             paint.shader = null
         }
@@ -401,7 +442,7 @@ class WeatherActivity : AppCompatActivity() {
         enum class Mode { SUN, RAIN, SNOW, FOG }
         private data class Particle(var x: Float, var y: Float, var speed: Float, var size: Float, var alpha: Int, var drift: Float)
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val particles = MutableList(96) { newParticle(true) }
+        private val particles = MutableList(168) { newParticle(true) }
         private var mode = Mode.SUN
         private val ticker = object : Runnable { override fun run() { step(); invalidate(); postDelayed(this, 16) } }
         fun setMode(value: Mode) { mode = value; particles.indices.forEach { particles[it] = newParticle(true) }; invalidate() }
@@ -420,7 +461,7 @@ class WeatherActivity : AppCompatActivity() {
         private fun step() {
             particles.forEachIndexed { index, p ->
                 when (mode) {
-                    Mode.RAIN -> { p.y += p.speed * 2.7f; p.x += p.drift * 0.5f }
+                    Mode.RAIN -> { p.y += p.speed * 4.2f; p.x += p.drift * 0.9f }
                     Mode.SNOW -> { p.y += p.speed * 0.62f; p.x += sin((p.y + index * 11f) * 0.018f) * p.drift }
                     Mode.FOG -> { p.x += p.speed * 0.18f; p.y += sin((p.x + index) * 0.01f) * 0.18f }
                     Mode.SUN -> { p.y -= p.speed * 0.18f; p.x += sin((p.y + index) * 0.018f) * 0.35f }
@@ -429,10 +470,17 @@ class WeatherActivity : AppCompatActivity() {
             }
         }
         private fun drawRain(canvas: Canvas) {
-            paint.shader = LinearGradient(0f, 0f, 0f, dp(34).toFloat(), Color.argb(20, 219, 234, 254), Color.argb(170, 147, 197, 253), Shader.TileMode.CLAMP)
-            paint.strokeWidth = dp(1.4f)
-            particles.forEach { canvas.drawLine(it.x, it.y, it.x - it.drift * 2f, it.y + it.size * 7f, paint) }
+            paint.shader = LinearGradient(0f, 0f, 0f, dp(70).toFloat(), Color.argb(85, 224, 242, 254), Color.argb(235, 96, 165, 250), Shader.TileMode.CLAMP)
+            paint.strokeWidth = dp(2.2f)
+            paint.strokeCap = Paint.Cap.ROUND
+            particles.forEach { canvas.drawLine(it.x, it.y, it.x - it.drift * 5.5f, it.y + it.size * 12.5f, paint) }
             paint.shader = null
+            paint.color = Color.argb(70, 219, 234, 254)
+            paint.strokeWidth = dp(0.8f)
+            for (i in 0 until 18) {
+                val y = (i * height / 18f + (particles.getOrNull(i)?.y ?: 0f) * 0.08f) % (height + 1f)
+                canvas.drawLine(0f, y, width.toFloat(), y + dp(8), paint)
+            }
         }
         private fun drawSnow(canvas: Canvas) {
             paint.color = Color.argb(190, 255, 255, 255)
@@ -447,15 +495,20 @@ class WeatherActivity : AppCompatActivity() {
             paint.style = Paint.Style.FILL
         }
         private fun drawSun(canvas: Canvas) {
-            paint.maskFilter = BlurMaskFilter(dp(8).toFloat(), BlurMaskFilter.Blur.NORMAL)
-            particles.forEach { paint.color = Color.argb(it.alpha, 255, 244, 180); canvas.drawCircle(it.x, it.y, it.size * 1.8f, paint) }
+            paint.maskFilter = BlurMaskFilter(dp(10).toFloat(), BlurMaskFilter.Blur.NORMAL)
+            particles.forEach {
+                paint.color = Color.argb((it.alpha + 55).coerceAtMost(240), 255, 236, 125)
+                canvas.drawCircle(it.x, it.y, it.size * 2.7f, paint)
+            }
             paint.maskFilter = null
+            paint.color = Color.argb(95, 255, 214, 102)
+            particles.take(36).forEach { canvas.drawCircle(it.x, it.y, it.size * 0.8f, paint) }
         }
         private fun newParticle(anywhere: Boolean): Particle {
             val w = width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
             val h = height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
             val y = if (anywhere) Random.nextFloat() * h else when (mode) { Mode.SUN -> h + 80f; else -> -80f }
-            return Particle(Random.nextFloat() * w, y, Random.nextFloat() * 3.2f + 1.2f, Random.nextFloat() * dp(3).coerceAtLeast(1f) + dp(1), Random.nextInt(65, 175), Random.nextFloat() * 4f - 2f)
+            return Particle(Random.nextFloat() * w, y, Random.nextFloat() * 4.2f + 1.6f, Random.nextFloat() * dp(4).coerceAtLeast(1f) + dp(1.5f), Random.nextInt(85, 210), Random.nextFloat() * 5.5f - 2.75f)
         }
         private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt().toFloat()
         private fun dp(v: Float) = v * resources.displayMetrics.density

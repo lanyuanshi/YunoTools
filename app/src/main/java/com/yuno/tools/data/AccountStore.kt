@@ -18,6 +18,7 @@ object AccountStore {
     private const val KEY_LAST_CHECKIN = "last_checkin"
     private const val KEY_VIP_UNTIL = "vip_until"
     private const val KEY_CREATED_AT = "created_at"
+    private const val PERMANENT_VIP_UNTIL = 4102444800000L
 
     data class AccountState(
         val loggedIn: Boolean,
@@ -126,8 +127,21 @@ object AccountStore {
         return Result.success(state(context))
     }
 
+
+    fun redeemCode(context: Context, code: String): Result<AccountState> {
+        val st = state(context)
+        if (!st.loggedIn) return Result.failure(IllegalStateException("请先登录"))
+        if (code.trim() != "蓝鸢") return Result.failure(IllegalArgumentException("兑换码无效"))
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(KEY_VIP_UNTIL, PERMANENT_VIP_UNTIL)
+            .apply()
+        return Result.success(state(context))
+    }
+
+    fun hasVipAccess(context: Context): Boolean = state(context).isVip
+
     fun vipText(state: AccountState): String = if (state.isVip) {
-        "会员有效期至 ${dateTime(state.vipUntil)}"
+        if (state.vipUntil >= PERMANENT_VIP_UNTIL) "永久会员" else "会员有效期至 ${dateTime(state.vipUntil)}"
     } else "普通用户"
 
     fun todayChecked(context: Context): Boolean = state(context).lastCheckIn == today()

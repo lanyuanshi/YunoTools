@@ -1,5 +1,6 @@
 package com.yuno.tools.ui.profile
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -11,6 +12,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import com.yuno.tools.data.AccountStore
+import com.yuno.tools.ui.tools.ExpressQueryActivity
 import com.yuno.tools.util.ThemeApplier
 import kotlin.math.roundToInt
 
@@ -63,6 +65,7 @@ class MemberCenterActivity : AppCompatActivity() {
             addStats(state)
             addCheckin(state)
             addVipPanel(state)
+            addMemberTools(state)
             addAccountActions(state)
         } else {
             addLoginPanel()
@@ -202,6 +205,52 @@ class MemberCenterActivity : AppCompatActivity() {
         row.addView(redeemButton("30天会员\n260积分", 30, 260), LinearLayout.LayoutParams(0, dp(68), 1f).apply { leftMargin = dp(6); rightMargin = dp(6) })
         row.addView(redeemButton("365天会员\n1999积分", 365, 1999), LinearLayout.LayoutParams(0, dp(68), 1f).apply { leftMargin = dp(6) })
         box.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        val codeInput = input("输入兑换码", false)
+        box.addView(codeInput, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(14) })
+        val codeBtn = Button(this).apply {
+            text = "兑换永久会员"
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            background = rounded(Color.parseColor("#7C3AED"), dp(18), Color.TRANSPARENT, 0)
+            setOnClickListener {
+                AccountStore.redeemCode(this@MemberCenterActivity, codeInput.text.toString())
+                    .onSuccess { toast("兑换成功，已开通永久会员"); render() }
+                    .onFailure { e -> toast(e.message ?: "兑换失败") }
+            }
+        }
+        box.addView(codeBtn, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+        card.addView(box)
+        content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+    }
+
+
+    private fun addMemberTools(state: AccountStore.AccountState) {
+        val card = card()
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18)) }
+        box.addView(sectionTitle("会员专区"))
+        box.addView(TextView(this).apply {
+            text = if (state.isVip) "已解锁会员工具：快递查询" else "开通会员后可使用快递查询等专属工具"
+            textSize = 14f
+            setTextColor(Color.parseColor("#334155"))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        val express = TextView(this).apply {
+            text = if (state.isVip) "快递查询\n自动识别快递公司，展示物流轨迹" else "快递查询\n会员专属，兑换后解锁"
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), 0, dp(16), 0)
+            setTextColor(Color.parseColor(if (state.isVip) "#0F766E" else "#64748B"))
+            background = rounded(Color.parseColor(if (state.isVip) "#ECFDF5" else "#F1F5F9"), dp(18), Color.parseColor(if (state.isVip) "#5EEAD4" else "#CBD5E1"), 1)
+            setOnClickListener {
+                if (AccountStore.hasVipAccess(this@MemberCenterActivity)) {
+                    startActivity(Intent(this@MemberCenterActivity, ExpressQueryActivity::class.java))
+                } else {
+                    toast("请先兑换或开通会员")
+                }
+            }
+        }
+        box.addView(express, LinearLayout.LayoutParams(-1, dp(72)).apply { topMargin = dp(14) })
         card.addView(box)
         content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
     }

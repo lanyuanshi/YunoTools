@@ -14,6 +14,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.yuno.tools.data.AccountStore
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -32,6 +33,11 @@ class ExpressQueryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!AccountStore.hasVipAccess(this)) {
+            toast("快递查询为会员专区功能，请先开通会员")
+            finish()
+            return
+        }
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(18), dp(16), dp(24)); setBackgroundColor(Color.parseColor("#F2F2F7")) }
         root.addView(header())
         numberInput = EditText(this).apply { hint = "输入快递单号"; textSize = 16f; setSingleLine(true); background = bg("#FFFFFF", 18); setPadding(dp(16), 0, dp(16), 0); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply { topMargin = dp(14) } }
@@ -54,9 +60,20 @@ class ExpressQueryActivity : AppCompatActivity() {
     }
 
     private fun requestExpress(no: String): ExpressResult {
-        val company = detectCompany(no)
-        val companyCode = company.first
-        val companyName = company.second
+        val companies = detectCompanies(no)
+        var lastError = "未查到轨迹"
+        companies.forEach { company ->
+            val result = runCatching { queryCompany(no, company.first, company.second) }.getOrElse {
+                lastError = it.message ?: "网络异常"
+                null
+            }
+            if (result != null && (result.items.isNotEmpty() || result.message.contains("签收") || result.message.contains("在途"))) return result
+        }
+        val fallback = companies.firstOrNull() ?: ("unknown" to "未知快递")
+        return ExpressResult(no, fallback.first, fallback.second, "查询失败：$lastError", emptyList())
+    }
+
+    private fun queryCompany(no: String, companyCode: String, companyName: String): ExpressResult {
         val url = "https://www.kuaidi100.com/query?type=${URLEncoder.encode(companyCode, "UTF-8")}&postid=${URLEncoder.encode(no, "UTF-8")}&temp=${System.currentTimeMillis()}"
         val req = Request.Builder().url(url).addHeader("User-Agent", UA).addHeader("Referer", "https://www.kuaidi100.com/").build()
         client.newCall(req).execute().use { resp ->
@@ -64,24 +81,34 @@ class ExpressQueryActivity : AppCompatActivity() {
             val json = JSONObject(resp.body?.string().orEmpty())
             val arr = json.optJSONArray("data")
             val items = mutableListOf<Pair<String, String>>()
-            if (arr != null) for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { items += it.optString("time") to it.optString("context") }
-            val message = json.optString("message").ifBlank { if (items.isEmpty()) json.optString("nu").ifBlank { "未查到轨迹" } else "已返回轨迹" }
+            if (arr != null) for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { obj ->
+                val time = obj.optString("time").ifBlank { obj.optString("ftime") }
+                val context = obj.optString("context")
+                if (time.isNotBlank() || context.isNotBlank()) items += time to context
+            }
+            val status = when (json.optString("state")) {
+                "0" -> "在途"; "1" -> "揽收"; "2" -> "疑难"; "3" -> "已签收"; "4" -> "退签"; "5" -> "派件中"; "6" -> "退回"; "7" -> "转投"; else -> ""
+            }
+            val message = status.ifBlank { json.optString("message").ifBlank { if (items.isEmpty()) "未查到轨迹" else "已返回轨迹" } }
             return ExpressResult(no, companyCode, companyName, message, items)
         }
     }
 
-    private fun detectCompany(no: String): Pair<String, String> {
+    private fun detectCompanies(no: String): List<Pair<String, String>> {
         val url = "https://www.kuaidi100.com/autonumber/autoComNum?text=${URLEncoder.encode(no, "UTF-8")}&resultv2=1"
         val req = Request.Builder().url(url).addHeader("User-Agent", UA).addHeader("Referer", "https://www.kuaidi100.com/").build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("识别快递公司失败：HTTP ${resp.code}")
             val json = JSONObject(resp.body?.string().orEmpty())
             val arr = json.optJSONArray("auto") ?: json.optJSONArray("autoDest")
-            val obj = arr?.optJSONObject(0)
-            val code = obj?.optString("comCode").orEmpty()
-            val name = obj?.optString("name").orEmpty().ifBlank { code }
-            if (code.isBlank()) error("无法自动识别快递公司")
-            return code to name
+            val list = mutableListOf<Pair<String, String>>()
+            if (arr != null) for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { obj ->
+                val code = obj.optString("comCode")
+                val name = obj.optString("name").ifBlank { code }
+                if (code.isNotBlank() && list.none { it.first == code }) list += code to name
+            }
+            if (list.isEmpty()) error("无法自动识别快递公司")
+            return list.take(5)
         }
     }
 
@@ -100,7 +127,7 @@ class ExpressQueryActivity : AppCompatActivity() {
 
     private fun clear() { numberInput.setText(""); lastResult = ""; showPlaceholder() }
     private fun showPlaceholder() { resultBox.removeAllViews(); resultBox.addView(line("查询结果会显示在这里", "#8A8F98", false)); resultBox.addView(line("支持复制完整物流轨迹。", "#C0C4CC", false)) }
-    private fun header() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg("#FFFFFF", 22); setPadding(dp(18), dp(18), dp(18), dp(18)); addView(line("快递查询", "#111827", true, 24f)); addView(line("输入单号后自动识别快递公司并展示轨迹。", "#8A8F98", false, 13f)) }
+    private fun header() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg("#FFFFFF", 22); setPadding(dp(18), dp(18), dp(18), dp(18)); addView(line("快递查询", "#111827", true, 24f)); addView(line("会员专区工具：自动识别多家候选快递公司，优先展示有效轨迹。", "#8A8F98", false, 13f)) }
     private fun line(t: String, color: String, bold: Boolean, size: Float = 15f) = TextView(this).apply { text = t; textSize = size; setTextColor(Color.parseColor(color)); setPadding(0, dp(4), 0, dp(4)); if (bold) typeface = Typeface.DEFAULT_BOLD; setTextIsSelectable(true) }
     private fun actionRow(vararg views: Button) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(12), 0, 0); views.forEach { addView(it, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(8) }) } }
     private fun pill(t: String, color: String, action: () -> Unit) = Button(this).apply { text = t; setTextColor(Color.WHITE); background = bg(color, 18); setOnClickListener { action() } }

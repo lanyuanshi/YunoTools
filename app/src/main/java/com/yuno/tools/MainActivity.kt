@@ -104,6 +104,7 @@ import com.yuno.tools.ui.tools.MagicCubeActivity
 import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
+import com.yuno.tools.ui.tools.WeatherActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.ProfileActivity
@@ -302,6 +303,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardTranslateTool).setOnClickListener {
             startActivity(Intent(this, TranslateActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardWeatherTool).setOnClickListener {
+            startActivity(Intent(this, WeatherActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardMagicCube).setOnClickListener {
             startActivity(Intent(this, MagicCubeActivity::class.java))

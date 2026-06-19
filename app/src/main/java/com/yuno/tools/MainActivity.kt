@@ -341,6 +341,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardTranslateTool).setOnClickListener {
             startActivity(Intent(this, TranslateActivity::class.java))
         }
+        findViewById<MaterialCardView>(R.id.cardMovieWarehouse).setOnClickListener {
+            startActivity(Intent(this, MovieWarehouseActivity::class.java))
+        }
         findViewById<MaterialCardView>(R.id.cardMagicCube).setOnClickListener {
             startActivity(Intent(this, MagicCubeActivity::class.java))
         }

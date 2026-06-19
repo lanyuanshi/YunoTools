@@ -107,6 +107,7 @@ import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
+import com.yuno.tools.ui.tools.MovieWarehouseActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.MemberCenterActivity
 import com.yuno.tools.ui.profile.MemberZoneActivity

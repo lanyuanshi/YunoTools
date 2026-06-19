@@ -120,6 +120,9 @@
             android:name=".ui.tools.TranslateActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.tools.MovieWarehouseActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.tools.HeisiImageActivity"
             android:screenOrientation="portrait" />
         <activity

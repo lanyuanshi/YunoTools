@@ -111,6 +111,10 @@ class MovieWarehouseActivity : Activity() {
         actionRow.addView(pill("复制配置", "#7C3AED") { copyText("影视仓配置", rawConfig.ifBlank { warehouseUrl }) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
         actionRow.addView(pill("打开源", "#0F766E") { openUrl(warehouseUrl) }, LinearLayout.LayoutParams(0, dp(44), 1f))
         hero.addView(actionRow)
+        val playRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, 0) }
+        playRow.addView(pill("粘贴播放", "#DC2626") { showDirectPlayDialog() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
+        playRow.addView(pill("播放说明", "#475569") { showPlayNotice() }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        hero.addView(playRow)
         container.addView(hero, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
 
         searchInput = EditText(this).apply {
@@ -328,7 +332,8 @@ class MovieWarehouseActivity : Activity() {
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, 0) }
         actions.addView(pill("详情", "#2563EB") { showDetail(site) }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(8) })
         actions.addView(pill("复制", "#64748B") { copyText(site.name, site.toShareText()) }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(8) })
-        actions.addView(pill("打开", "#0F766E") { openBestLink(site) }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        actions.addView(pill("打开", "#0F766E") { openBestLink(site) }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(8) })
+        actions.addView(pill("播放", "#DC2626") { playBestDirect(site) }, LinearLayout.LayoutParams(0, dp(40), 1f))
         box.addView(actions)
         card.addView(box)
         return card
@@ -349,6 +354,64 @@ class MovieWarehouseActivity : Activity() {
             .setNegativeButton("打开链接") { _, _ -> openBestLink(site) }
             .setNeutralButton(if (favorites.contains(site.keyOrName)) "取消收藏" else "收藏") { _, _ -> toggleFavorite(site) }
             .show()
+    }
+
+    private fun showDirectPlayDialog() {
+        val input = EditText(this).apply {
+            hint = "粘贴已授权的 m3u8/mp4 播放直链"
+            setSingleLine(false)
+            minLines = 2
+            setTextColor(Color.parseColor("#0F172A"))
+            setHintTextColor(Color.parseColor("#94A3B8"))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("直链播放")
+            .setMessage("仅支持你有权访问的 m3u8/mp4 等直链，不执行第三方 Spider 或破解解析。")
+            .setView(input)
+            .setPositiveButton("播放") { _, _ -> playDirectUrl(input.text?.toString().orEmpty(), "影视仓直链") }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showPlayNotice() {
+        AlertDialog.Builder(this)
+            .setTitle("播放能力说明")
+            .setMessage("当前为合规 TVBox 风格播放器：可以读取仓库配置、识别并播放 m3u8/mp4 等直链；不会执行第三方 Spider、破解解析器或绕过站点限制。若站点只提供 spider/ext 加密参数，需要在官方 TVBox 或授权服务中使用。")
+            .setPositiveButton("知道了", null)
+            .show()
+    }
+
+    private fun playBestDirect(site: MovieSite) {
+        val url = extractDirectMediaUrl(site.ext).ifBlank { extractDirectMediaUrl(site.api) }
+        if (url.isBlank()) {
+            toast("该站点没有可直接播放的 m3u8/mp4 直链")
+            showPlayNotice()
+            return
+        }
+        playDirectUrl(url, site.name)
+    }
+
+    private fun playDirectUrl(url: String, title: String) {
+        val direct = extractDirectMediaUrl(url).ifBlank { url.trim() }
+        if (!isDirectMediaUrl(direct)) {
+            toast("只支持 m3u8/mp4 等直链播放")
+            return
+        }
+        startActivity(Intent(this, MovieWarehousePlayerActivity::class.java).putExtra("url", direct).putExtra("title", title))
+    }
+
+    private fun extractDirectMediaUrl(text: String): String {
+        return Regex("""https?://[^\s\"'<>]+(?:\.m3u8|\.mp4|\.m4v|\.webm|\.mkv)(?:\?[^\s\"'<>]*)?""", RegexOption.IGNORE_CASE)
+
+            .find(text)
+            ?.value
+            .orEmpty()
+    }
+
+    private fun isDirectMediaUrl(url: String): Boolean {
+        val lower = url.trim().lowercase(Locale.ROOT)
+        return (lower.startsWith("http://") || lower.startsWith("https://")) &&
+            (lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".m4v") || lower.contains(".webm") || lower.contains(".mkv"))
     }
 
     private fun openBestLink(site: MovieSite) {

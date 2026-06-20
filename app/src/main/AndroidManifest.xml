@@ -126,6 +126,12 @@
             android:name=".ui.tools.MovieWarehousePlayerActivity"
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity
+            android:name=".ui.tools.GachaAnalysisActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.tools.WutheringWavesGachaActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.tools.HeisiImageActivity"
             android:screenOrientation="portrait" />
         <activity

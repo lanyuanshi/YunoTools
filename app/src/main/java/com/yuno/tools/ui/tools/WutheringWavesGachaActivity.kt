@@ -21,6 +21,8 @@ import android.widget.TextView
 import android.widget.Toast
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
@@ -65,7 +67,7 @@ class WutheringWavesGachaActivity : Activity() {
 
         val inputCard = glassCard().apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(16), dp(16)) }
         input = EditText(this).apply {
-            hint = "粘贴脚本生成的 URL / JSON / 抽卡文本\n建议使用脚本导出的完整 JSON，可识别 UID、卡池、星级、时间"
+            hint = "粘贴 PowerShell 脚本输出的 Convene Record URL / JSON / 抽卡文本\n官方链接会自动拉取角色池、武器池、常驻池、新手池记录"
             minLines = 4; gravity = Gravity.TOP; imeOptions = EditorInfo.IME_ACTION_DONE
             setTextColor(Color.WHITE); setHintTextColor(Color.parseColor("#A5B4FC")); textSize = 14f; background = bg("#26304F", 16); setPadding(dp(12), dp(10), dp(12), dp(10))
         }
@@ -96,26 +98,99 @@ class WutheringWavesGachaActivity : Activity() {
 
     private fun analyze() {
         val text = input.text?.toString().orEmpty().trim()
-        if (text.isBlank()) { toast("先粘贴抽卡记录或链接"); return }
+        if (text.isBlank()) { toast("先粘贴脚本输出的抽卡链接或记录"); return }
         prefs.edit().putString("last_input", text).apply()
-        progress.visibility = View.VISIBLE; status.text = "正在读取并解析…"
-        if (text.startsWith("http", true)) {
-            Thread {
-                val result = runCatching { fetchText(normalizeUrl(text)) }
-                runOnUiThread { progress.visibility = View.GONE; result.onSuccess { parseAndRender(it, "远程记录读取完成") }.onFailure { status.text = "读取失败：${it.message}" } }
-            }.start()
-        } else {
-            progress.visibility = View.GONE; parseAndRender(text, "本地文本解析完成")
+        progress.visibility = View.VISIBLE
+        val officialUrl = extractOfficialRecordUrl(text)
+        when {
+            officialUrl.isNotBlank() -> {
+                status.text = "已识别鸣潮官方抽卡链接，正在按卡池拉取记录…"
+                Thread {
+                    val result = runCatching { fetchOfficialGachaRecords(officialUrl) }
+                    runOnUiThread {
+                        progress.visibility = View.GONE
+                        result.onSuccess { parseAndRender(it, "官方接口拉取完成") }
+                            .onFailure { status.text = "官方接口读取失败：${it.message}" }
+                    }
+                }.start()
+            }
+            text.startsWith("http", true) -> {
+                status.text = "正在读取远程文本…"
+                Thread {
+                    val result = runCatching { fetchText(normalizeUrl(text)) }
+                    runOnUiThread { progress.visibility = View.GONE; result.onSuccess { parseAndRender(it, "远程记录读取完成") }.onFailure { status.text = "读取失败：${it.message}" } }
+                }.start()
+            }
+            else -> {
+                progress.visibility = View.GONE
+                parseAndRender(text, "本地文本解析完成")
+            }
         }
     }
 
     private fun normalizeUrl(url: String): String = URLDecoder.decode(url.trim(), "UTF-8")
+
+    private fun extractOfficialRecordUrl(text: String): String {
+        val pattern = Regex("""https://aki-gm-resources(?:-oversea)?\.aki-game\.(?:net|com)/aki/gacha/index\.html#/record[^\s\"'<>]*""", RegexOption.IGNORE_CASE)
+        return pattern.find(text)?.value?.trim()?.trimEnd('\r', '\n') ?: ""
+    }
+
     private fun fetchText(url: String): String {
         client.newCall(Request.Builder().url(url).get().build()).execute().use { resp ->
             val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful || body.isBlank()) error("HTTP ${resp.code}")
             return body
         }
+    }
+
+    private fun fetchOfficialGachaRecords(recordUrl: String): String {
+        val params = parseRecordParams(recordUrl)
+        uid = params["player_id"].orEmpty().ifBlank { params["playerId"].orEmpty() }.ifBlank { "未识别" }
+        val api = "https://gmserver-api.aki-game2.net/gacha/record/query"
+        val all = JSONArray()
+        val poolNames = mapOf(1 to "角色池", 2 to "武器池", 3 to "常驻角色池", 4 to "常驻武器池", 5 to "新手池", 6 to "新手自选")
+        val media = "application/json; charset=utf-8".toMediaType()
+        var okPool = 0
+        for (poolType in 1..6) {
+            val payload = JSONObject()
+                .put("serverId", params["svr_id"] ?: params["serverId"] ?: "")
+                .put("playerId", params["player_id"] ?: params["playerId"] ?: "")
+                .put("languageCode", params["lang"] ?: params["languageCode"] ?: "zh-Hans")
+                .put("recordId", params["record_id"] ?: params["recordId"] ?: "")
+                .put("cardPoolId", params["resources_id"] ?: params["cardPoolId"] ?: "")
+                .put("cardPoolType", poolType)
+            val req = Request.Builder()
+                .url(api)
+                .post(payload.toString().toRequestBody(media))
+                .header("Content-Type", "application/json")
+                .header("Origin", if (recordUrl.contains("oversea")) "https://aki-gm-resources-oversea.aki-game.net" else "https://aki-gm-resources.aki-game.com")
+                .header("Referer", recordUrl)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) return@use
+                val json = JSONObject(body)
+                val data = json.optJSONArray("data") ?: json.optJSONObject("data")?.optJSONArray("list") ?: JSONArray()
+                if (data.length() > 0) okPool++
+                for (i in 0 until data.length()) {
+                    val item = data.optJSONObject(i) ?: continue
+                    if (!item.has("cardPoolType")) item.put("cardPoolType", poolNames[poolType] ?: "卡池$poolType")
+                    if (!item.has("poolName")) item.put("poolName", poolNames[poolType] ?: "卡池$poolType")
+                    all.put(item)
+                }
+            }
+        }
+        if (all.length() == 0) error("未拉取到抽卡记录，链接可能过期；请进游戏打开唤取记录后重新运行脚本")
+        return JSONObject().put("uid", uid).put("source", "official_api").put("poolCount", okPool).put("data", all).toString()
+    }
+
+    private fun parseRecordParams(recordUrl: String): Map<String, String> {
+        val query = recordUrl.substringAfter("?/", recordUrl).substringAfter("?", "")
+        if (query.isBlank()) error("抽卡链接缺少参数")
+        return query.split("&").mapNotNull { part ->
+            val idx = part.indexOf('=')
+            if (idx <= 0) null else URLDecoder.decode(part.substring(0, idx), "UTF-8") to URLDecoder.decode(part.substring(idx + 1), "UTF-8")
+        }.toMap()
     }
 
     private fun parseAndRender(raw: String, msg: String) {
@@ -206,14 +281,23 @@ class WutheringWavesGachaActivity : Activity() {
         text.contains("常驻") -> "常驻角色池"
         else -> "角色池"
     }
-    private fun normalizePool(text: String) = when {
-        text.contains("新手自选") || text.contains("自选") -> "新手自选"
-        text.contains("新手") -> "新手池"
-        text.contains("武器") || text.contains("weapon", true) -> "武器池"
-        text.contains("常驻") && text.contains("角色") -> "常驻角色池"
-        text.contains("常驻") -> "常驻角色池"
-        text.contains("角色") || text.contains("限定") || text.contains("event", true) -> "角色池"
-        else -> text.ifBlank { "未知卡池" }
+    private fun normalizePool(text: String) = when (text.trim()) {
+        "1" -> "角色池"
+        "2" -> "武器池"
+        "3" -> "常驻角色池"
+        "4" -> "常驻武器池"
+        "5" -> "新手池"
+        "6" -> "新手自选"
+        else -> when {
+            text.contains("新手自选") || text.contains("自选") -> "新手自选"
+            text.contains("新手") -> "新手池"
+            text.contains("常驻") && text.contains("武器") -> "常驻武器池"
+            text.contains("武器") || text.contains("weapon", true) -> "武器池"
+            text.contains("常驻") && text.contains("角色") -> "常驻角色池"
+            text.contains("常驻") -> "常驻角色池"
+            text.contains("角色") || text.contains("限定") || text.contains("event", true) -> "角色池"
+            else -> text.ifBlank { "未知卡池" }
+        }
     }
 
     private fun renderStats() {
@@ -300,7 +384,7 @@ class WutheringWavesGachaActivity : Activity() {
         return tile
     }
 
-    private fun poolOrder(): List<String> = listOf("角色池", "武器池", "常驻角色池", "新手池", "新手自选")
+    private fun poolOrder(): List<String> = listOf("角色池", "武器池", "常驻角色池", "常驻武器池", "新手池", "新手自选")
     private fun avgFive(list: List<GachaRecord>): Double { val ints = fiveIntervals(list.sortedBy { it.sortKey }); return if (ints.isEmpty()) 0.0 else ints.average() }
     private fun fiveIntervals(list: List<GachaRecord>): List<Int> { val out = mutableListOf<Int>(); var count = 0; list.forEach { count++; if (it.rank >= 5) { out.add(count); count = 0 } }; return out }
     private fun fiveIntervalsForPool(pool: String) = fiveIntervals(records.filter { it.pool == pool }.sortedBy { it.sortKey })

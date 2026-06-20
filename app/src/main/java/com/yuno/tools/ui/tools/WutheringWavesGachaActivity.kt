@@ -26,6 +26,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
@@ -98,7 +100,7 @@ class WutheringWavesGachaActivity : Activity() {
 
     private fun analyze() {
         val text = input.text?.toString().orEmpty().trim()
-        if (text.isBlank()) { toast("先粘贴脚本输出的抽卡链接或记录"); return }
+        if (text.isBlank()) { toast("先粘贴鸣潮抽卡链接或记录"); return }
         prefs.edit().putString("last_input", text).apply()
         progress.visibility = View.VISIBLE
         val officialUrl = extractOfficialRecordUrl(text)
@@ -313,10 +315,13 @@ class WutheringWavesGachaActivity : Activity() {
         val total = records.size
         val avg = avgFive(records)
         resultBox.addView(topSummary(total, five, avg))
+        resultBox.addView(reportActions())
+        resultBox.addView(insightPanel())
         poolOrder().forEach { pool ->
             val list = records.filter { it.pool == pool }
             resultBox.addView(poolPanel(pool, list))
         }
+        resultBox.addView(timelinePanel())
     }
 
     private fun renderListSummary() {
@@ -330,7 +335,7 @@ class WutheringWavesGachaActivity : Activity() {
     }
 
     private fun topSummary(total: Int, five: Int, avg: Double): View {
-        val card = panel("欧皇")
+        val card = panel(overallRating(avg, five))
         val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         row1.addView(labelValue("UID", uid), LinearLayout.LayoutParams(0, dp(72), 1f).apply { rightMargin = dp(10) })
         row1.addView(labelValue("总抽数", "${total}抽", "#8B5CF6"), LinearLayout.LayoutParams(0, dp(72), 1f))
@@ -338,6 +343,7 @@ class WutheringWavesGachaActivity : Activity() {
         row2.addView(labelValue("总金数", "${five}金", "#FACC15"), LinearLayout.LayoutParams(0, dp(72), 1f).apply { rightMargin = dp(10) })
         row2.addView(labelValue("平均出金", if (avg > 0) String.format(Locale.ROOT, "%.1f抽", avg) else "暂无", "#FFFFFF"), LinearLayout.LayoutParams(0, dp(72), 1f))
         card.addView(row1); card.addView(row2)
+        card.addView(line("综合评价：${ratingComment(avg, five)}"))
         return card
     }
 
@@ -354,7 +360,11 @@ class WutheringWavesGachaActivity : Activity() {
         val card = glassCard().apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(14), dp(14), dp(14)); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) } }
         card.addView(title)
         card.addView(View(this).apply { setBackgroundColor(Color.parseColor("#33FFFFFF")) }, LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(12); bottomMargin = dp(12) })
+        card.addView(pityProgress(pool, list))
         card.addView(tileGrid(buildTiles(pool, fiveList)))
+        if (list.isNotEmpty()) {
+            card.addView(line("近期记录：" + list.take(6).joinToString(" / ") { "${it.name}${if (it.rank >= 5) "★" else ""}" }))
+        }
         return card
     }
 
@@ -391,14 +401,103 @@ class WutheringWavesGachaActivity : Activity() {
     private fun missRate(pool: String, fiveList: List<GachaRecord>): Double { if (pool != "角色池" || fiveList.isEmpty()) return 0.0; val misses = fiveList.count { isLikelyStandard(it.name) }; return ((fiveList.size - misses) * 100.0 / fiveList.size) }
     private fun isLikelyStandard(name: String) = listOf("维里奈", "鉴心", "卡卡罗", "安可", "凌阳").any { name.contains(it) }
 
+    private fun reportActions(): View {
+        val card = glassCard().apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(14), dp(14), dp(14)); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) } }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(pill("复制报告", "#8B5CF6") { copy(shareReport()) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
+        row.addView(pill("保存快照", "#2563EB") { saveSnapshot() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
+        row.addView(pill("历史快照", "#334155") { showSnapshots() }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        card.addView(row)
+        return card
+    }
+
+    private fun insightPanel(): View {
+        val card = panel("抽卡概览")
+        val pools = poolOrder().map { it to records.filter { r -> r.pool == it } }.filter { it.second.isNotEmpty() }
+        val best = pools.maxByOrNull { it.second.count { r -> r.rank >= 5 } }
+        card.addView(line("当前保底：全记录 ${records.takeWhile { it.rank < 5 }.size} 抽；分池请看下方进度条"))
+        card.addView(line("五星率：${String.format(Locale.ROOT, "%.2f", records.count { it.rank >= 5 } * 100.0 / max(1, records.size))}% · 四星率：${String.format(Locale.ROOT, "%.2f", records.count { it.rank == 4 } * 100.0 / max(1, records.size))}%"))
+        card.addView(line("出金最多：${best?.first ?: "暂无"} ${best?.second?.count { it.rank >= 5 } ?: 0} 金"))
+        return card
+    }
+
+    private fun pityProgress(pool: String, list: List<GachaRecord>): View {
+        val pity = currentPity(list)
+        val limit = pityLimit(pool)
+        val percent = (pity * 100 / max(1, limit)).coerceIn(0, 100)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(10)) }
+        box.addView(line("保底进度：$pity / $limit 抽 · $percent%${if (pity >= limit - 10) " · 接近保底" else ""}"))
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; background = bg("#1F2937", 10) }
+        bar.addView(View(this).apply { background = bg(if (percent >= 85) "#FACC15" else "#8B5CF6", 10) }, LinearLayout.LayoutParams(0, dp(12), percent.toFloat()))
+        bar.addView(View(this), LinearLayout.LayoutParams(0, dp(12), (100 - percent).toFloat()))
+        box.addView(bar)
+        return box
+    }
+
+    private fun timelinePanel(): View {
+        val card = panel("五星时间线")
+        val fives = records.filter { it.rank >= 5 }.sortedByDescending { it.sortKey }.take(12)
+        if (fives.isEmpty()) card.addView(line("暂无五星记录，导入更多数据后会展示时间线"))
+        fives.forEachIndexed { i, r -> card.addView(line("${i + 1}. ${r.name} · ${r.pool} · ${r.time.ifBlank { "未知时间" }} · 间隔 ${fiveIntervalsForPool(r.pool).getOrNull(fives.size - i - 1) ?: 0} 抽")) }
+        return card
+    }
+
+    private fun overallRating(avg: Double, five: Int): String = when {
+        five == 0 -> "未出金"
+        avg <= 45 -> "欧皇"
+        avg <= 62 -> "小欧"
+        avg <= 75 -> "正常"
+        else -> "偏非"
+    }
+
+    private fun ratingComment(avg: Double, five: Int): String = when {
+        five == 0 -> "还没有五星记录，先看分池保底进度。"
+        avg <= 45 -> "平均出金很靠前，属于明显偏欧。"
+        avg <= 62 -> "整体运气不错，出金节奏优于常规期望。"
+        avg <= 75 -> "整体接近期望值，重点关注下一金保底。"
+        else -> "平均出金偏后，建议结合保底进度规划资源。"
+    }
+
+    private fun currentPity(list: List<GachaRecord>): Int = list.sortedByDescending { it.sortKey }.takeWhile { it.rank < 5 }.size
+    private fun pityLimit(pool: String): Int = when { pool.contains("新手") -> 50; else -> 80 }
+
+    private fun saveSnapshot() {
+        if (records.isEmpty()) { toast("没有可保存的分析结果"); return }
+        val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(Date())
+        val item = "$time||${summaryText()}"
+        val old = prefs.getString("snapshots", "").orEmpty().lines().filter { it.isNotBlank() }.take(19)
+        prefs.edit().putString("snapshots", listOf(item).plus(old).joinToString("\n")).apply()
+        toast("已保存历史快照")
+    }
+
+    private fun showSnapshots() {
+        val rows = prefs.getString("snapshots", "").orEmpty().lines().filter { it.isNotBlank() }
+        resultBox.addView(panel("历史快照").apply {
+            if (rows.isEmpty()) addView(line("暂无历史快照"))
+            rows.take(10).forEach { addView(line(it.replace("||", "\n"))) }
+        }, 0)
+        toast("已展开历史快照")
+    }
+
+    private fun shareReport(): String = buildString {
+        appendLine("漂泊者助手式鸣潮抽卡报告")
+        appendLine("UID：$uid")
+        appendLine("评级：${overallRating(avgFive(records), records.count { it.rank >= 5 })}")
+        appendLine(summaryText())
+        poolOrder().forEach { pool ->
+            val list = records.filter { it.pool == pool }
+            if (list.isNotEmpty()) appendLine("$pool：${list.size}抽，${list.count { it.rank >= 5 }}金，当前保底${currentPity(list)}抽，平均出金${if (avgFive(list) > 0) String.format(Locale.ROOT, "%.1f", avgFive(list)) else "暂无"}")
+        }
+    }
+
     private fun panel(title: String) = glassCard().apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(16), dp(16), dp(16)); addView(TextView(context).apply { text = title; setTextColor(Color.parseColor("#FACC15")); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(12)) }); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) } }
     private fun glassCard() = LinearLayout(this).apply { background = GradientDrawable().apply { setColor(Color.parseColor("#CC111827")); cornerRadius = dp(22).toFloat(); setStroke(dp(1), Color.parseColor("#33FFFFFF")) } }
     private fun labelValue(label: String, value: String, color: String = "#FFFFFF") = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; background = bg("#26304F", 12); setPadding(dp(12), 0, dp(12), 0); addView(TextView(context).apply { text = label; setTextColor(Color.parseColor("#CBD5E1")); textSize = 15f }, LinearLayout.LayoutParams(0, -2, 1f)); addView(TextView(context).apply { text = value; setTextColor(Color.parseColor(color)); textSize = 20f; typeface = Typeface.DEFAULT_BOLD }) }
     private fun smallMetric(v: String, k: String) = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; addView(TextView(context).apply { text = v; setTextColor(Color.parseColor("#FACC15")); textSize = 18f; typeface = Typeface.DEFAULT_BOLD }); addView(TextView(context).apply { text = k; setTextColor(Color.parseColor("#CBD5E1")); textSize = 12f }) }
     private fun line(text: String) = TextView(this).apply { this.text = text; setTextColor(Color.WHITE); textSize = 13f; setPadding(0, dp(4), 0, dp(4)) }
     private fun stars(rank: Int) = when { rank >= 5 -> "★★★★★"; rank == 4 -> "★★★★"; else -> "★★★" }
-    private fun summaryText() = "鸣潮抽卡分析：UID $uid，共 ${records.size} 抽，五星 ${records.count { it.rank >= 5 }}，四星 ${records.count { it.rank == 4 }}，当前保底 ${records.takeWhile { it.rank < 5 }.size} 抽。"
-    private fun showPlaceholder(text: String = "导入后将生成接近漂泊者小助理样式的卡片总结") { resultBox.removeAllViews(); resultBox.addView(TextView(this).apply { this.text = text; gravity = Gravity.CENTER; setTextColor(Color.WHITE); textSize = 14f; background = bg("#AA111827", 22); setPadding(dp(18), dp(28), dp(18), dp(28)) }) }
+    private fun summaryText() = "鸣潮抽卡分析：UID $uid，共 ${records.size} 抽，五星 ${records.count { it.rank >= 5 }}，四星 ${records.count { it.rank == 4 }}，平均出金 ${if (avgFive(records) > 0) String.format(Locale.ROOT, "%.1f", avgFive(records)) else "暂无"} 抽。"
+    private fun showPlaceholder(text: String = "导入后将生成接近漂泊者助手小程序的总览、欧气评级、分池保底、五星时间线和分享报告") { resultBox.removeAllViews(); resultBox.addView(TextView(this).apply { this.text = text; gravity = Gravity.CENTER; setTextColor(Color.WHITE); textSize = 14f; background = bg("#AA111827", 22); setPadding(dp(18), dp(28), dp(18), dp(28)) }) }
     private fun pasteClipboard() { val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager; input.setText(cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()); toast("已粘贴") }
     private fun clearAll() { input.setText(""); records.clear(); prefs.edit().clear().apply(); uid = "未识别"; status.text = "已清空"; showPlaceholder() }
     private fun copy(text: String) { (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("鸣潮抽卡分析", text)); toast("已复制") }

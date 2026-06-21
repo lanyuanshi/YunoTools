@@ -129,6 +129,7 @@ class MainActivity : AppCompatActivity() {
         private const val MUSIC_DOWNLOADS_KEY = "online_downloads"
         private const val GRID_ORDER_PREFS = "yuno_grid_order"
         private const val LYRIC_SYNC_LEAD_MS = 500L
+        private const val FAVORITE_PLAY_CACHE_TTL_MS = 6 * 60 * 60 * 1000L
     }
     private enum class MainTab { HOME, PROFILE }
     private enum class MusicPanelTab { LOCAL, FAVORITE, ONLINE }
@@ -1188,22 +1189,28 @@ class MainActivity : AppCompatActivity() {
                 list.addView(makeHintText("暂无酷我音乐收藏。搜索歌曲或歌手后，点击“收藏”即可保存到这里。"))
                 content.addView(ScrollView(this).apply { isFillViewport = true; addView(list) }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             } else {
-                val items = favorites.map { record ->
-                    Triple(record.title, record.artist.ifBlank { record.sourceLabel }) {
+                val cacheCount = favorites.count { it.playUrl.isNotBlank() && !isFavoritePlayCacheExpired(it) }
+                val cacheAction = Triple("清除播放缓存", "已缓存 $cacheCount/${favorites.size} 首 · 点此清除临时链接") {
+                    clearFavoritePlayCache()
+                    Toast.makeText(this@MainActivity, "已清除收藏歌曲播放缓存", Toast.LENGTH_SHORT).show()
+                    showFavoriteTab()
+                }
+                val items = listOf(cacheAction) + favorites.map { record ->
+                    Triple(record.title, favoriteRecordSubtitle(record)) {
                         playOnlineRecord(record)
                         subTitle.text = currentMusicTitle
                     }
                 }
-                val loading = favorites.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
-                val current = favorites.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
-                val favoriteActions = favorites.map { record ->
+                val loading = listOf("0") + favorites.map { if (loadingOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                val current = listOf("0") + favorites.map { if (currentOnlinePlayKey == musicRecordKey(it)) "1" else "0" }
+                val favoriteActions = listOf<(() -> Unit)?>(null) + favorites.map { record ->
                     {
                         removeMusicRecord(MUSIC_FAVORITES_KEY, record)
                         Toast.makeText(this@MainActivity, "已取消收藏：${record.title}", Toast.LENGTH_SHORT).show()
                         showFavoriteTab()
                     }
                 }
-                content.addView(musicCardGrid(items, loading, current, favoriteStates = favorites.map { true }, favoriteActions = favoriteActions), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                content.addView(musicCardGrid(items, loading, current, favoriteStates = listOf(false) + favorites.map { true }, favoriteActions = favoriteActions), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             }
         }
 
@@ -1980,6 +1987,31 @@ class MainActivity : AppCompatActivity() {
         return record.sourceLabel + "|" + record.songId + "|" + record.pageUrl + "|" + record.title + "|" + record.artist
     }
 
+
+    private fun isFavoritePlayCacheExpired(record: OnlineMusicRecord): Boolean {
+        if (record.playUrl.isBlank()) return true
+        val age = System.currentTimeMillis() - record.savedAt
+        return age < 0L || age > FAVORITE_PLAY_CACHE_TTL_MS
+    }
+
+    private fun favoriteRecordSubtitle(record: OnlineMusicRecord): String {
+        val base = record.artist.ifBlank { record.sourceLabel }
+        val cache = when {
+            record.playUrl.isBlank() -> "未缓存"
+            isFavoritePlayCacheExpired(record) -> "缓存已过期"
+            else -> "已缓存"
+        }
+        return "$base · $cache"
+    }
+
+    private fun clearFavoritePlayCache() {
+        val cleared = loadMusicRecords(MUSIC_FAVORITES_KEY).map {
+            if (it.localPath.isNotBlank()) it else it.copy(playUrl = "", savedAt = 0L)
+        }
+        saveMusicRecords(MUSIC_FAVORITES_KEY, cleared)
+        if (musicPanelLastTab == MusicPanelTab.FAVORITE) refreshOnlineMusicList?.invoke()
+    }
+
     private fun playOnlineRecord(record: OnlineMusicRecord) {
         val key = musicRecordKey(record)
         updateMusicPlaylist()
@@ -1988,7 +2020,8 @@ class MainActivity : AppCompatActivity() {
             playResolvedOnlineRecord(record, Uri.fromFile(File(record.localPath)), key)
             return
         }
-        val shouldRefresh = musicPanelLastTab == MusicPanelTab.FAVORITE || record.playUrl.isBlank()
+        val cachedFavorite = musicPanelLastTab == MusicPanelTab.FAVORITE && record.playUrl.isNotBlank() && !isFavoritePlayCacheExpired(record)
+        val shouldRefresh = record.playUrl.isBlank() || (musicPanelLastTab == MusicPanelTab.FAVORITE && !cachedFavorite)
         if (!shouldRefresh && record.playUrl.isNotBlank()) {
             playResolvedOnlineRecord(record, com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(record.playUrl), key)
             return

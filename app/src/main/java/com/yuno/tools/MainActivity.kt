@@ -1484,7 +1484,7 @@ class MainActivity : AppCompatActivity() {
             setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), 0)
             updateLyrics(currentTimedLyrics, currentLyricIndex, (musicPlayer?.currentPosition ?: 0L) + LYRIC_SYNC_LEAD_MS, lyricHighlightColor(), musicPlayer?.isPlaying == true, currentLyricsText)
         }
-        nowPlayingCard.addView(karaokeLyricsView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (104 * density).toInt()))
+        nowPlayingCard.addView(karaokeLyricsView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (136 * density).toInt()))
         fun syncKaraokeLyrics() {
             karaokeLyricsView.updateLyrics(currentTimedLyrics, currentLyricIndex, (musicPlayer?.currentPosition ?: 0L) + LYRIC_SYNC_LEAD_MS, lyricHighlightColor(), musicPlayer?.isPlaying == true, currentLyricsText)
         }
@@ -2157,7 +2157,7 @@ class MainActivity : AppCompatActivity() {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textAlign = Paint.Align.LEFT
+            textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         private val notePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -2170,6 +2170,13 @@ class MainActivity : AppCompatActivity() {
         private var highlightColor: Int = Color.parseColor("#007AFF")
         private var playing: Boolean = false
         private var fallbackText: String = "歌词将在播放酷我歌曲后显示"
+        private var dragStartY = 0f
+        private var dragStartOffset = 0f
+        private var manualOffset = 0f
+
+        init {
+            isClickable = true
+        }
 
         fun updateLyrics(lines: List<TimedLyricLine>, lineIndex: Int, positionMs: Long, highlightColor: Int, playing: Boolean, fallbackText: String) {
             this.lines = lines
@@ -2181,6 +2188,36 @@ class MainActivity : AppCompatActivity() {
             invalidate()
         }
 
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            val density = resources.displayMetrics.density
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    dragStartY = event.rawY
+                    dragStartOffset = manualOffset
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val minOffset = -54f * density
+                    val maxOffset = 18f * density
+                    manualOffset = (dragStartOffset + event.rawY - dragStartY).coerceIn(minOffset, maxOffset)
+                    invalidate()
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                    performClick()
+                    return true
+                }
+            }
+            return super.onTouchEvent(event)
+        }
+
+        override fun performClick(): Boolean {
+            super.performClick()
+            return true
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val density = resources.displayMetrics.density
@@ -2188,39 +2225,59 @@ class MainActivity : AppCompatActivity() {
             val text = current.ifBlank { fallbackText }
             val centerX = width / 2f
             lyricPaint.textSize = 20f * density
-            notePaint.textSize = 12f * density
+            notePaint.textSize = 11f * density
             highlightPaint.textSize = lyricPaint.textSize
             lyricPaint.color = Color.parseColor("#8A94A6")
             highlightPaint.color = highlightColor
-            notePaint.color = if (playing) blend(highlightColor, Color.WHITE, 0.28f) else Color.parseColor("#A6B0BE")
-            val baseline = height * 0.72f
-            val bounce = if (playing) kotlin.math.abs(kotlin.math.sin(positionMs / 115.0)).toFloat() * 9f * density else 0f
-            val noteY = height * 0.47f - bounce
-            val display = text.take(28)
+            notePaint.color = if (playing) blend(highlightColor, Color.WHITE, 0.2f) else Color.parseColor("#A6B0BE")
+            notePaint.setShadowLayer(4f * density, 0f, 1.5f * density, Color.argb(90, 0, 0, 0))
+
+            val baseOffset = -16f * density
+            val baseline = height * 0.58f + baseOffset + manualOffset
+            val noteRestY = baseline - 28f * density
+            val display = text.take(30)
             val totalWidth = lyricPaint.measureText(display).coerceAtLeast(1f)
             val startX = centerX - totalWidth / 2f
+
             canvas.drawText(display, centerX, baseline, lyricPaint)
-            if (lines.isNotEmpty() && current.isNotBlank()) {
+            if (lines.isNotEmpty() && current.isNotBlank() && display.isNotEmpty()) {
                 val safe = lineIndex.coerceIn(0, lines.lastIndex)
                 val lineStart = lines[safe].timeMs
                 val lineEnd = lines.getOrNull(safe + 1)?.timeMs ?: (lineStart + 3200L)
                 val duration = (lineEnd - lineStart).coerceAtLeast(900L)
                 val progress = ((positionMs - lineStart).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-                val rawChar = ((display.length - 1).coerceAtLeast(0) * progress).roundToInt().coerceIn(0, (display.length - 1).coerceAtLeast(0))
-                val highlightChars = (rawChar + 1).coerceIn(1, display.length)
+                val charFloat = progress * display.length.coerceAtLeast(1)
+                val charIndex = kotlin.math.floor(charFloat).toInt().coerceIn(0, display.lastIndex)
+                val localProgress = (charFloat - kotlin.math.floor(charFloat)).coerceIn(0f, 1f)
+                val highlightChars = (charIndex + 1).coerceIn(1, display.length)
                 val highlightText = display.take(highlightChars)
+
                 canvas.save()
                 canvas.clipRect(startX, 0f, startX + lyricPaint.measureText(highlightText), height.toFloat())
-                canvas.drawText(display, startX + totalWidth / 2f, baseline, highlightPaint.apply { textAlign = Paint.Align.CENTER })
+                canvas.drawText(display, centerX, baseline, highlightPaint)
                 canvas.restore()
-                val before = display.take(rawChar)
-                val charText = display.getOrNull(rawChar)?.toString().orEmpty()
-                val charCenter = startX + lyricPaint.measureText(before) + lyricPaint.measureText(charText) / 2f
-                val note = "♪"
-                canvas.drawText(note, charCenter, noteY, notePaint)
+
+                fun charCenterAt(index: Int): Float {
+                    val before = display.take(index.coerceIn(0, display.length))
+                    val charText = display.getOrNull(index)?.toString().orEmpty()
+                    return startX + lyricPaint.measureText(before) + lyricPaint.measureText(charText) / 2f
+                }
+                val currentCenter = charCenterAt(charIndex)
+                val nextCenter = charCenterAt((charIndex + 1).coerceAtMost(display.lastIndex))
+                val eased = (1f - kotlin.math.cos(localProgress * Math.PI).toFloat()) / 2f
+                val charCenter = currentCenter + (nextCenter - currentCenter) * eased
+                val jump = if (playing) kotlin.math.sin(localProgress * Math.PI).toFloat().coerceAtLeast(0f) * 16f * density else 0f
+                val squash = if (playing && localProgress > 0.82f) (localProgress - 0.82f) / 0.18f else 0f
+                notePaint.textScaleX = 1f + squash * 0.18f
+                canvas.save()
+                canvas.scale(1f, 1f - squash * 0.12f, charCenter, noteRestY)
+                canvas.drawText("♪", charCenter, noteRestY - jump, notePaint)
+                canvas.restore()
+                notePaint.textScaleX = 1f
             } else {
-                canvas.drawText("♪", centerX, noteY, notePaint)
+                canvas.drawText("♪", centerX, noteRestY, notePaint)
             }
+            notePaint.clearShadowLayer()
         }
 
         private fun blend(from: Int, to: Int, ratio: Float): Int {

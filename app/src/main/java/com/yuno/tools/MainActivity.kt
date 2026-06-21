@@ -100,6 +100,7 @@ import com.yuno.tools.ui.tools.Base64ToolActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
 import com.yuno.tools.ui.tools.SubscriptionActivity
+import com.yuno.tools.ui.tools.CalculatorActivity
 import com.yuno.tools.ui.tools.LevelToolActivity
 import com.yuno.tools.ui.tools.CompassToolActivity
 import com.yuno.tools.ui.tools.VibratorToolActivity
@@ -329,6 +330,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardMemberZone).setOnClickListener {
             startActivity(Intent(this, MemberZoneActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardCalculatorTool).setOnClickListener {
+            startActivity(Intent(this, CalculatorActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardLevelTool).setOnClickListener {
             startActivity(Intent(this, LevelToolActivity::class.java))

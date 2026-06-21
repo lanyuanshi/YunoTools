@@ -84,6 +84,27 @@ object MusicSearchHelper {
         return data.optJSONArray("list") ?: data.optJSONArray("songs") ?: data.optJSONArray("items") ?: data.optJSONArray("data")
     }
 
+
+    fun refreshPlayableSong(title: String, artist: String, songId: String, pageUrl: String): OnlineSong? {
+        val cleanTitle = cleanField(title)
+        val cleanArtist = cleanField(artist).substringBefore(" · ").trim()
+        val queries = listOf(
+            listOf(cleanTitle, cleanArtist).filter { it.isNotBlank() }.joinToString(" "),
+            cleanTitle,
+            songId
+        ).filter { it.isNotBlank() }.distinct()
+        for (query in queries) {
+            val songs = runCatching { searchKuwo(query) }.getOrElse { emptyList() }
+            val matched = songs.firstOrNull { song ->
+                (songId.isNotBlank() && song.songId == songId) ||
+                    (pageUrl.isNotBlank() && song.pageUrl == pageUrl) ||
+                    (song.title.equals(cleanTitle, true) && (cleanArtist.isBlank() || song.artist.contains(cleanArtist, true)))
+            } ?: songs.firstOrNull { it.title.contains(cleanTitle, true) || cleanTitle.contains(it.title, true) }
+            if (matched?.playUrl?.isNotBlank() == true) return matched
+        }
+        return null
+    }
+
     fun fetchKuwoLyrics(songId: String): List<String> = fetchKuwoTimedLyrics(songId).map { it.text }.distinct()
 
     fun fetchKuwoTimedLyrics(songId: String): List<TimedLyric> {

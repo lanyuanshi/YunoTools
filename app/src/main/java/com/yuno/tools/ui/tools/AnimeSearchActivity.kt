@@ -107,13 +107,19 @@ class AnimeSearchActivity : AppCompatActivity() {
 
 
     private fun pickChineseTitle(anilist: JSONObject?, title: JSONObject?): String {
+        return titleAliases(anilist, title).firstOrNull { it.hasChinese() }.orEmpty()
+    }
+
+    private fun titleAliases(anilist: JSONObject?, title: JSONObject?): List<String> {
         val candidates = mutableListOf<String>()
         title?.optString("chinese")?.takeIf { it.isNotBlank() }?.let { candidates += it }
-        anilist?.optJSONArray("synonyms")?.let { arr ->
-            for (i in 0 until arr.length()) candidates += arr.optString(i)
-        }
         title?.optString("native")?.takeIf { it.isNotBlank() }?.let { candidates += it }
-        return candidates.firstOrNull { it.hasChinese() }.orEmpty()
+        title?.optString("romaji")?.takeIf { it.isNotBlank() }?.let { candidates += it }
+        title?.optString("english")?.takeIf { it.isNotBlank() }?.let { candidates += it }
+        anilist?.optJSONArray("synonyms")?.let { arr ->
+            for (i in 0 until arr.length()) arr.optString(i).takeIf { it.isNotBlank() }?.let { candidates += it }
+        }
+        return candidates.map { it.trim() }.filter { it.isNotBlank() }.distinct()
     }
 
     private fun String.hasChinese(): Boolean = any { it.code in 0x4E00..0x9FFF }
@@ -215,7 +221,8 @@ class AnimeSearchActivity : AppCompatActivity() {
                     episode != "未知" -> "大概第 $episode 集"
                     else -> "未知"
                 }
-                val cnName = pickChineseTitle(anilist, title)
+                val aliases = titleAliases(anilist, title)
+                val cnName = aliases.firstOrNull { it.hasChinese() }.orEmpty()
                 val from = item.optDouble("from", 0.0)
                 val to = item.optDouble("to", 0.0)
                 list += AnimeMatch(
@@ -228,6 +235,7 @@ class AnimeSearchActivity : AppCompatActivity() {
                     similarity = (item.optDouble("similarity", 0.0) * 100).roundToInt().coerceIn(0, 100),
                     imageUrl = item.optString("image", "").orEmpty(),
                     videoUrl = item.optString("video", "").orEmpty(),
+                    aliases = aliases.filter { it != name && it != cnName }.take(8),
                     anilistId = anilist?.optInt("id", 0) ?: 0,
                     episode = episode,
                     fromSecond = from.roundToInt(),
@@ -348,6 +356,7 @@ class AnimeSearchActivity : AppCompatActivity() {
         val similarity: Int,
         val imageUrl: String,
         val videoUrl: String,
+        val aliases: List<String>,
         val anilistId: Int,
         val episode: String,
         val fromSecond: Int,

@@ -1981,12 +1981,59 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun playOnlineRecord(record: OnlineMusicRecord) {
-        val target = if (record.localPath.isNotBlank()) Uri.fromFile(File(record.localPath)) else com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(record.playUrl)
+        val key = musicRecordKey(record)
         updateMusicPlaylist()
         currentMusicIndex = musicPlaylist.indexOfFirst { sameMusicRecord(it, record) }
-        val key = musicRecordKey(record)
+        if (record.localPath.isNotBlank()) {
+            playResolvedOnlineRecord(record, Uri.fromFile(File(record.localPath)), key)
+            return
+        }
+        val shouldRefresh = musicPanelLastTab == MusicPanelTab.FAVORITE || record.playUrl.isBlank()
+        if (!shouldRefresh && record.playUrl.isNotBlank()) {
+            playResolvedOnlineRecord(record, com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(record.playUrl), key)
+            return
+        }
+        loadingOnlinePlayKey = key
+        currentOnlinePlayKey = key
+        refreshOnlineMusicList?.invoke()
+        Toast.makeText(this, "正在刷新收藏歌曲播放链接…", Toast.LENGTH_SHORT).show()
+        Thread {
+            val refreshed = com.yuno.tools.util.MusicSearchHelper.refreshPlayableSong(record.title, record.artist, record.songId, record.pageUrl)
+            runOnUiThread {
+                val playable = refreshed?.let {
+                    record.copy(
+                        artist = it.artist.ifBlank { record.artist },
+                        sourceLabel = it.source.label,
+                        pageUrl = it.pageUrl.ifBlank { record.pageUrl },
+                        playUrl = it.playUrl.orEmpty(),
+                        songId = it.songId.ifBlank { record.songId },
+                        savedAt = System.currentTimeMillis()
+                    )
+                } ?: record
+                if (playable.playUrl.isBlank()) {
+                    loadingOnlinePlayKey = null
+                    currentOnlinePlayKey = null
+                    refreshOnlineMusicList?.invoke()
+                    Toast.makeText(this, "收藏歌曲暂时无法刷新播放链接，请重新搜索后收藏", Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                if (musicPanelLastTab == MusicPanelTab.FAVORITE) replaceFavoriteRecord(record, playable)
+                playResolvedOnlineRecord(playable, com.yuno.tools.util.MusicSearchHelper.uriFromPublicUrl(playable.playUrl), musicRecordKey(playable))
+            }
+        }.start()
+    }
+
+    private fun playResolvedOnlineRecord(record: OnlineMusicRecord, target: Uri, key: String) {
+        currentOnlinePlayKey = key
+        loadingOnlinePlayKey = key
         playSelectedMusic(record.sourceLabel + " · " + record.title, target, key)
         loadLyricsForRecord(record, key)
+    }
+
+    private fun replaceFavoriteRecord(old: OnlineMusicRecord, fresh: OnlineMusicRecord) {
+        val records = loadMusicRecords(MUSIC_FAVORITES_KEY)
+        val updated = records.map { if (sameMusicRecord(it, old)) fresh else it }
+        saveMusicRecords(MUSIC_FAVORITES_KEY, updated)
     }
 
     private fun loadLyricsForRecord(record: OnlineMusicRecord, key: String = musicRecordKey(record)) {

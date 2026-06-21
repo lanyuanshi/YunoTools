@@ -2278,46 +2278,65 @@ class MainActivity : AppCompatActivity() {
                 val lineEnd = lines.getOrNull(safe + 1)?.timeMs ?: (lineStart + 3200L)
                 val duration = (lineEnd - lineStart).coerceAtLeast(900L)
                 progress = ((positionMs - lineStart).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-                val charSpan = display.length.coerceAtLeast(1)
-                val charFloat = (progress * charSpan).coerceIn(0f, charSpan - 0.001f)
+                val charSpan = (display.length - 1).coerceAtLeast(1)
+                val charFloat = (progress * charSpan).coerceIn(0f, charSpan.toFloat())
                 charIndex = kotlin.math.floor(charFloat).toInt().coerceIn(0, display.lastIndex)
                 localProgress = (charFloat - kotlin.math.floor(charFloat)).coerceIn(0f, 1f)
             }
 
-            val jumpWave = if (playing && charIndex >= 0) {
-                val lifted = kotlin.math.sin(localProgress * Math.PI).toFloat().coerceAtLeast(0f)
-                lifted * lifted * (3f - 2f * lifted)
-            } else 0f
-            val lyricLift = jumpWave * 8f * density
-            val noteLift = jumpWave * 15f * density
-            val landing = if (playing && charIndex >= 0 && localProgress > 0.78f) ((localProgress - 0.78f) / 0.22f).coerceIn(0f, 1f) else 0f
-
+            val charCenters = FloatArray(display.length)
+            val charWidths = FloatArray(display.length)
             var x = startX
-            var noteCenterX = width / 2f
             for (i in display.indices) {
                 val charText = display[i].toString()
                 val charWidth = lyricPaint.measureText(charText)
-                val center = x + charWidth / 2f
-                val isActive = i == charIndex
-                val isSung = charIndex >= 0 && (i < charIndex || (i == charIndex && localProgress > 0.08f))
-                val paint = if (isSung || isActive) highlightPaint else lyricPaint
-                val charLift = if (isActive) lyricLift else 0f
-                val scaleY = if (isActive) 1f - landing * 0.08f else 1f
-                val scaleX = if (isActive) 1f + landing * 0.08f else 1f
-                canvas.save()
-                if (isActive) canvas.scale(scaleX, scaleY, center, baseline - charLift)
-                canvas.drawText(charText, x, baseline - charLift, paint)
-                canvas.restore()
-                if (isActive) noteCenterX = center
+                charWidths[i] = charWidth
+                charCenters[i] = x + charWidth / 2f
                 x += charWidth
             }
 
-            if (charIndex >= 0) {
-                val lyricTop = baseline + lyricPaint.fontMetrics.ascent - lyricLift
-                val noteTouchY = lyricTop - notePaint.fontMetrics.descent + 0.5f * density
+            val impactWidth = 0.26f
+            fun impactAt(distance: Float): Float {
+                val t = (1f - kotlin.math.abs(distance) / impactWidth).coerceIn(0f, 1f)
+                return t * t * (3f - 2f * t)
+            }
+            val currentImpact = if (playing && charIndex >= 0) impactAt(localProgress) else 0f
+            val nextImpact = if (playing && charIndex >= 0) impactAt(localProgress - 1f) else 0f
+            val hop = if (playing && charIndex >= 0) kotlin.math.sin(localProgress * Math.PI).toFloat().coerceAtLeast(0f) else 0f
+            val smooth = localProgress * localProgress * (3f - 2f * localProgress)
+            val currentCenter = if (charIndex >= 0) charCenters[charIndex] else width / 2f
+            val nextCenter = if (charIndex >= 0) charCenters[(charIndex + 1).coerceAtMost(display.lastIndex)] else currentCenter
+            val noteCenterX = currentCenter + (nextCenter - currentCenter) * smooth
+
+            for (i in display.indices) {
+                val charText = display[i].toString()
+                val isCurrent = i == charIndex
+                val isNext = i == (charIndex + 1).coerceAtMost(display.lastIndex)
+                val isSung = charIndex >= 0 && (i < charIndex || (isCurrent && localProgress > 0.08f))
+                val paint = if (isSung || isCurrent) highlightPaint else lyricPaint
+                val impact = when {
+                    isCurrent -> currentImpact
+                    isNext -> nextImpact
+                    else -> 0f
+                }
+                val pressDown = impact * 3.2f * density
+                val scaleX = 1f + impact * 0.08f
+                val scaleY = 1f - impact * 0.1f
+                val drawX = charCenters[i] - charWidths[i] / 2f
                 canvas.save()
-                canvas.scale(1f + landing * 0.1f, 1f - landing * 0.1f, noteCenterX, noteTouchY)
-                canvas.drawText("♪", noteCenterX, noteTouchY - noteLift, notePaint)
+                if (impact > 0f) canvas.scale(scaleX, scaleY, charCenters[i], baseline + pressDown)
+                canvas.drawText(charText, drawX, baseline + pressDown, paint)
+                canvas.restore()
+            }
+
+            if (charIndex >= 0) {
+                val lyricTop = baseline + lyricPaint.fontMetrics.ascent
+                val touchY = lyricTop - notePaint.fontMetrics.descent + 0.5f * density
+                val noteHop = hop * 15f * density
+                val landingImpact = currentImpact.coerceAtLeast(nextImpact)
+                canvas.save()
+                canvas.scale(1f + landingImpact * 0.1f, 1f - landingImpact * 0.1f, noteCenterX, touchY)
+                canvas.drawText("♪", noteCenterX, touchY - noteHop, notePaint)
                 canvas.restore()
                 if (playing) postInvalidateOnAnimation()
             } else {

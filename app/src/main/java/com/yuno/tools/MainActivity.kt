@@ -180,8 +180,6 @@ class MainActivity : AppCompatActivity() {
     private var refreshKaraokeLyricsView: (() -> Unit)? = null
     private var bounceLyricsView: (() -> Unit)? = null
     private var refreshPlayerPanelState: (() -> Unit)? = null
-    private var dynamicIslandCard: MaterialCardView? = null
-    private var dynamicIslandText: TextView? = null
     private var refreshMusicProgressView: (() -> Unit)? = null
     private val musicProgressHandler = Handler(Looper.getMainLooper())
     private val musicProgressTicker = object : Runnable {
@@ -221,7 +219,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         ThemeApplier.apply(this)
         setupHomeFullscreenInsets()
-        installDynamicIsland()
 
         bindHomeCards()
         setupHomeBannerCarousel()
@@ -942,7 +939,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     refreshPlayerPanelState?.invoke()
-                    updateDynamicIsland()
+                    updateMusicNotification(musicPlayer?.isPlaying == true)
                     if (playbackState == Player.STATE_READY) {
                         if (loadingOnlinePlayKey != null) {
                             loadingOnlinePlayKey = null
@@ -961,7 +958,7 @@ class MainActivity : AppCompatActivity() {
                     loadingOnlinePlayKey = null
                     currentOnlinePlayKey = null
                     updateMusicNavState(false)
-                    updateDynamicIsland(forceHide = true)
+                    updateMusicNotification(false)
                     refreshOnlineMusicList?.invoke()
                     Toast.makeText(this@MainActivity, "播放失败：$failedTitle，可能是版权限制或临时链接失效", Toast.LENGTH_LONG).show()
                 }
@@ -975,58 +972,6 @@ class MainActivity : AppCompatActivity() {
         "Accept" to "*/*",
         "Referer" to "https://music.163.com/"
     )
-
-    private fun installDynamicIsland() {
-        val card = MaterialCardView(this).apply {
-            radius = dp(24).toFloat()
-            cardElevation = dp(10).toFloat()
-            setCardBackgroundColor(Color.parseColor("#EE111318"))
-            strokeWidth = 1
-            strokeColor = Color.parseColor("#33FFFFFF")
-            alpha = 0f
-            visibility = View.GONE
-            setOnClickListener { showMusicPanel() }
-        }
-        val text = TextView(this).apply {
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setPadding(dp(18), 0, dp(18), 0)
-        }
-        card.addView(text, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        val params = FrameLayout.LayoutParams(dp(246), dp(46), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(16) }
-        addContentView(card, params)
-        dynamicIslandCard = card
-        dynamicIslandText = text
-        updateDynamicIsland(forceHide = true)
-    }
-
-    private fun updateDynamicIsland(forceHide: Boolean = false) {
-        val card = dynamicIslandCard ?: return
-        val text = dynamicIslandText ?: return
-        val player = musicPlayer
-        val shouldShow = !forceHide && currentMusicUri != null && player != null
-        if (!shouldShow) {
-            if (card.visibility == View.VISIBLE) {
-                card.animate().alpha(0f).translationY(-dp(8).toFloat()).setDuration(180L).withEndAction { card.visibility = View.GONE }.start()
-            }
-            return
-        }
-        val playing = player?.isPlaying == true
-        val position = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
-        val phase = ((position / 180L) % 4L).toInt()
-        val pulse = listOf("▂▅▂", "▃▇▃", "▅█▅", "▃▇▃")[phase]
-        val song = currentMusicTitle.substringAfter(" · ", currentMusicTitle).ifBlank { "正在播放" }
-        text.text = "${if (playing) pulse else "Ⅱ"}  $song"
-        if (card.visibility != View.VISIBLE) {
-            card.visibility = View.VISIBLE
-            card.translationY = -dp(8).toFloat()
-            card.animate().alpha(1f).translationY(0f).setDuration(220L).setInterpolator(OvershootInterpolator(0.65f)).start()
-        }
-    }
 
     private fun playSelectedMusic(title: String, uri: Uri, onlineKey: String? = null) {
         currentMusicTitle = title
@@ -1051,7 +996,6 @@ class MainActivity : AppCompatActivity() {
         player.play()
         updateMusicNavState(true)
         updateMusicNotification(true)
-        updateDynamicIsland()
         refreshPlayerPanelState?.invoke()
         refreshOnlineMusicList?.invoke()
     }
@@ -1554,12 +1498,11 @@ class MainActivity : AppCompatActivity() {
             loopBtn.background = pillBackground(musicRepeatMode == Player.REPEAT_MODE_ONE)
             syncKaraokeLyrics()
             syncMusicProgress(progressView, currentTimeText, totalTimeText)
-            updateDynamicIsland()
+            updateMusicNotification(musicPlayer?.isPlaying == true)
         }
         refreshMusicProgressView = {
             syncMusicProgress(progressView, currentTimeText, totalTimeText)
             syncKaraokeLyrics()
-            updateDynamicIsland()
         }
         refreshLyricsView = { syncKaraokeLyrics() }
         refreshLyricBeatView = { syncKaraokeLyrics() }
@@ -2245,13 +2188,14 @@ class MainActivity : AppCompatActivity() {
             val text = current.ifBlank { fallbackText }
             val centerX = width / 2f
             lyricPaint.textSize = 20f * density
-            notePaint.textSize = 20f * density
+            notePaint.textSize = 12f * density
             highlightPaint.textSize = lyricPaint.textSize
             lyricPaint.color = Color.parseColor("#8A94A6")
             highlightPaint.color = highlightColor
             notePaint.color = if (playing) blend(highlightColor, Color.WHITE, 0.28f) else Color.parseColor("#A6B0BE")
-            val baseline = height * 0.68f
-            val noteY = height * 0.31f + if (playing) kotlin.math.sin(positionMs / 120.0).toFloat() * 4f * density else 0f
+            val baseline = height * 0.72f
+            val bounce = if (playing) kotlin.math.abs(kotlin.math.sin(positionMs / 115.0)).toFloat() * 9f * density else 0f
+            val noteY = height * 0.47f - bounce
             val display = text.take(28)
             val totalWidth = lyricPaint.measureText(display).coerceAtLeast(1f)
             val startX = centerX - totalWidth / 2f
@@ -2272,7 +2216,7 @@ class MainActivity : AppCompatActivity() {
                 val before = display.take(rawChar)
                 val charText = display.getOrNull(rawChar)?.toString().orEmpty()
                 val charCenter = startX + lyricPaint.measureText(before) + lyricPaint.measureText(charText) / 2f
-                val note = listOf("♪", "♫", "♬", "♩")[((positionMs / 160L) % 4L).toInt()]
+                val note = "♪"
                 canvas.drawText(note, charCenter, noteY, notePaint)
             } else {
                 canvas.drawText("♪", centerX, noteY, notePaint)

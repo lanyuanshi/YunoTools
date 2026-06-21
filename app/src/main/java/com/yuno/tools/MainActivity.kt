@@ -177,8 +177,11 @@ class MainActivity : AppCompatActivity() {
     }
     private var refreshLyricsView: ((CharSequence) -> Unit)? = null
     private var refreshLyricBeatView: ((CharSequence) -> Unit)? = null
+    private var refreshKaraokeLyricsView: (() -> Unit)? = null
     private var bounceLyricsView: (() -> Unit)? = null
     private var refreshPlayerPanelState: (() -> Unit)? = null
+    private var dynamicIslandCard: MaterialCardView? = null
+    private var dynamicIslandText: TextView? = null
     private var refreshMusicProgressView: (() -> Unit)? = null
     private val musicProgressHandler = Handler(Looper.getMainLooper())
     private val musicProgressTicker = object : Runnable {
@@ -218,6 +221,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         ThemeApplier.apply(this)
         setupHomeFullscreenInsets()
+        installDynamicIsland()
 
         bindHomeCards()
         setupHomeBannerCarousel()
@@ -938,6 +942,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     refreshPlayerPanelState?.invoke()
+                    updateDynamicIsland()
                     if (playbackState == Player.STATE_READY) {
                         if (loadingOnlinePlayKey != null) {
                             loadingOnlinePlayKey = null
@@ -956,6 +961,7 @@ class MainActivity : AppCompatActivity() {
                     loadingOnlinePlayKey = null
                     currentOnlinePlayKey = null
                     updateMusicNavState(false)
+                    updateDynamicIsland(forceHide = true)
                     refreshOnlineMusicList?.invoke()
                     Toast.makeText(this@MainActivity, "播放失败：$failedTitle，可能是版权限制或临时链接失效", Toast.LENGTH_LONG).show()
                 }
@@ -969,6 +975,58 @@ class MainActivity : AppCompatActivity() {
         "Accept" to "*/*",
         "Referer" to "https://music.163.com/"
     )
+
+    private fun installDynamicIsland() {
+        val card = MaterialCardView(this).apply {
+            radius = dp(24).toFloat()
+            cardElevation = dp(10).toFloat()
+            setCardBackgroundColor(Color.parseColor("#EE111318"))
+            strokeWidth = 1
+            strokeColor = Color.parseColor("#33FFFFFF")
+            alpha = 0f
+            visibility = View.GONE
+            setOnClickListener { showMusicPanel() }
+        }
+        val text = TextView(this).apply {
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(18), 0, dp(18), 0)
+        }
+        card.addView(text, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        val params = FrameLayout.LayoutParams(dp(246), dp(46), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(16) }
+        addContentView(card, params)
+        dynamicIslandCard = card
+        dynamicIslandText = text
+        updateDynamicIsland(forceHide = true)
+    }
+
+    private fun updateDynamicIsland(forceHide: Boolean = false) {
+        val card = dynamicIslandCard ?: return
+        val text = dynamicIslandText ?: return
+        val player = musicPlayer
+        val shouldShow = !forceHide && currentMusicUri != null && player != null
+        if (!shouldShow) {
+            if (card.visibility == View.VISIBLE) {
+                card.animate().alpha(0f).translationY(-dp(8).toFloat()).setDuration(180L).withEndAction { card.visibility = View.GONE }.start()
+            }
+            return
+        }
+        val playing = player?.isPlaying == true
+        val position = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
+        val phase = ((position / 180L) % 4L).toInt()
+        val pulse = listOf("▂▅▂", "▃▇▃", "▅█▅", "▃▇▃")[phase]
+        val song = currentMusicTitle.substringAfter(" · ", currentMusicTitle).ifBlank { "正在播放" }
+        text.text = "${if (playing) pulse else "Ⅱ"}  $song"
+        if (card.visibility != View.VISIBLE) {
+            card.visibility = View.VISIBLE
+            card.translationY = -dp(8).toFloat()
+            card.animate().alpha(1f).translationY(0f).setDuration(220L).setInterpolator(OvershootInterpolator(0.65f)).start()
+        }
+    }
 
     private fun playSelectedMusic(title: String, uri: Uri, onlineKey: String? = null) {
         currentMusicTitle = title
@@ -993,6 +1051,7 @@ class MainActivity : AppCompatActivity() {
         player.play()
         updateMusicNavState(true)
         updateMusicNotification(true)
+        updateDynamicIsland()
         refreshPlayerPanelState?.invoke()
         refreshOnlineMusicList?.invoke()
     }
@@ -1477,28 +1536,14 @@ class MainActivity : AppCompatActivity() {
         optionRow.addView(randomBtn)
         optionRow.addView(loopBtn)
         nowPlayingCard.addView(optionRow)
-        val lyricBeatText = TextView(this).apply {
-            text = buildLyricBeatDisplay()
-            textSize = 15f
-            typeface = Typeface.MONOSPACE
-            gravity = Gravity.CENTER
-            setTextColor(lyricHighlightColor())
-            includeFontPadding = false
-            setPadding((10 * density).toInt(), (8 * density).toInt(), (10 * density).toInt(), 0)
+        val karaokeLyricsView = KaraokeLyricsView(this).apply {
+            setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), 0)
+            updateLyrics(currentTimedLyrics, currentLyricIndex, (musicPlayer?.currentPosition ?: 0L) + LYRIC_SYNC_LEAD_MS, lyricHighlightColor(), musicPlayer?.isPlaying == true, currentLyricsText)
         }
-        nowPlayingCard.addView(lyricBeatText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        val lyricsText = TextView(this).apply {
-            text = currentLyricsText
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            setLineSpacing(2f * density, 1.08f)
-            maxLines = 4
-            ellipsize = null
-            setTextColor(Color.parseColor("#5F6673"))
-            gravity = Gravity.CENTER
-            setPadding((10 * density).toInt(), (4 * density).toInt(), (10 * density).toInt(), 0)
+        nowPlayingCard.addView(karaokeLyricsView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (104 * density).toInt()))
+        fun syncKaraokeLyrics() {
+            karaokeLyricsView.updateLyrics(currentTimedLyrics, currentLyricIndex, (musicPlayer?.currentPosition ?: 0L) + LYRIC_SYNC_LEAD_MS, lyricHighlightColor(), musicPlayer?.isPlaying == true, currentLyricsText)
         }
-        nowPlayingCard.addView(lyricsText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         fun syncPanelState() {
             subTitle.text = currentMusicTitle
             playingTitle.text = currentMusicTitle
@@ -1507,27 +1552,25 @@ class MainActivity : AppCompatActivity() {
             randomBtn.background = pillBackground(musicShuffleEnabled)
             loopBtn.isSelected = musicRepeatMode == Player.REPEAT_MODE_ONE
             loopBtn.background = pillBackground(musicRepeatMode == Player.REPEAT_MODE_ONE)
-            lyricBeatText.text = buildLyricBeatDisplay()
-            lyricsText.text = buildLyricsDisplay()
+            syncKaraokeLyrics()
             syncMusicProgress(progressView, currentTimeText, totalTimeText)
+            updateDynamicIsland()
         }
         refreshMusicProgressView = {
             syncMusicProgress(progressView, currentTimeText, totalTimeText)
-            lyricBeatText.text = buildLyricBeatDisplay()
+            syncKaraokeLyrics()
+            updateDynamicIsland()
         }
-        refreshLyricsView = { text -> lyricsText.text = text }
-        refreshLyricBeatView = { text -> lyricBeatText.text = text }
+        refreshLyricsView = { syncKaraokeLyrics() }
+        refreshLyricBeatView = { syncKaraokeLyrics() }
+        refreshKaraokeLyricsView = { syncKaraokeLyrics() }
         bounceLyricsView = {
-            lyricsText.animate().cancel()
-            lyricsText.scaleX = 0.97f
-            lyricsText.scaleY = 0.97f
-            lyricsText.translationY = 3f * density
-            lyricsText.animate()
-                .scaleX(1f)
-                .scaleY(1f)
+            karaokeLyricsView.animate().cancel()
+            karaokeLyricsView.translationY = 3f * density
+            karaokeLyricsView.animate()
                 .translationY(0f)
-                .setDuration(260L)
-                .setInterpolator(OvershootInterpolator(1.8f))
+                .setDuration(220L)
+                .setInterpolator(OvershootInterpolator(1.45f))
                 .start()
         }
         refreshPlayerPanelState = { syncPanelState() }
@@ -1541,6 +1584,7 @@ class MainActivity : AppCompatActivity() {
                 refreshPlayerPanelState = null
                 refreshLyricsView = null
                 refreshLyricBeatView = null
+                refreshKaraokeLyricsView = null
                 bounceLyricsView = null
             }
         }
@@ -2164,6 +2208,86 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    private class KaraokeLyricsView(context: Context) : View(context) {
+        private val lyricPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.LEFT
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        private val notePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        private var lines: List<TimedLyricLine> = emptyList()
+        private var lineIndex: Int = -1
+        private var positionMs: Long = 0L
+        private var highlightColor: Int = Color.parseColor("#007AFF")
+        private var playing: Boolean = false
+        private var fallbackText: String = "歌词将在播放酷我歌曲后显示"
+
+        fun updateLyrics(lines: List<TimedLyricLine>, lineIndex: Int, positionMs: Long, highlightColor: Int, playing: Boolean, fallbackText: String) {
+            this.lines = lines
+            this.lineIndex = lineIndex
+            this.positionMs = positionMs.coerceAtLeast(0L)
+            this.highlightColor = highlightColor
+            this.playing = playing
+            this.fallbackText = fallbackText
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val density = resources.displayMetrics.density
+            val current = lines.getOrNull(lineIndex.coerceIn(0, (lines.size - 1).coerceAtLeast(0)))?.text.orEmpty()
+            val text = current.ifBlank { fallbackText }
+            val centerX = width / 2f
+            lyricPaint.textSize = 20f * density
+            notePaint.textSize = 20f * density
+            highlightPaint.textSize = lyricPaint.textSize
+            lyricPaint.color = Color.parseColor("#8A94A6")
+            highlightPaint.color = highlightColor
+            notePaint.color = if (playing) blend(highlightColor, Color.WHITE, 0.28f) else Color.parseColor("#A6B0BE")
+            val baseline = height * 0.68f
+            val noteY = height * 0.31f + if (playing) kotlin.math.sin(positionMs / 120.0).toFloat() * 4f * density else 0f
+            val display = text.take(28)
+            val totalWidth = lyricPaint.measureText(display).coerceAtLeast(1f)
+            val startX = centerX - totalWidth / 2f
+            canvas.drawText(display, centerX, baseline, lyricPaint)
+            if (lines.isNotEmpty() && current.isNotBlank()) {
+                val safe = lineIndex.coerceIn(0, lines.lastIndex)
+                val lineStart = lines[safe].timeMs
+                val lineEnd = lines.getOrNull(safe + 1)?.timeMs ?: (lineStart + 3200L)
+                val duration = (lineEnd - lineStart).coerceAtLeast(900L)
+                val progress = ((positionMs - lineStart).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                val rawChar = ((display.length - 1).coerceAtLeast(0) * progress).roundToInt().coerceIn(0, (display.length - 1).coerceAtLeast(0))
+                val highlightChars = (rawChar + 1).coerceIn(1, display.length)
+                val highlightText = display.take(highlightChars)
+                canvas.save()
+                canvas.clipRect(startX, 0f, startX + lyricPaint.measureText(highlightText), height.toFloat())
+                canvas.drawText(display, startX + totalWidth / 2f, baseline, highlightPaint.apply { textAlign = Paint.Align.CENTER })
+                canvas.restore()
+                val before = display.take(rawChar)
+                val charText = display.getOrNull(rawChar)?.toString().orEmpty()
+                val charCenter = startX + lyricPaint.measureText(before) + lyricPaint.measureText(charText) / 2f
+                val note = listOf("♪", "♫", "♬", "♩")[((positionMs / 160L) % 4L).toInt()]
+                canvas.drawText(note, charCenter, noteY, notePaint)
+            } else {
+                canvas.drawText("♪", centerX, noteY, notePaint)
+            }
+        }
+
+        private fun blend(from: Int, to: Int, ratio: Float): Int {
+            val t = ratio.coerceIn(0f, 1f)
+            val r = (Color.red(from) + (Color.red(to) - Color.red(from)) * t).roundToInt().coerceIn(0, 255)
+            val g = (Color.green(from) + (Color.green(to) - Color.green(from)) * t).roundToInt().coerceIn(0, 255)
+            val b = (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t).roundToInt().coerceIn(0, 255)
+            return Color.rgb(r, g, b)
+        }
+    }
+
     private class AvatarMusicProgressView(context: Context) : View(context) {
         private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -2572,8 +2696,10 @@ class MainActivity : AppCompatActivity() {
         val index = lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
         val changedLine = index != currentLyricIndex
         if (changedLine) currentLyricIndex = index
+        currentLyricsText = buildLyricsDisplay(position, index).toString()
         refreshLyricBeatView?.invoke(buildLyricBeatDisplay(position))
-        refreshLyricsView?.invoke(buildLyricsDisplay(position, index))
+        refreshLyricsView?.invoke(currentLyricsText)
+        refreshKaraokeLyricsView?.invoke()
         if (changedLine) bounceLyricsView?.invoke()
     }
 

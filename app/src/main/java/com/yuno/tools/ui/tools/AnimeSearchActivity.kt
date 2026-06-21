@@ -4,6 +4,8 @@ import android.content.Intent
 import android.content.Context
 import android.content.ClipboardManager
 import android.content.ClipData
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
@@ -24,6 +26,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
@@ -73,15 +76,16 @@ class AnimeSearchActivity : AppCompatActivity() {
 
         Thread {
             try {
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val rawBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw IOException("无法读取图片")
-
-                val results = requestTraceMoe(bytes, true).ifEmpty { requestTraceMoe(bytes, false) }
-                if (results.isEmpty()) throw IOException("没有找到匹配番剧，请换一张更清晰截图")
+                val bytes = prepareSearchImage(rawBytes)
+                val results = searchTraceMoeAccurate(bytes)
+                if (results.isEmpty()) throw IOException("没有找到可靠匹配，请换一张原视频截图，尽量避开字幕、弹幕、拼图和二创图")
 
                 runOnUiThread {
                     runCatching {
-                        status.text = "搜索完成，共展示 ${results.size} 个可能结果（包含低概率匹配）"
+                        val best = results.maxOfOrNull { it.similarity } ?: 0
+                        status.text = "搜索完成 · 最佳匹配 $best% · 已过滤明显低概率结果"
                         renderResults(results)
                     }.onFailure { err ->
                         status.text = "结果渲染失败"
@@ -114,12 +118,42 @@ class AnimeSearchActivity : AppCompatActivity() {
 
     private fun String.hasChinese(): Boolean = any { it.code in 0x4E00..0x9FFF }
 
+    private fun prepareSearchImage(raw: ByteArray): ByteArray {
+        val bitmap = BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return raw
+        val maxSide = maxOf(bitmap.width, bitmap.height)
+        val normalized = if (maxSide > 1600) {
+            val scale = 1600f / maxSide
+            Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).roundToInt(), (bitmap.height * scale).roundToInt(), true)
+        } else bitmap
+        return ByteArrayOutputStream().use { out ->
+            normalized.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            out.toByteArray().takeIf { it.isNotEmpty() } ?: raw
+        }
+    }
+
+    private fun searchTraceMoeAccurate(bytes: ByteArray): List<AnimeMatch> {
+        val merged = mutableMapOf<String, AnimeMatch>()
+        listOf(false, true).forEach { cutBorders ->
+            requestTraceMoe(bytes, cutBorders).forEach { match ->
+                val key = match.matchKey()
+                val old = merged[key]
+                merged[key] = if (old == null) match else old.copy(
+                    similarity = maxOf(old.similarity, (match.similarity + 4).coerceAtMost(100)),
+                    sources = old.sources + match.sources
+                )
+            }
+        }
+        val ranked = merged.values.sortedWith(compareByDescending<AnimeMatch> { it.similarity }.thenByDescending { it.sources.size })
+        val reliable = ranked.filter { it.similarity >= 72 || it.sources.size > 1 }
+        return (reliable.ifEmpty { ranked.take(3) }).take(8).mapIndexed { index, item -> item.copy(rank = index + 1) }
+    }
+
     private fun requestTraceMoe(bytes: ByteArray, cutBorders: Boolean): List<AnimeMatch> {
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart(
                 "image",
                 "anime_search.jpg",
-                bytes.toRequestBody("image/*".toMediaTypeOrNull())
+                bytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
             ).build()
 
         val url = if (cutBorders) {
@@ -130,7 +164,7 @@ class AnimeSearchActivity : AppCompatActivity() {
         val request = Request.Builder()
             .url(url)
             .post(body)
-            .addHeader("User-Agent", "YunoTools/1.1.36")
+            .addHeader("User-Agent", "YunoTools/1.2.11")
             .build()
 
         client.newCall(request).execute().use { response ->
@@ -138,7 +172,7 @@ class AnimeSearchActivity : AppCompatActivity() {
             val json = JSONObject(response.body?.string().orEmpty())
             val arr = json.optJSONArray("result") ?: return emptyList()
             val list = mutableListOf<AnimeMatch>()
-            val count = minOf(arr.length(), 8)
+            val count = minOf(arr.length(), 12)
             for (i in 0 until count) {
                 val item = arr.optJSONObject(i) ?: continue
                 val anilist = item.optJSONObject("anilist")
@@ -155,16 +189,22 @@ class AnimeSearchActivity : AppCompatActivity() {
                     else -> "未知"
                 }
                 val cnName = pickChineseTitle(anilist, title)
+                val from = item.optDouble("from", 0.0)
+                val to = item.optDouble("to", 0.0)
                 list += AnimeMatch(
                     rank = i + 1,
                     title = name,
                     chineseTitle = cnName,
                     type = anilist?.optString("type", "").orEmpty().ifBlank { "未知" },
                     episodeInfo = episodeInfo,
-                    timeRange = "${formatTime(item.optDouble("from", 0.0))} - ${formatTime(item.optDouble("to", 0.0))}",
+                    timeRange = "${formatTime(from)} - ${formatTime(to)}",
                     similarity = (item.optDouble("similarity", 0.0) * 100).roundToInt().coerceIn(0, 100),
                     imageUrl = item.optString("image", "").orEmpty(),
-                    videoUrl = item.optString("video", "").orEmpty()
+                    videoUrl = item.optString("video", "").orEmpty(),
+                    anilistId = anilist?.optInt("id", 0) ?: 0,
+                    episode = episode,
+                    fromSecond = from.roundToInt(),
+                    sources = setOf(if (cutBorders) "裁边识别" else "原图识别")
                 )
             }
             return list
@@ -263,6 +303,13 @@ class AnimeSearchActivity : AppCompatActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
     private fun AnimeMatch.displayTitle(): String = if (chineseTitle.isNotBlank()) chineseTitle else title
+    private fun AnimeMatch.matchKey(): String = listOf(anilistId.takeIf { it > 0 }?.toString() ?: displayTitle(), episode, fromSecond / 3).joinToString("_")
+    private fun AnimeMatch.confidenceLabel(): String = when {
+        similarity >= 90 -> "很高，基本可信"
+        similarity >= 80 -> "较高，建议核对集数时间"
+        similarity >= 72 -> "中等，可能受字幕/裁切影响"
+        else -> "较低，仅作备选"
+    }
 
     private data class AnimeMatch(
         val rank: Int,
@@ -273,6 +320,10 @@ class AnimeSearchActivity : AppCompatActivity() {
         val timeRange: String,
         val similarity: Int,
         val imageUrl: String,
-        val videoUrl: String
+        val videoUrl: String,
+        val anilistId: Int,
+        val episode: String,
+        val fromSecond: Int,
+        val sources: Set<String>
     )
 }

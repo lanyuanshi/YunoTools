@@ -48,13 +48,26 @@
             app:strokeColor="#FFFFFFFF"
             app:strokeWidth="2dp">
 
-            <ImageView
-                android:id="@+id/ivTitleAvatar"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:padding="13dp"
-                android:scaleType="centerCrop"
-                android:src="@drawable/ic_profile" />
+                android:layout_height="match_parent">
+
+                <ImageView
+                    android:id="@+id/ivTitleAvatar"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="13dp"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_profile" />
+
+                <androidx.media3.ui.PlayerView
+                    android:id="@+id/pvTitleAvatar"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    app:resize_mode="zoom"
+                    app:use_controller="false" />
+            </FrameLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 

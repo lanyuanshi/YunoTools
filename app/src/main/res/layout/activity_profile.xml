@@ -66,6 +66,14 @@
                             android:padding="18dp"
                             android:scaleType="centerCrop"
                             android:src="@drawable/ic_profile" />
+
+                        <androidx.media3.ui.PlayerView
+                            android:id="@+id/pvProfileEntryAvatar"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:visibility="gone"
+                            app:resize_mode="zoom"
+                            app:use_controller="false" />
                     </FrameLayout>
 
                     <LinearLayout

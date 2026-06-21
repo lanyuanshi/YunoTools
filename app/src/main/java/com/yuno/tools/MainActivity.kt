@@ -148,6 +148,8 @@ class MainActivity : AppCompatActivity() {
 
     private var currentTab = MainTab.HOME
     private var avatarPlayer: ExoPlayer? = null
+    private var titleAvatarPlayer: ExoPlayer? = null
+    private var profileEntryAvatarPlayer: ExoPlayer? = null
     private var musicPlayer: ExoPlayer? = null
     private var musicSpinAnimator: ObjectAnimator? = null
     private var navBarsAnimator: ValueAnimator? = null
@@ -174,6 +176,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private var refreshLyricsView: ((CharSequence) -> Unit)? = null
+    private var refreshLyricBeatView: ((CharSequence) -> Unit)? = null
     private var bounceLyricsView: (() -> Unit)? = null
     private var refreshPlayerPanelState: (() -> Unit)? = null
     private var refreshMusicProgressView: (() -> Unit)? = null
@@ -633,83 +636,75 @@ class MainActivity : AppCompatActivity() {
                 if (state.isVip) "VIP会员 · ${AccountStore.vipText(state)} · ${state.points}积分" else "普通用户 · ${state.points}积分 · 进入管理账号"
             } else "进入后管理头像、登录、会员、签到"
             val iv = findViewById<ImageView>(R.id.ivProfileEntryAvatar)
-            val uriText = UserSettingsStore.getAvatarUri(this)
-            iv.post {
-                iv.imageTintList = null
-                iv.clearColorFilter()
-                Glide.with(iv).clear(iv)
-                if (uriText.isNotBlank()) {
-                    val uri = Uri.parse(uriText)
-                    val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
-                    if (isVideo) {
-                        iv.setImageResource(R.drawable.ic_profile)
-                        iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                        iv.setPadding(dp(18), dp(18), dp(18), dp(18))
-                    } else {
-                        iv.imageTintList = null
-                        iv.clearColorFilter()
-                        iv.setPadding(0, 0, 0, 0)
-                        iv.scaleType = ImageView.ScaleType.CENTER_CROP
-                        Glide.with(iv)
-                            .load(uri)
-                            .signature(ObjectKey(uriText + "#" + System.currentTimeMillis()))
-                            .skipMemoryCache(true)
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
-                            .circleCrop()
-                            .dontAnimate()
-                            .placeholder(R.drawable.bg_circle_blue)
-                            .error(R.drawable.ic_profile)
-                            .into(iv)
-                    }
-                } else {
-                    iv.setImageResource(R.drawable.ic_profile)
-                    iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                    iv.setPadding(dp(18), dp(18), dp(18), dp(18))
-                }
-            }
+            val pv = findViewById<PlayerView>(R.id.pvProfileEntryAvatar)
+            iv.post { renderAvatarInto(iv, pv, 18, AvatarSlot.PROFILE_ENTRY) }
         }
     }
 
     private fun updateHomeProfileEntry() {
         runCatching {
-            val uriText = UserSettingsStore.getAvatarUri(this)
             val iv = findViewById<ImageView>(R.id.ivTitleAvatar)
-            // 首页右上角头像需要在视图恢复显示后强制重载，避免 XML tint / Glide 缓存残留导致仍显示默认头像
-            iv.post {
-                iv.imageTintList = null
-                iv.clearColorFilter()
-                Glide.with(iv).clear(iv)
-                if (uriText.isNotBlank()) {
-                    val uri = Uri.parse(uriText)
-                    val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
-                    if (isVideo) {
-                        iv.setImageResource(R.drawable.ic_profile)
-                        iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                        iv.setPadding(dp(14), dp(14), dp(14), dp(14))
-                        iv.scaleType = ImageView.ScaleType.CENTER
-                    } else {
-                        iv.imageTintList = null
-                        iv.clearColorFilter()
-                        iv.setPadding(0, 0, 0, 0)
-                        iv.scaleType = ImageView.ScaleType.CENTER_CROP
-                        Glide.with(iv)
-                            .load(uri)
-                            .signature(ObjectKey(uriText + "#homeTitle#" + System.currentTimeMillis()))
-                            .skipMemoryCache(true)
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
-                            .circleCrop()
-                            .dontAnimate()
-                            .placeholder(R.drawable.bg_circle_blue)
-                            .error(R.drawable.ic_profile)
-                            .into(iv)
-                    }
-                } else {
-                    iv.setImageResource(R.drawable.ic_profile)
-                    iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-                    iv.setPadding(dp(14), dp(14), dp(14), dp(14))
-                    iv.scaleType = ImageView.ScaleType.CENTER
-                }
+            val pv = findViewById<PlayerView>(R.id.pvTitleAvatar)
+            iv.post { renderAvatarInto(iv, pv, 14, AvatarSlot.TITLE) }
+        }
+    }
+
+    private enum class AvatarSlot { TITLE, PROFILE_ENTRY, PERSONAL }
+
+    private fun renderAvatarInto(iv: ImageView, pv: PlayerView?, defaultPaddingDp: Int, slot: AvatarSlot) {
+        val uriText = UserSettingsStore.getAvatarUri(this)
+        iv.imageTintList = null
+        iv.clearColorFilter()
+        Glide.with(iv).clear(iv)
+        if (uriText.isBlank()) {
+            releaseAvatarPlayer(slot)
+            pv?.visibility = View.GONE
+            iv.visibility = View.VISIBLE
+            iv.setImageResource(R.drawable.ic_profile)
+            iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
+            iv.setPadding(dp(defaultPaddingDp), dp(defaultPaddingDp), dp(defaultPaddingDp), dp(defaultPaddingDp))
+            iv.scaleType = ImageView.ScaleType.CENTER
+            return
+        }
+        val uri = Uri.parse(uriText)
+        val isVideo = runCatching { contentResolver.getType(uri)?.startsWith("video/") == true }.getOrDefault(false)
+        if (isVideo && pv != null) {
+            releaseAvatarPlayer(slot)
+            iv.visibility = View.GONE
+            pv.visibility = View.VISIBLE
+            val player = ExoPlayer.Builder(this).build().also { player ->
+                player.volume = 0f
+                player.repeatMode = Player.REPEAT_MODE_ONE
+                player.setMediaItem(MediaItem.fromUri(uri))
+                pv.player = player
+                player.prepare()
+                player.playWhenReady = true
             }
+            setAvatarPlayer(slot, player)
+        } else {
+            releaseAvatarPlayer(slot)
+            pv?.visibility = View.GONE
+            iv.visibility = View.VISIBLE
+            iv.setPadding(0, 0, 0, 0)
+            iv.scaleType = ImageView.ScaleType.CENTER_CROP
+            Glide.with(iv)
+                .load(uri)
+                .signature(ObjectKey(uriText + "#" + slot.name + "#" + System.currentTimeMillis()))
+                .skipMemoryCache(true)
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .circleCrop()
+                .dontAnimate()
+                .placeholder(R.drawable.bg_circle_blue)
+                .error(R.drawable.ic_profile)
+                .into(iv)
+        }
+    }
+
+    private fun setAvatarPlayer(slot: AvatarSlot, player: ExoPlayer?) {
+        when (slot) {
+            AvatarSlot.TITLE -> titleAvatarPlayer = player
+            AvatarSlot.PROFILE_ENTRY -> profileEntryAvatarPlayer = player
+            AvatarSlot.PERSONAL -> avatarPlayer = player
         }
     }
 
@@ -1482,6 +1477,15 @@ class MainActivity : AppCompatActivity() {
         optionRow.addView(randomBtn)
         optionRow.addView(loopBtn)
         nowPlayingCard.addView(optionRow)
+        val lyricBeatText = TextView(this).apply {
+            text = buildLyricBeatDisplay()
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(lyricHighlightColor())
+            setPadding(0, (8 * density).toInt(), 0, 0)
+        }
+        nowPlayingCard.addView(lyricBeatText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val lyricsText = TextView(this).apply {
             text = currentLyricsText
             textSize = 12f
@@ -1490,7 +1494,7 @@ class MainActivity : AppCompatActivity() {
             ellipsize = null
             setTextColor(Color.parseColor("#5F6673"))
             gravity = Gravity.CENTER
-            setPadding((10 * density).toInt(), (8 * density).toInt(), (10 * density).toInt(), 0)
+            setPadding((10 * density).toInt(), (4 * density).toInt(), (10 * density).toInt(), 0)
         }
         nowPlayingCard.addView(lyricsText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         fun syncPanelState() {
@@ -1501,11 +1505,16 @@ class MainActivity : AppCompatActivity() {
             randomBtn.background = pillBackground(musicShuffleEnabled)
             loopBtn.isSelected = musicRepeatMode == Player.REPEAT_MODE_ONE
             loopBtn.background = pillBackground(musicRepeatMode == Player.REPEAT_MODE_ONE)
+            lyricBeatText.text = buildLyricBeatDisplay()
             lyricsText.text = buildLyricsDisplay()
             syncMusicProgress(progressView, currentTimeText, totalTimeText)
         }
-        refreshMusicProgressView = { syncMusicProgress(progressView, currentTimeText, totalTimeText) }
+        refreshMusicProgressView = {
+            syncMusicProgress(progressView, currentTimeText, totalTimeText)
+            lyricBeatText.text = buildLyricBeatDisplay()
+        }
         refreshLyricsView = { text -> lyricsText.text = text }
+        refreshLyricBeatView = { text -> lyricBeatText.text = text }
         bounceLyricsView = {
             lyricsText.animate().cancel()
             lyricsText.scaleX = 0.97f
@@ -1529,6 +1538,7 @@ class MainActivity : AppCompatActivity() {
                 refreshMusicProgressView = null
                 refreshPlayerPanelState = null
                 refreshLyricsView = null
+                refreshLyricBeatView = null
                 bounceLyricsView = null
             }
         }
@@ -2560,8 +2570,26 @@ class MainActivity : AppCompatActivity() {
         val index = lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
         val changedLine = index != currentLyricIndex
         if (changedLine) currentLyricIndex = index
+        refreshLyricBeatView?.invoke(buildLyricBeatDisplay(position))
         refreshLyricsView?.invoke(buildLyricsDisplay(position, index))
         if (changedLine) bounceLyricsView?.invoke()
+    }
+
+    private fun buildLyricBeatDisplay(position: Long = (musicPlayer?.currentPosition ?: 0L).coerceAtLeast(0L)): CharSequence {
+        val playing = musicPlayer?.isPlaying == true
+        val level = if (playing) currentMusicDynamicLevel() else 0.28f
+        val phase = ((position / 170L) % 4L).toInt()
+        val notes = listOf("♪", "♫", "♬", "♩")
+        val full = notes.joinToString("  ")
+        val active = phase.coerceIn(0, notes.lastIndex)
+        val start = notes.take(active).sumOf { it.length + 2 }.coerceAtMost(full.length)
+        val end = (start + notes[active].length).coerceAtMost(full.length)
+        return SpannableString(full).apply {
+            val base = lyricHighlightColor()
+            setSpan(ForegroundColorSpan(Color.parseColor("#9AA4B2")), 0, full.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val activeColor = blendColor(base, Color.WHITE, (0.18f + level * 0.36f).coerceIn(0f, 0.58f))
+            setSpan(ForegroundColorSpan(activeColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
     }
 
     private fun buildLyricsDisplay(
@@ -2788,53 +2816,39 @@ class MainActivity : AppCompatActivity() {
     private fun loadAvatar() {
         val iv = findViewById<ImageView>(R.id.ivAvatar)
         val pv = findViewById<PlayerView>(R.id.pvAvatar)
-        val uriText = UserSettingsStore.getAvatarUri(this)
-        iv.imageTintList = null
-        iv.clearColorFilter()
-        iv.setPadding(0, 0, 0, 0)
-        if (uriText.isNotBlank()) {
-            val uri = Uri.parse(uriText)
-            val isVideo = contentResolver.getType(uri)?.startsWith("video/") == true
-            if (isVideo) {
-                Glide.with(iv).clear(iv)
-                iv.setImageResource(R.drawable.bg_circle_blue)
-                iv.imageTintList = null
-                pv.visibility = View.VISIBLE
-                releaseAvatarPlayer()
-                avatarPlayer = ExoPlayer.Builder(this).build().also { player ->
-                    player.volume = 0f
-                    player.repeatMode = Player.REPEAT_MODE_ONE
-                    player.setMediaItem(MediaItem.fromUri(uri))
-                    pv.player = player
-                    player.prepare()
-                    player.playWhenReady = true
-                }
-            } else {
-                releaseAvatarPlayer()
-                pv.visibility = View.GONE
-                Glide.with(iv)
-                    .load(uri)
-                    .circleCrop()
-                    .placeholder(R.drawable.bg_circle_blue)
-                    .error(R.drawable.ic_profile)
-                    .into(iv)
-            }
-            findViewById<TextView>(R.id.tvAvatarHint).text = "点击更换头像，支持 GIF / WebP / 视频动态头像"
+        renderAvatarInto(iv, pv, 18, AvatarSlot.PERSONAL)
+        findViewById<TextView>(R.id.tvAvatarHint).text = if (UserSettingsStore.getAvatarUri(this).isNotBlank()) {
+            "点击更换头像，支持 GIF / WebP / 视频动态头像"
         } else {
-            releaseAvatarPlayer()
-            pv.visibility = View.GONE
-            Glide.with(iv).clear(iv)
-            iv.setImageResource(R.drawable.ic_profile)
-            iv.imageTintList = ColorStateList.valueOf(Color.WHITE)
-            findViewById<TextView>(R.id.tvAvatarHint).text = "点击选择头像，支持 GIF / WebP / 视频动态头像"
+            "点击选择头像，支持 GIF / WebP / 视频动态头像"
         }
     }
 
-    private fun releaseAvatarPlayer() {
-        val pv = runCatching { findViewById<PlayerView>(R.id.pvAvatar) }.getOrNull()
-        pv?.player = null
-        avatarPlayer?.release()
-        avatarPlayer = null
+    private fun releaseAvatarPlayer(slot: AvatarSlot? = null) {
+        fun releasePersonal() {
+            val pv = runCatching { findViewById<PlayerView>(R.id.pvAvatar) }.getOrNull()
+            pv?.player = null
+            avatarPlayer?.release()
+            avatarPlayer = null
+        }
+        fun releaseTitle() {
+            val pv = runCatching { findViewById<PlayerView>(R.id.pvTitleAvatar) }.getOrNull()
+            pv?.player = null
+            titleAvatarPlayer?.release()
+            titleAvatarPlayer = null
+        }
+        fun releaseProfileEntry() {
+            val pv = runCatching { findViewById<PlayerView>(R.id.pvProfileEntryAvatar) }.getOrNull()
+            pv?.player = null
+            profileEntryAvatarPlayer?.release()
+            profileEntryAvatarPlayer = null
+        }
+        when (slot) {
+            AvatarSlot.TITLE -> releaseTitle()
+            AvatarSlot.PROFILE_ENTRY -> releaseProfileEntry()
+            AvatarSlot.PERSONAL -> releasePersonal()
+            null -> { releasePersonal(); releaseTitle(); releaseProfileEntry() }
+        }
     }
 
     private fun playProfileEntranceBounce() {

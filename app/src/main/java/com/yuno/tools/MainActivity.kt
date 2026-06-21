@@ -1479,16 +1479,18 @@ class MainActivity : AppCompatActivity() {
         nowPlayingCard.addView(optionRow)
         val lyricBeatText = TextView(this).apply {
             text = buildLyricBeatDisplay()
-            textSize = 18f
-            typeface = Typeface.DEFAULT_BOLD
+            textSize = 15f
+            typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
             setTextColor(lyricHighlightColor())
-            setPadding(0, (8 * density).toInt(), 0, 0)
+            includeFontPadding = false
+            setPadding((10 * density).toInt(), (8 * density).toInt(), (10 * density).toInt(), 0)
         }
         nowPlayingCard.addView(lyricBeatText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val lyricsText = TextView(this).apply {
             text = currentLyricsText
             textSize = 12f
+            typeface = Typeface.MONOSPACE
             setLineSpacing(2f * density, 1.08f)
             maxLines = 4
             ellipsize = null
@@ -2575,20 +2577,24 @@ class MainActivity : AppCompatActivity() {
         if (changedLine) bounceLyricsView?.invoke()
     }
 
-    private fun buildLyricBeatDisplay(position: Long = (musicPlayer?.currentPosition ?: 0L).coerceAtLeast(0L)): CharSequence {
-        val playing = musicPlayer?.isPlaying == true
-        val level = if (playing) currentMusicDynamicLevel() else 0.28f
-        val phase = ((position / 170L) % 4L).toInt()
-        val notes = listOf("♪", "♫", "♬", "♩")
-        val full = notes.joinToString("  ")
-        val active = phase.coerceIn(0, notes.lastIndex)
-        val start = notes.take(active).sumOf { it.length + 2 }.coerceAtMost(full.length)
-        val end = (start + notes[active].length).coerceAtMost(full.length)
+    private fun buildLyricBeatDisplay(position: Long = ((musicPlayer?.currentPosition ?: 0L) + LYRIC_SYNC_LEAD_MS).coerceAtLeast(0L)): CharSequence {
+        val lines = currentTimedLyrics
+        if (lines.isEmpty() || currentLyricsKey == null) return "♪"
+        val safeIndex = currentLyricIndex.coerceAtLeast(0).coerceAtMost(lines.lastIndex)
+        val current = lines.getOrNull(safeIndex)?.text.orEmpty()
+        if (current.isBlank()) return "♪"
+        val lineStartMs = lines[safeIndex].timeMs
+        val lineEndMs = lines.getOrNull(safeIndex + 1)?.timeMs ?: (lineStartMs + 3200L)
+        val duration = (lineEndMs - lineStartMs).coerceAtLeast(900L)
+        val progress = ((position - lineStartMs).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+        val charIndex = ((current.length - 1) * progress).roundToInt().coerceIn(0, current.lastIndex)
+        val phase = ((position / 160L) % 4L).toInt()
+        val note = listOf("♪", "♫", "♬", "♩")[phase]
+        val full = "  ".repeat(charIndex) + note
         return SpannableString(full).apply {
             val base = lyricHighlightColor()
-            setSpan(ForegroundColorSpan(Color.parseColor("#9AA4B2")), 0, full.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            val activeColor = blendColor(base, Color.WHITE, (0.18f + level * 0.36f).coerceIn(0f, 0.58f))
-            setSpan(ForegroundColorSpan(activeColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val level = if (musicPlayer?.isPlaying == true) currentMusicDynamicLevel() else 0.3f
+            setSpan(ForegroundColorSpan(blendColor(base, Color.WHITE, (0.18f + level * 0.38f).coerceIn(0f, 0.62f))), full.length - note.length, full.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
 

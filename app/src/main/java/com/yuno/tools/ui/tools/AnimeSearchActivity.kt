@@ -78,14 +78,14 @@ class AnimeSearchActivity : AppCompatActivity() {
             try {
                 val rawBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw IOException("无法读取图片")
-                val bytes = prepareSearchImage(rawBytes)
-                val results = searchTraceMoeAccurate(bytes)
+                val variants = buildSearchVariants(rawBytes)
+                val results = searchTraceMoeAccurate(variants)
                 if (results.isEmpty()) throw IOException("没有找到可靠匹配，请换一张原视频截图，尽量避开字幕、弹幕、拼图和二创图")
 
                 runOnUiThread {
                     runCatching {
                         val best = results.maxOfOrNull { it.similarity } ?: 0
-                        status.text = "搜索完成 · 最佳匹配 $best% · 已过滤明显低概率结果"
+                        status.text = "搜索完成 · ${variants.size} 组画面候选 · 最佳匹配 $best%"
                         renderResults(results)
                     }.onFailure { err ->
                         status.text = "结果渲染失败"
@@ -118,37 +118,64 @@ class AnimeSearchActivity : AppCompatActivity() {
 
     private fun String.hasChinese(): Boolean = any { it.code in 0x4E00..0x9FFF }
 
-    private fun prepareSearchImage(raw: ByteArray): ByteArray {
-        val bitmap = BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return raw
-        val maxSide = maxOf(bitmap.width, bitmap.height)
-        val normalized = if (maxSide > 1600) {
-            val scale = 1600f / maxSide
-            Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).roundToInt(), (bitmap.height * scale).roundToInt(), true)
-        } else bitmap
-        return ByteArrayOutputStream().use { out ->
-            normalized.compress(Bitmap.CompressFormat.JPEG, 92, out)
-            out.toByteArray().takeIf { it.isNotEmpty() } ?: raw
-        }
+    private fun buildSearchVariants(raw: ByteArray): List<Pair<String, ByteArray>> {
+        val bitmap = BitmapFactory.decodeByteArray(raw, 0, raw.size) ?: return listOf("原图" to raw)
+        val normalized = normalizeBitmap(bitmap)
+        val variants = mutableListOf<Pair<String, Bitmap>>()
+        variants += "原图" to normalized
+        variants += "去字幕主体" to cropPercent(normalized, 0.08f, 0.04f, 0.84f, 0.72f)
+        variants += "中心角色" to cropPercent(normalized, 0.24f, 0.02f, 0.56f, 0.76f)
+        variants += "去黑边宽屏" to cropPercent(normalized, 0.10f, 0.02f, 0.80f, 0.82f)
+        variants += "上半画面" to cropPercent(normalized, 0.12f, 0.00f, 0.76f, 0.62f)
+        return variants.distinctBy { "${it.second.width}x${it.second.height}_${it.first}" }
+            .map { it.first to jpegBytes(it.second) }
+            .filter { it.second.isNotEmpty() }
     }
 
-    private fun searchTraceMoeAccurate(bytes: ByteArray): List<AnimeMatch> {
+    private fun normalizeBitmap(bitmap: Bitmap): Bitmap {
+        val maxSide = maxOf(bitmap.width, bitmap.height)
+        if (maxSide <= 1600) return bitmap
+        val scale = 1600f / maxSide
+        return Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).roundToInt(), (bitmap.height * scale).roundToInt(), true)
+    }
+
+    private fun cropPercent(bitmap: Bitmap, x: Float, y: Float, w: Float, h: Float): Bitmap {
+        val left = (bitmap.width * x).roundToInt().coerceIn(0, bitmap.width - 1)
+        val top = (bitmap.height * y).roundToInt().coerceIn(0, bitmap.height - 1)
+        val width = (bitmap.width * w).roundToInt().coerceIn(1, bitmap.width - left)
+        val height = (bitmap.height * h).roundToInt().coerceIn(1, bitmap.height - top)
+        return Bitmap.createBitmap(bitmap, left, top, width, height)
+    }
+
+    private fun jpegBytes(bitmap: Bitmap): ByteArray = ByteArrayOutputStream().use { out ->
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 94, out)
+        out.toByteArray()
+    }
+
+    private fun searchTraceMoeAccurate(variants: List<Pair<String, ByteArray>>): List<AnimeMatch> {
         val merged = mutableMapOf<String, AnimeMatch>()
-        listOf(false, true).forEach { cutBorders ->
-            requestTraceMoe(bytes, cutBorders).forEach { match ->
-                val key = match.matchKey()
-                val old = merged[key]
-                merged[key] = if (old == null) match else old.copy(
-                    similarity = maxOf(old.similarity, (match.similarity + 4).coerceAtMost(100)),
-                    sources = old.sources + match.sources
-                )
+        variants.forEach { (variantName, bytes) ->
+            listOf(false, true).forEach { cutBorders ->
+                runCatching { requestTraceMoe(bytes, cutBorders, variantName) }.getOrDefault(emptyList()).forEach { match ->
+                    val key = match.matchKey()
+                    val old = merged[key]
+                    merged[key] = if (old == null) match else old.copy(
+                        similarity = maxOf(old.similarity, (match.similarity + old.sources.size * 3 + 5).coerceAtMost(100)),
+                        sources = old.sources + match.sources
+                    )
+                }
             }
         }
-        val ranked = merged.values.sortedWith(compareByDescending<AnimeMatch> { it.similarity }.thenByDescending { it.sources.size })
-        val reliable = ranked.filter { it.similarity >= 72 || it.sources.size > 1 }
-        return (reliable.ifEmpty { ranked.take(3) }).take(8).mapIndexed { index, item -> item.copy(rank = index + 1) }
+        val ranked = merged.values.sortedWith(
+            compareByDescending<AnimeMatch> { it.sources.size }
+                .thenByDescending { it.similarity }
+                .thenBy { it.rank }
+        )
+        val reliable = ranked.filter { it.similarity >= 70 || it.sources.size >= 2 }
+        return (reliable.ifEmpty { ranked.take(5) }).take(8).mapIndexed { index, item -> item.copy(rank = index + 1) }
     }
 
-    private fun requestTraceMoe(bytes: ByteArray, cutBorders: Boolean): List<AnimeMatch> {
+    private fun requestTraceMoe(bytes: ByteArray, cutBorders: Boolean, variantName: String): List<AnimeMatch> {
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart(
                 "image",
@@ -164,7 +191,7 @@ class AnimeSearchActivity : AppCompatActivity() {
         val request = Request.Builder()
             .url(url)
             .post(body)
-            .addHeader("User-Agent", "YunoTools/1.2.11")
+            .addHeader("User-Agent", "YunoTools/1.2.12")
             .build()
 
         client.newCall(request).execute().use { response ->
@@ -204,7 +231,7 @@ class AnimeSearchActivity : AppCompatActivity() {
                     anilistId = anilist?.optInt("id", 0) ?: 0,
                     episode = episode,
                     fromSecond = from.roundToInt(),
-                    sources = setOf(if (cutBorders) "裁边识别" else "原图识别")
+                    sources = setOf("$variantName/${if (cutBorders) "裁边" else "原图"}")
                 )
             }
             return list

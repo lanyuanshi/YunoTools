@@ -172,7 +172,7 @@ class MainActivity : AppCompatActivity() {
     private val lyricsTicker = object : Runnable {
         override fun run() {
             updateFlowingLyrics()
-            lyricsHandler.postDelayed(this, 180L)
+            lyricsHandler.postDelayed(this, 16L)
         }
     }
     private var refreshLyricsView: ((CharSequence) -> Unit)? = null
@@ -185,7 +185,7 @@ class MainActivity : AppCompatActivity() {
     private val musicProgressTicker = object : Runnable {
         override fun run() {
             refreshMusicProgressView?.invoke()
-            musicProgressHandler.postDelayed(this, 250L)
+            musicProgressHandler.postDelayed(this, 33L)
         }
     }
     private var refreshOnlineMusicList: (() -> Unit)? = null
@@ -2234,7 +2234,8 @@ class MainActivity : AppCompatActivity() {
 
             val baseOffset = -16f * density
             val baseline = height * 0.58f + baseOffset + manualOffset
-            val noteRestY = baseline - 28f * density
+            val lyricTop = baseline + lyricPaint.fontMetrics.ascent
+            val noteRestY = lyricTop - notePaint.fontMetrics.descent + 1.5f * density
             val display = text.take(30)
             val totalWidth = lyricPaint.measureText(display).coerceAtLeast(1f)
             val startX = centerX - totalWidth / 2f
@@ -2246,14 +2247,13 @@ class MainActivity : AppCompatActivity() {
                 val lineEnd = lines.getOrNull(safe + 1)?.timeMs ?: (lineStart + 3200L)
                 val duration = (lineEnd - lineStart).coerceAtLeast(900L)
                 val progress = ((positionMs - lineStart).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-                val charFloat = progress * display.length.coerceAtLeast(1)
+                val charSpan = (display.length - 1).coerceAtLeast(1)
+                val charFloat = progress * charSpan
                 val charIndex = kotlin.math.floor(charFloat).toInt().coerceIn(0, display.lastIndex)
                 val localProgress = (charFloat - kotlin.math.floor(charFloat)).coerceIn(0f, 1f)
-                val highlightChars = (charIndex + 1).coerceIn(1, display.length)
-                val highlightText = display.take(highlightChars)
 
                 canvas.save()
-                canvas.clipRect(startX, 0f, startX + lyricPaint.measureText(highlightText), height.toFloat())
+                canvas.clipRect(startX, 0f, startX + totalWidth * progress, height.toFloat())
                 canvas.drawText(display, centerX, baseline, highlightPaint)
                 canvas.restore()
 
@@ -2264,16 +2264,18 @@ class MainActivity : AppCompatActivity() {
                 }
                 val currentCenter = charCenterAt(charIndex)
                 val nextCenter = charCenterAt((charIndex + 1).coerceAtMost(display.lastIndex))
-                val eased = (1f - kotlin.math.cos(localProgress * Math.PI).toFloat()) / 2f
-                val charCenter = currentCenter + (nextCenter - currentCenter) * eased
-                val jump = if (playing) kotlin.math.sin(localProgress * Math.PI).toFloat().coerceAtLeast(0f) * 16f * density else 0f
-                val squash = if (playing && localProgress > 0.82f) (localProgress - 0.82f) / 0.18f else 0f
-                notePaint.textScaleX = 1f + squash * 0.18f
+                val smoothStep = localProgress * localProgress * (3f - 2f * localProgress)
+                val charCenter = currentCenter + (nextCenter - currentCenter) * smoothStep
+                val jumpWave = kotlin.math.sin(localProgress * Math.PI).toFloat().coerceAtLeast(0f)
+                val jump = if (playing) jumpWave * 10f * density else 0f
+                val landing = if (playing) (1f - localProgress).coerceIn(0f, 1f).let { if (it < 0.18f) 1f - it / 0.18f else 0f } else 0f
+                notePaint.textScaleX = 1f + landing * 0.1f
                 canvas.save()
-                canvas.scale(1f, 1f - squash * 0.12f, charCenter, noteRestY)
+                canvas.scale(1f, 1f - landing * 0.08f, charCenter, noteRestY)
                 canvas.drawText("♪", charCenter, noteRestY - jump, notePaint)
                 canvas.restore()
                 notePaint.textScaleX = 1f
+                if (playing) postInvalidateOnAnimation()
             } else {
                 canvas.drawText("♪", centerX, noteRestY, notePaint)
             }

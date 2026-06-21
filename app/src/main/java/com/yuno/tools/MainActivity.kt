@@ -2589,8 +2589,39 @@ class MainActivity : AppCompatActivity() {
         val progress = ((position - lineStartMs).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
         val highlightEnd = (currentStart + max(1, (current.length * progress).roundToInt())).coerceAtMost(currentEnd)
         return SpannableString(full).apply {
-            setSpan(ForegroundColorSpan(lyricHighlightColor()), currentStart, highlightEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            applyFlowingLyricSpans(this, currentStart, highlightEnd, currentEnd, progress)
         }
+    }
+
+    private fun applyFlowingLyricSpans(text: SpannableString, start: Int, highlightEnd: Int, lineEnd: Int, progress: Float) {
+        if (start >= highlightEnd) return
+        val base = lyricHighlightColor()
+        val bright = lightenColor(base, 0.34f)
+        val dim = blendColor(base, Color.WHITE, 0.52f)
+        val spanCount = (highlightEnd - start).coerceAtLeast(1)
+        for (i in start until highlightEnd) {
+            val local = (i - start).toFloat() / spanCount.toFloat()
+            val wave = ((kotlin.math.sin((local * 8.0 + progress * 10.0).toDouble()) + 1.0) / 2.0).toFloat()
+            val color = when {
+                local > progress - 0.08f && local < progress + 0.08f -> bright
+                wave > 0.72f -> blendColor(base, bright, 0.42f)
+                else -> blendColor(dim, base, (0.45f + wave * 0.45f).coerceIn(0f, 1f))
+            }
+            text.setSpan(ForegroundColorSpan(color), i, i + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        if (highlightEnd < lineEnd) {
+            text.setSpan(ForegroundColorSpan(Color.parseColor("#8A94A6")), highlightEnd, lineEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+    }
+
+    private fun lightenColor(color: Int, ratio: Float): Int = blendColor(color, Color.WHITE, ratio.coerceIn(0f, 1f))
+
+    private fun blendColor(from: Int, to: Int, ratio: Float): Int {
+        val t = ratio.coerceIn(0f, 1f)
+        val r = (Color.red(from) + (Color.red(to) - Color.red(from)) * t).roundToInt().coerceIn(0, 255)
+        val g = (Color.green(from) + (Color.green(to) - Color.green(from)) * t).roundToInt().coerceIn(0, 255)
+        val b = (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t).roundToInt().coerceIn(0, 255)
+        return Color.rgb(r, g, b)
     }
 
     private fun lyricHighlightColor(): Int = when (UserSettingsStore.getLyricHighlightStyle(this)) {
@@ -2822,9 +2853,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ThemeApplier.apply(this)
-        updateHomeProfileEntry()
+        syncProfileAvatarEntries()
         updateNavSelection(currentTab, animate = false)
-        if (currentTab == MainTab.PROFILE) { updateProfileEntry() }
+    }
+
+    private fun syncProfileAvatarEntries() {
+        updateHomeProfileEntry()
+        updateProfileEntry()
+        findViewById<View>(R.id.cardTitleProfile).postDelayed({ updateHomeProfileEntry() }, 120L)
+        findViewById<View>(R.id.profilePage).postDelayed({ updateProfileEntry() }, 120L)
     }
 
     override fun onBackPressed() {

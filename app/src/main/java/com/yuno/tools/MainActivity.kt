@@ -68,11 +68,13 @@ import androidx.core.view.children
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.media.app.NotificationCompat.MediaStyle
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.signature.ObjectKey
 import com.google.android.material.card.MaterialCardView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
@@ -80,6 +82,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import androidx.media3.session.MediaSession
 import com.yuno.tools.data.UserSettingsStore
 import com.yuno.tools.data.AccountStore
 import com.yuno.tools.ui.video.VideoParseActivity
@@ -151,6 +154,7 @@ class MainActivity : AppCompatActivity() {
     private var titleAvatarPlayer: ExoPlayer? = null
     private var profileEntryAvatarPlayer: ExoPlayer? = null
     private var musicPlayer: ExoPlayer? = null
+    private var musicMediaSession: MediaSession? = null
     private var musicSpinAnimator: ObjectAnimator? = null
     private var navBarsAnimator: ValueAnimator? = null
     private var cardBarsAnimator: ValueAnimator? = null
@@ -923,14 +927,16 @@ class MainActivity : AppCompatActivity() {
                 .build()
         }.also { created ->
             musicPlayer = created
+            ensureMusicMediaSession(created)
             created.repeatMode = musicRepeatMode
             created.shuffleModeEnabled = musicShuffleEnabled
             val songUri = currentMusicUri ?: defaultLocalSongUri()
-            created.setMediaItem(MediaItem.fromUri(songUri))
+            created.setMediaItem(buildMusicMediaItem(currentMusicTitle, songUri))
             created.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     updateMusicNavState(isPlaying)
                     refreshPlayerPanelState?.invoke()
+                    updateMusicNotification(isPlaying)
                     if (isPlaying && loadingOnlinePlayKey != null) {
                         loadingOnlinePlayKey = null
                         refreshOnlineMusicList?.invoke()
@@ -967,6 +973,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun ensureMusicMediaSession(player: ExoPlayer): MediaSession {
+        return musicMediaSession ?: MediaSession.Builder(this, player)
+            .setId("YunoToolsMusicSession")
+            .build()
+            .also { musicMediaSession = it }
+    }
+
+    private fun buildMusicMediaItem(title: String, uri: Uri): MediaItem {
+        val songTitle = title.substringAfter(" · ", title).ifBlank { title }
+        val artist = title.substringBefore(" · ", "YunoTools").ifBlank { "YunoTools" }
+        val metadata = MediaMetadata.Builder()
+            .setTitle(songTitle)
+            .setArtist(artist)
+            .setAlbumTitle("YunoTools 音乐")
+            .build()
+        return MediaItem.Builder()
+            .setUri(uri)
+            .setMediaId(uri.toString())
+            .setMediaMetadata(metadata)
+            .build()
+    }
+
     private fun musicHttpHeaders(): Map<String, String> = mapOf(
         "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
         "Accept" to "*/*",
@@ -990,7 +1018,9 @@ class MainActivity : AppCompatActivity() {
         player.clearMediaItems()
         player.repeatMode = musicRepeatMode
         player.shuffleModeEnabled = musicShuffleEnabled
-        player.setMediaItem(MediaItem.fromUri(uri))
+        player.setMediaItem(buildMusicMediaItem(title, uri))
+        ensureMusicMediaSession(player)
+        updateMusicNotification(false)
         player.prepare()
         player.playWhenReady = true
         player.play()
@@ -2826,6 +2856,8 @@ class MainActivity : AppCompatActivity() {
         navBarsAnimator = null
         cardBarsAnimator?.cancel()
         cardBarsAnimator = null
+        musicMediaSession?.release()
+        musicMediaSession = null
         musicPlayer?.release()
         musicPlayer = null
         runCatching {
@@ -2859,6 +2891,7 @@ class MainActivity : AppCompatActivity() {
             manager.cancel(MUSIC_NOTIFICATION_ID)
             return
         }
+        val session = musicPlayer?.let { ensureMusicMediaSession(it) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -2883,7 +2916,10 @@ class MainActivity : AppCompatActivity() {
             .setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .apply {
+                session?.sessionCompatToken?.let { setStyle(MediaStyle().setMediaSession(it).setShowActionsInCompactView()) }
+            }
             .build()
         manager.notify(MUSIC_NOTIFICATION_ID, notification)
     }

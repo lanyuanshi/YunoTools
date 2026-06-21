@@ -25,6 +25,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -79,13 +80,14 @@ class AnimeSearchActivity : AppCompatActivity() {
                 val rawBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw IOException("无法读取图片")
                 val variants = buildSearchVariants(rawBytes)
-                val results = searchTraceMoeAccurate(variants)
+                val results = enrichChineseMetadata(searchTraceMoeAccurate(variants))
                 if (results.isEmpty()) throw IOException("没有找到可靠匹配，请换一张原视频截图，尽量避开字幕、弹幕、拼图和二创图")
 
                 runOnUiThread {
                     runCatching {
                         val best = results.maxOfOrNull { it.similarity } ?: 0
-                        status.text = "搜索完成 · ${variants.size} 组画面候选 · 最佳匹配 $best%"
+                        val cnCount = results.count { it.chineseTitle.isNotBlank() }
+                        status.text = "搜索完成 · ${variants.size} 组候选 · 最佳 $best% · 中文名 $cnCount/${results.size}"
                         renderResults(results)
                     }.onFailure { err ->
                         status.text = "结果渲染失败"
@@ -246,6 +248,82 @@ class AnimeSearchActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun enrichChineseMetadata(matches: List<AnimeMatch>): List<AnimeMatch> {
+        return matches.map { match ->
+            val bgm = findBangumiChinese(match)
+            if (bgm == null) match else match.copy(
+                chineseTitle = bgm.chineseTitle.ifBlank { match.chineseTitle },
+                aliases = (listOf(match.chineseTitle, bgm.name, bgm.chineseTitle) + match.aliases + bgm.aliases)
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() && it != match.title }
+                    .distinct()
+                    .take(12)
+            )
+        }
+    }
+
+    private fun findBangumiChinese(match: AnimeMatch): BangumiTitle? {
+        val queries = (listOf(match.title, match.chineseTitle) + match.aliases)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(5)
+        for (query in queries) {
+            val found = runCatching { searchBangumiSubject(query) }.getOrNull()
+            if (found != null && (found.chineseTitle.isNotBlank() || found.aliases.any { it.hasChinese() })) return found
+        }
+        return null
+    }
+
+    private fun searchBangumiSubject(keyword: String): BangumiTitle? {
+        val payload = JSONObject()
+            .put("keyword", keyword)
+            .put("filter", JSONObject().put("type", JSONArray().put(2)))
+        val request = Request.Builder()
+            .url("https://api.bgm.tv/v0/search/subjects?limit=5")
+            .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            .addHeader("User-Agent", "YunoTools/1.2.14 (Android; anime-search)")
+            .addHeader("Accept", "application/json")
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val root = JSONObject(response.body?.string().orEmpty())
+            val data = root.optJSONArray("data") ?: return null
+            for (i in 0 until data.length()) {
+                val item = data.optJSONObject(i) ?: continue
+                val title = parseBangumiTitle(item)
+                if (title.chineseTitle.isNotBlank() || title.aliases.any { it.hasChinese() }) return title
+            }
+        }
+        return null
+    }
+
+    private fun parseBangumiTitle(item: JSONObject): BangumiTitle {
+        val aliases = mutableListOf<String>()
+        val name = item.optString("name").orEmpty()
+        val nameCn = item.optString("name_cn").orEmpty()
+        item.optJSONArray("infobox")?.let { info ->
+            for (i in 0 until info.length()) {
+                val row = info.optJSONObject(i) ?: continue
+                val key = row.optString("key")
+                if (!key.contains("别名") && !key.contains("中文") && !key.contains("简体")) continue
+                val value = row.opt("value")
+                when (value) {
+                    is String -> aliases += value
+                    is JSONArray -> for (j in 0 until value.length()) {
+                        val v = value.opt(j)
+                        when (v) {
+                            is JSONObject -> aliases += v.optString("v")
+                            is String -> aliases += v
+                        }
+                    }
+                }
+            }
+        }
+        return BangumiTitle(name, nameCn, aliases.map { it.trim() }.filter { it.isNotBlank() }.distinct())
+    }
+
     private fun renderResults(results: List<AnimeMatch>) {
         val container = findViewById<LinearLayout>(R.id.llAnimeResults)
         container.removeAllViews()
@@ -362,4 +440,6 @@ class AnimeSearchActivity : AppCompatActivity() {
         val fromSecond: Int,
         val sources: Set<String>
     )
+
+    private data class BangumiTitle(val name: String, val chineseTitle: String, val aliases: List<String>)
 }

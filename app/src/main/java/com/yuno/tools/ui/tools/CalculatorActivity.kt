@@ -17,6 +17,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.log10
@@ -25,6 +28,11 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 class CalculatorActivity : AppCompatActivity() {
+    private companion object {
+        private const val DATE_PATTERN = "yyyy-MM-dd"
+        private const val DAY_MILLIS = 24L * 60L * 60L * 1000L
+    }
+
     private lateinit var expressionText: TextView
     private lateinit var resultText: TextView
     private lateinit var panel: LinearLayout
@@ -83,7 +91,7 @@ class CalculatorActivity : AppCompatActivity() {
                 "标准" to { showStandard() }, "科学" to { showScientific() }, "程序员" to { showProgrammer() },
                 "换算" to { showConverter() }, "日期" to { showDate() }, "房贷" to { showMortgage() },
                 "个税" to { showTax() }, "BMI" to { showBmi() }
-            ).forEach { (name, action) -> addView(tab(name, action)) }
+            ).forEach { (name, action) -> addView(tab(name) { safeRun("打开${name}计算器失败", action) }) }
         })
     }
 
@@ -146,18 +154,19 @@ class CalculatorActivity : AppCompatActivity() {
         val out = resultBox("相差天数")
         panel.addView(card("日期间隔", start, end, out, "计算", "#10B981") {
             runCatching {
-                val s = java.time.LocalDate.parse(start.text.toString().trim())
-                val e = java.time.LocalDate.parse(end.text.toString().trim())
-                val days = java.time.temporal.ChronoUnit.DAYS.between(s, e)
-                out.text = "相差：${abs(days)} 天\n开始：$s\n结束：$e"
+                val startCal = parseDate(start.text.toString().trim())
+                val endCal = parseDate(end.text.toString().trim())
+                val days = ((stripTime(endCal).timeInMillis - stripTime(startCal).timeInMillis) / DAY_MILLIS).toInt()
+                out.text = "相差：${abs(days)} 天\n开始：${formatDate(startCal)}\n结束：${formatDate(endCal)}"
             }.onFailure { toast("日期格式应为 yyyy-MM-dd") }
         })
-        val base = edit("基准日期 yyyy-MM-dd", java.time.LocalDate.now().toString())
+        val base = edit("基准日期 yyyy-MM-dd", todayDate())
         val add = edit("加减天数，例如 30 或 -7", "30")
         val out2 = resultBox("目标日期")
         panel.addView(card("日期加减", base, add, out2, "计算", "#F59E0B") {
             runCatching {
-                out2.text = java.time.LocalDate.parse(base.text.toString().trim()).plusDays(add.text.toString().trim().toLong()).toString()
+                val target = parseDate(base.text.toString().trim()).apply { add(Calendar.DAY_OF_MONTH, add.text.toString().trim().toInt()) }
+                out2.text = formatDate(target)
             }.onFailure { toast("请检查日期和天数") }
         })
     }
@@ -216,7 +225,7 @@ class CalculatorActivity : AppCompatActivity() {
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(if (key == "=") Color.WHITE else Color.parseColor("#111827"))
         background = rounded(if (key == "=") "#2563EB" else if (key in listOf("C", "⌫")) "#E0E7FF" else "#FFFFFF", 18)
-        setOnClickListener { handleKey(key) }
+        setOnClickListener { safeRun("按键处理失败") { handleKey(key) } }
     }
 
     private fun handleKey(key: String) {
@@ -264,7 +273,7 @@ class CalculatorActivity : AppCompatActivity() {
         layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) }
         addView(TextView(context).apply { text = title; textSize = 17f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#111827")); setPadding(0, 0, 0, dp(8)) })
         views.forEach { addView(it) }
-        addView(pill(buttonText, color, action), LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(10) })
+        addView(pill(buttonText, color) { safeRun("${title}失败", action) }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(10) })
     }
 
     private fun card(title: String, a: EditText, out: TextView, buttonText: String, color: String, action: () -> Unit): LinearLayout = card(title, a, out, buttonText = buttonText, color = color, action = action)
@@ -284,6 +293,17 @@ class CalculatorActivity : AppCompatActivity() {
     private fun monthlyTax(x: Double): Double = when { x <= 3000 -> x * .03; x <= 12000 -> x * .10 - 210; x <= 25000 -> x * .20 - 1410; x <= 35000 -> x * .25 - 2660; x <= 55000 -> x * .30 - 4410; x <= 80000 -> x * .35 - 7160; else -> x * .45 - 15160 }.coerceAtLeast(0.0)
     private fun copy(text: String) { (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("计算结果", text)); toast("已复制") }
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    private fun safeRun(message: String, action: () -> Unit) {
+        runCatching(action).onFailure { toast(message) }
+    }
+    private fun parseDate(value: String): Calendar = Calendar.getInstance().apply {
+        time = SimpleDateFormat(DATE_PATTERN, Locale.CHINA).apply { isLenient = false }.parse(value) ?: error("Invalid date")
+    }
+    private fun stripTime(calendar: Calendar): Calendar = (calendar.clone() as Calendar).apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
+    private fun formatDate(calendar: Calendar): String = SimpleDateFormat(DATE_PATTERN, Locale.CHINA).format(calendar.time)
+    private fun todayDate(): String = formatDate(Calendar.getInstance())
     private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt()
 
     private class ExpressionParser(private val source: String) {

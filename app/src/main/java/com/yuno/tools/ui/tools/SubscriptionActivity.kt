@@ -95,7 +95,7 @@ class SubscriptionActivity : AppCompatActivity() {
     }
 
     private fun copyModuleLink(module: SubscriptionModule) {
-        ClipboardUtil.copyToClipboard(this, module.link, "${module.title}订阅链接")
+        ClipboardUtil.copyToClipboard(this, module.link, "${module.title}链接")
         Toast.makeText(this, "已复制：${module.title}", Toast.LENGTH_SHORT).show()
     }
 
@@ -103,10 +103,10 @@ class SubscriptionActivity : AppCompatActivity() {
 
     companion object {
         private val modules = listOf(
-            SubscriptionModule("basic", "基础模块订阅", "适合日常基础功能使用", "YUNO_SUBSCRIPTION_BASIC_PENDING_LINK"),
-            SubscriptionModule("advanced", "进阶模块订阅", "包含更多增强功能入口", "YUNO_SUBSCRIPTION_ADVANCED_PENDING_LINK"),
-            SubscriptionModule("vip", "VIP模块订阅", "预留高级订阅通道", "YUNO_SUBSCRIPTION_VIP_PENDING_LINK"),
-            SubscriptionModule("backup", "备用模块订阅", "用于后续扩展或备用线路", "YUNO_SUBSCRIPTION_BACKUP_PENDING_LINK")
+            SubscriptionModule("basic", "基础订阅", "日常上网使用", "https://liangxin.xyz/api/v1/liangxin?OwO=c839e10adb16508d57094ce46ac80cdb"),
+            SubscriptionModule("advanced", "进阶订阅", "包含更多增强功能入口", "YUNO_SUBSCRIPTION_ADVANCED_PENDING_LINK"),
+            SubscriptionModule("vip", "VIP订阅", "预留高级订阅通道", "YUNO_SUBSCRIPTION_VIP_PENDING_LINK"),
+            SubscriptionModule("backup", "备用订阅", "用于后续扩展或备用线路", "YUNO_SUBSCRIPTION_BACKUP_PENDING_LINK")
         )
     }
 }

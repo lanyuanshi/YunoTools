@@ -38,6 +38,7 @@ class CalculatorActivity : AppCompatActivity() {
     private lateinit var resultText: TextView
     private lateinit var panel: LinearLayout
     private lateinit var tabRow: LinearLayout
+    private val tabButtons = mutableMapOf<String, Button>()
     private var expression = ""
     private var lastResult = ""
     private var activeMode = "标准"
@@ -94,20 +95,22 @@ class CalculatorActivity : AppCompatActivity() {
             "标准" to { showStandard() }, "科学" to { showScientific() }, "程序员" to { showProgrammer() },
             "换算" to { showConverter() }, "日期" to { showDate() }, "房贷" to { showMortgage() },
             "个税" to { showTax() }, "BMI" to { showBmi() }, "折扣" to { showDiscount() }, "小费" to { showTip() }
-        ).forEach { (name, action) -> tabRow.addView(tab(name) { switchMode(name, action) }) }
+        ).forEach { (name, action) ->
+            val button = tab(name) { switchMode(name, action) }
+            tabButtons[name] = button
+            tabRow.addView(button)
+        }
     }
 
     private fun switchMode(name: String, action: () -> Unit) {
         activeMode = name
-        safeRun("打开${name}计算器失败") { action() }
         refreshTabs()
+        safeRun("打开${name}计算器失败") { action() }
     }
 
     private fun refreshTabs() {
-        if (!::tabRow.isInitialized) return
-        for (i in 0 until tabRow.childCount) {
-            val btn = tabRow.getChildAt(i) as? Button ?: continue
-            val active = btn.text.toString() == activeMode
+        tabButtons.forEach { (name, btn) ->
+            val active = name == activeMode
             btn.setTextColor(Color.parseColor(if (active) "#FFFFFF" else "#111827"))
             btn.background = rounded(if (active) "#2563EB" else "#FFFFFF", 18)
         }

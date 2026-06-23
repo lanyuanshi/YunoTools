@@ -105,6 +105,9 @@
             android:name=".ui.tools.CalculatorActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.tools.DailyQuestionActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.tools.LevelToolActivity"
             android:screenOrientation="portrait" />
         <activity

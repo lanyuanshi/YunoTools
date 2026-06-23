@@ -37,6 +37,7 @@ class CalculatorActivity : AppCompatActivity() {
     private lateinit var expressionText: TextView
     private lateinit var resultText: TextView
     private lateinit var panel: LinearLayout
+    private lateinit var modeTitle: TextView
     private lateinit var tabRow: LinearLayout
     private val tabButtons = mutableMapOf<String, Button>()
     private var expression = ""
@@ -72,6 +73,16 @@ class CalculatorActivity : AppCompatActivity() {
         root.addView(expressionText, LinearLayout.LayoutParams(-1, -2))
         root.addView(resultText, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         root.addView(modeTabs())
+        modeTitle = TextView(this).apply {
+            text = "标准计算器"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#0F172A"))
+            background = rounded("#DBEAFE", 20)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }
+        }
+        root.addView(modeTitle)
         panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(panel)
         setContentView(ScrollView(this).apply { addView(root) })
@@ -104,6 +115,10 @@ class CalculatorActivity : AppCompatActivity() {
 
     private fun switchMode(name: String, action: () -> Unit) {
         activeMode = name
+        if (::modeTitle.isInitialized) {
+            modeTitle.text = "${name}计算器 · v1.2.30 已修复切换"
+            modeTitle.background = rounded(modeColor(name, light = true), 20)
+        }
         refreshTabs()
         safeRun("打开${name}计算器失败") { action() }
     }
@@ -112,8 +127,22 @@ class CalculatorActivity : AppCompatActivity() {
         tabButtons.forEach { (name, btn) ->
             val active = name == activeMode
             btn.setTextColor(Color.parseColor(if (active) "#FFFFFF" else "#111827"))
-            btn.background = rounded(if (active) "#2563EB" else "#FFFFFF", 18)
+            btn.background = rounded(if (active) modeColor(name) else "#FFFFFF", 18)
         }
+    }
+
+
+    private fun modeColor(name: String, light: Boolean = false): String = when (name) {
+        "标准" -> if (light) "#DBEAFE" else "#2563EB"
+        "科学" -> if (light) "#EDE9FE" else "#7C3AED"
+        "程序员" -> if (light) "#DCFCE7" else "#16A34A"
+        "换算" -> if (light) "#FEF3C7" else "#F59E0B"
+        "日期" -> if (light) "#CCFBF1" else "#0D9488"
+        "房贷" -> if (light) "#E0F2FE" else "#0284C7"
+        "个税" -> if (light) "#FCE7F3" else "#DB2777"
+        "BMI" -> if (light) "#DCFCE7" else "#10B981"
+        "折扣" -> if (light) "#FFE4E6" else "#E11D48"
+        else -> if (light) "#FFEDD5" else "#F97316"
     }
 
     private fun showStandard() {
@@ -130,6 +159,7 @@ class CalculatorActivity : AppCompatActivity() {
 
     private fun showProgrammer() {
         panel.removeAllViews()
+        panel.addView(tipBox("程序员模式已可打开：支持进制转换、AND / OR / XOR 和位移。"))
         val input = edit("输入十进制整数", "255")
         val out = resultBox("二进制 / 八进制 / 十六进制结果")
         panel.addView(card("进制转换", input, out, "转换", "#2563EB") {
@@ -148,6 +178,7 @@ class CalculatorActivity : AppCompatActivity() {
 
     private fun showConverter() {
         panel.removeAllViews()
+        panel.addView(tipBox("换算模式：长度、重量、温度、面积、速度都在这里。"))
         addConvert("长度", "米", listOf("厘米" to 100.0, "毫米" to 1000.0, "千米" to 0.001, "英寸" to 39.3700787, "英尺" to 3.2808399))
         addConvert("重量", "千克", listOf("克" to 1000.0, "吨" to 0.001, "斤" to 2.0, "磅" to 2.2046226, "盎司" to 35.2739619))
         addConvert("温度", "摄氏度", emptyList()) { v -> "华氏度：${fmt(v * 9 / 5 + 32)} °F\n开尔文：${fmt(v + 273.15)} K" }

@@ -6,9 +6,9 @@
 
 # YunoTools
 
-**当前版本：v1.2.29**
+**当前版本：v1.2.30**
 
-安装包下载：[release/YunoTools-v1.2.29.apk](release/YunoTools-v1.2.29.apk)
+安装包下载：[release/YunoTools-v1.2.30.apk](release/YunoTools-v1.2.30.apk)
 
 一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本继续完善全能计算器功能与 UI 细节，并在日常工具新增“每日一题”：每天随机一道离谱无厘头题，支持下方选择答案、显示解析、记录今日答题和连续营业天数。
 
@@ -79,7 +79,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.29.apk](release/YunoTools-v1.2.29.apk)
+下载并安装：[release/YunoTools-v1.2.30.apk](release/YunoTools-v1.2.30.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -94,11 +94,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.29
-- 修复计算器点击“程序员”等模式时提示“打开程序员计算器失败”的问题，模式切换按钮不再因布局包装导致类型转换失败。
-- 继续完善全能计算器 UI：保留选中态、按键配色、提示卡片和异常兜底，保证模式切换稳定。
-- 扩充“每日一题”题库，新增离谱娱乐、搞笑内涵、地理常识、生活脑洞等多类型题目。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.29.apk`
+### v1.2.30
+- 根据截图继续修复计算器：新增明显的模式标题卡片，点击“程序员/换算”等模式会立即显示对应内容和“v1.2.30 已修复切换”提示，便于确认已安装新版。
+- 计算器模式按钮按不同功能显示不同选中颜色，程序员和换算页顶部增加说明卡片，避免看起来没变化。
+- 保留 v1.2.29 的模式切换稳定修复和每日一题扩展题库。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.30.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

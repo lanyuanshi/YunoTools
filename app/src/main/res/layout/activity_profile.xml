@@ -57,12 +57,16 @@
                     <FrameLayout
                         android:layout_width="82dp"
                         android:layout_height="82dp"
-                        android:background="@drawable/bg_circle_blue">
+                        android:background="@drawable/bg_circle_blue"
+                        android:clipChildren="true"
+                        android:clipToOutline="true"
+                        android:clipToPadding="true">
 
                         <ImageView
                             android:id="@+id/ivProfileEntryAvatar"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
+                            android:layout_gravity="center"
                             android:padding="18dp"
                             android:scaleType="centerCrop"
                             android:src="@drawable/ic_profile" />
@@ -71,8 +75,10 @@
                             android:id="@+id/pvProfileEntryAvatar"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
+                            android:layout_gravity="center"
                             android:visibility="gone"
                             app:resize_mode="zoom"
+                            app:surface_type="texture_view"
                             app:use_controller="false" />
                     </FrameLayout>
 

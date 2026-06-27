@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.30**
+**当前版本：v1.2.31**
 
-安装包下载：[release/YunoTools-v1.2.30.apk](release/YunoTools-v1.2.30.apk)
+安装包下载：[release/YunoTools-v1.2.31.apk](release/YunoTools-v1.2.31.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本继续完善全能计算器功能与 UI 细节，并在日常工具新增“每日一题”：每天随机一道离谱无厘头题，支持下方选择答案、显示解析、记录今日答题和连续营业天数。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本将个人资料页头像显示改为真正的圆形裁剪，静态图片和动态视频头像在资料入口中都保持圆形显示。
 
 ## 功能列表
 
@@ -79,7 +79,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.30.apk](release/YunoTools-v1.2.30.apk)
+下载并安装：[release/YunoTools-v1.2.31.apk](release/YunoTools-v1.2.31.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -94,11 +94,10 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.30
-- 根据截图继续修复计算器：新增明显的模式标题卡片，点击“程序员/换算”等模式会立即显示对应内容和“v1.2.30 已修复切换”提示，便于确认已安装新版。
-- 计算器模式按钮按不同功能显示不同选中颜色，程序员和换算页顶部增加说明卡片，避免看起来没变化。
-- 保留 v1.2.29 的模式切换稳定修复和每日一题扩展题库。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.30.apk`
+### v1.2.31
+- 将个人资料页入口头像改为圆形裁剪，避免自定义图片或视频头像显示为方形。
+- 为资料页入口动态头像启用 `texture_view`，确保视频头像也能被圆形容器裁剪。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.31.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

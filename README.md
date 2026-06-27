@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.31**
+**当前版本：v1.2.32**
 
-安装包下载：[release/YunoTools-v1.2.31.apk](release/YunoTools-v1.2.31.apk)
+安装包下载：[release/YunoTools-v1.2.32.apk](release/YunoTools-v1.2.32.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本将个人资料页头像显示改为真正的圆形裁剪，静态图片和动态视频头像在资料入口中都保持圆形显示。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本在设置页新增“检查更新”，点击后软件会在后台读取更新目录并识别是否存在更高版本 APK，不跳转浏览器，直接在应用内反馈结果。
 
 ## 功能列表
 
@@ -79,7 +79,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.31.apk](release/YunoTools-v1.2.31.apk)
+下载并安装：[release/YunoTools-v1.2.32.apk](release/YunoTools-v1.2.32.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -94,10 +94,10 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.31
-- 将个人资料页入口头像改为圆形裁剪，避免自定义图片或视频头像显示为方形。
-- 为资料页入口动态头像启用 `texture_view`，确保视频头像也能被圆形容器裁剪。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.31.apk`
+### v1.2.32
+- 设置页新增“检查更新”，点击后后台读取 `https://www.lyyp.cloud/s/ErLug` 并识别是否存在更高版本 APK。
+- 检查更新不跳转浏览器或其他页面，结果通过设置页状态文字和弹窗反馈给用户。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.32.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

@@ -285,6 +285,66 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
+                android:text="软件更新"
+                android:textColor="#111827"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="#FFFFFF"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="检查更新"
+                        android:textColor="#111827"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvUpdateState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:text="当前版本："
+                        android:textColor="#8E8E93"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="点击后会在软件后台读取更新目录，识别是否存在更高版本 APK，不会跳转到浏览器或其他页面。"
+                        android:textColor="#8E8E93"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCheckUpdate"
+                        android:layout_width="match_parent"
+                        android:layout_height="46dp"
+                        android:layout_marginTop="12dp"
+                        android:text="检查更新"
+                        android:textColor="@android:color/white"
+                        app:backgroundTint="#007AFF"
+                        app:cornerRadius="14dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
                 android:text="主题"
                 android:textColor="#111827"
                 android:textSize="18sp"

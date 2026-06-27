@@ -22,11 +22,14 @@ import com.yuno.tools.ui.tools.AIChatActivity
 import com.yuno.tools.util.ThemeApplier
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.net.URLDecoder
+import org.json.JSONObject
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class SettingsActivity : AppCompatActivity() {
     private val updateUrl = "https://www.lyyp.cloud/s/ErLug"
+    private val updateShareId = "ErLug"
+    private val updateShareUri = "cloudreve://ErLug@share"
     private val updateClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
@@ -279,25 +282,58 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun fetchLatestApk(): ApkCandidate? {
+        ensureShareReadable()
+        val encodedUri = URLEncoder.encode(updateShareUri, "UTF-8")
+        val fileListJson = getUpdateText("https://www.lyyp.cloud/api/v4/file?uri=$encodedUri")
+        val candidates = parseCloudreveFileCandidates(fileListJson) + parseApkCandidates(fileListJson)
+        return candidates
+            .filter { compareVersion(it.version, BuildConfig.VERSION_NAME) > 0 }
+            .maxWithOrNull { a, b -> compareVersion(a.version, b.version) }
+    }
+
+    private fun ensureShareReadable() {
+        val infoJson = getUpdateText("https://www.lyyp.cloud/api/v4/share/info/$updateShareId?count_views=true&owner_extended=true")
+        val root = JSONObject(infoJson)
+        val code = root.optInt("code", -1)
+        if (code != 0) error(root.optString("msg", "分享信息读取失败"))
+        val data = root.optJSONObject("data") ?: error("分享信息为空")
+        if (data.optBoolean("expired", false)) error("分享链接已过期")
+        if (!data.optBoolean("unlocked", true)) error("分享链接需要访问密码")
+    }
+
+    private fun getUpdateText(url: String): String {
         val request = Request.Builder()
-            .url(updateUrl)
+            .url(url)
             .header("User-Agent", "YunoTools/${BuildConfig.VERSION_NAME} Android UpdateChecker")
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Referer", updateUrl)
             .build()
         updateClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("服务器返回 ${response.code}")
-            val html = response.body?.string().orEmpty()
-            val candidates = parseApkCandidates(html)
-            return candidates
-                .filter { compareVersion(it.version, BuildConfig.VERSION_NAME) > 0 }
-                .maxWithOrNull { a, b -> compareVersion(a.version, b.version) }
+            return response.body?.string().orEmpty().ifBlank { error("服务器返回为空") }
         }
     }
 
-    private fun parseApkCandidates(html: String): List<ApkCandidate> {
-        val decoded = runCatching { URLDecoder.decode(html, "UTF-8") }.getOrDefault(html)
-        val apkRegex = Regex("[A-Za-z0-9_ .\\-()]*?(?:v|V)?(\\d+(?:\\.\\d+){1,3})[A-Za-z0-9_ .\\-()]*?\\.apk")
-        return apkRegex.findAll(decoded)
+    private fun parseCloudreveFileCandidates(json: String): List<ApkCandidate> {
+        val root = JSONObject(json)
+        val code = root.optInt("code", -1)
+        if (code != 0) error(root.optString("msg", "文件列表读取失败"))
+        val data = root.optJSONObject("data") ?: return emptyList()
+        val files = data.optJSONArray("files") ?: return emptyList()
+        val result = mutableListOf<ApkCandidate>()
+        for (i in 0 until files.length()) {
+            val file = files.optJSONObject(i) ?: continue
+            val name = file.optString("name")
+            if (!name.endsWith(".apk", ignoreCase = true)) continue
+            val version = extractApkVersion(name) ?: continue
+            result += ApkCandidate(name, version)
+        }
+        return result.distinctBy { it.fileName }
+    }
+
+    private fun parseApkCandidates(text: String): List<ApkCandidate> {
+        return Regex("[A-Za-z0-9_ .\\-()]*?(?:v|V)?(\\d+(?:\\.\\d+){1,3})[A-Za-z0-9_ .\\-()]*?\\.apk")
+            .findAll(text)
             .mapNotNull { match ->
                 val fileName = match.value.trim().substringAfterLast('/').substringAfterLast('=')
                 val version = match.groupValues.getOrNull(1).orEmpty()
@@ -305,6 +341,10 @@ class SettingsActivity : AppCompatActivity() {
             }
             .distinctBy { it.fileName }
             .toList()
+    }
+
+    private fun extractApkVersion(name: String): String? {
+        return Regex("(?:v|V)?(\\d+(?:\\.\\d+){1,3})").find(name)?.groupValues?.getOrNull(1)
     }
 
     private fun compareVersion(left: String, right: String): Int {

@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.33**
+**当前版本：v1.2.34**
 
-安装包下载：[release/YunoTools-v1.2.33.apk](release/YunoTools-v1.2.33.apk)
+安装包下载：[release/YunoTools-v1.2.34.apk](release/YunoTools-v1.2.34.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本重新构建全能计算器布局，优化顶部结果屏、模式切换、科学键盘和工具卡片，让标准、科学、程序员、换算、日期、财务与健康计算更完整、更美观。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本修复设置页检查更新：不再只扫描分享页前端壳 HTML，而是后台读取 Cloudreve 分享信息与文件列表接口，准确识别更新目录中的 APK 版本。
 
 ## 功能列表
 
@@ -79,7 +79,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.33.apk](release/YunoTools-v1.2.33.apk)
+下载并安装：[release/YunoTools-v1.2.34.apk](release/YunoTools-v1.2.34.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -94,11 +94,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.33
-- 重新构建全能计算器新布局：顶部深色结果屏、横向模式标签、说明卡片、标准键盘和工具卡片分区更清晰。
-- 完善标准/科学/程序员/单位换算/日期/房贷/个税/BMI/折扣/小费等模式，新增时间与存储容量换算。
-- 优化按钮配色、卡片间距、输入框和结果展示，让计算器整体更像正式工具应用。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.33.apk`
+### v1.2.34
+- 修复检查更新没有读取到用户提供链接真实文件的问题：先读取分享信息，再读取 Cloudreve 文件列表接口。
+- 检查更新现在会识别 `https://www.lyyp.cloud/s/ErLug` 对应目录中的 APK 文件名版本号，例如 `YunoTools-v1.2.33.apk`。
+- 仍保持后台读取和应用内反馈，不跳转浏览器或其他页面。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.34.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

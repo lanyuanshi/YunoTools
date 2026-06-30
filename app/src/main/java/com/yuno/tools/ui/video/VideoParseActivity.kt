@@ -96,24 +96,24 @@ class VideoParseActivity : AppCompatActivity() {
             return parseDoubaoThread(url).takeIf { it.images.isNotEmpty() } ?: error("豆包解析失败：未找到无水印原图")
         }
 
-        val candidates = buildUrlCandidates(url)
         var lastError: Throwable? = null
-        candidates.forEachIndexed { index, candidate ->
-            updateState(if (index == 0) "正在请求解析接口..." else "正在尝试展开后的链接...")
-            repeat(3) { attempt ->
-                try {
-                    if (attempt > 0) {
-                        updateState("网络不稳定，正在第 ${attempt + 1} 次重试...")
-                        delay((450L * attempt).coerceAtMost(1200L))
+        repeat(3) { attempt ->
+            try {
+                updateState(
+                    when (attempt) {
+                        0 -> "正在请求解析接口..."
+                        1 -> "当前网络响应慢，正在自动重试..."
+                        else -> "正在使用宽容超时继续重试..."
                     }
-                    val response = RetrofitClient.apiService.parseVideo(candidate)
-                    val parsed = parseApiResponse(response)
-                    if (parsed.hasUsefulContent()) return parsed
-                    lastError = IllegalStateException("解析接口返回为空结果")
-                } catch (e: Exception) {
-                    lastError = e
-                    if (!e.isRetryableNetworkError()) return@repeat
-                }
+                )
+                if (attempt > 0) delay(900L * attempt)
+                val response = RetrofitClient.apiService.parseVideo(url)
+                val parsed = parseApiResponse(response)
+                if (parsed.hasUsefulContent()) return parsed
+                lastError = IllegalStateException("解析接口返回为空结果")
+            } catch (e: Exception) {
+                lastError = e
+                if (!e.isRetryableNetworkError()) throw e
             }
         }
         throw lastError ?: IllegalStateException("解析失败，请稍后再试")
@@ -179,7 +179,7 @@ class VideoParseActivity : AppCompatActivity() {
     private fun friendlyParseError(error: Throwable): String {
         val message = error.message.orEmpty()
         return when {
-            error.isRetryableNetworkError() -> "网络不稳定或接口响应慢，已自动重试仍失败，请切换网络后再试"
+            error.isRetryableNetworkError() -> "解析接口连接不稳定，已自动重试仍失败；请稍后重试或切换网络"
             message.contains("解析接口") || message.contains("HTTP") -> message
             message.isNotBlank() -> "解析失败：$message"
             else -> "解析失败，请检查链接或稍后再试"

@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.36**
+**当前版本：v1.2.37**
 
-安装包下载：[release/YunoTools-v1.2.36.apk](release/YunoTools-v1.2.36.apk)
+安装包下载：[release/YunoTools-v1.2.37.apk](release/YunoTools-v1.2.37.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本优化短视频去水印解析速度与弱网适应：缩短网络超时、启用连接复用、自动重试、短链展开和解析状态反馈。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本修复短视频去水印弱网优化过激导致解析失败的问题：恢复宽容超时，强制解析接口使用 HTTP/1.1，并保留自动重试与状态反馈。
 
 ## 功能列表
 
@@ -79,7 +79,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.36.apk](release/YunoTools-v1.2.36.apk)
+下载并安装：[release/YunoTools-v1.2.37.apk](release/YunoTools-v1.2.37.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -94,11 +94,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.36
-- 优化短视频去水印解析速度：网络超时从长等待改为更快失败与更快反馈。
-- 增强弱网适应：启用连接复用、请求重试、短链快速展开和多候选链接尝试。
-- 解析页面新增状态提示，用户可看到请求、重试、展开链接等进度。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.36.apk`
+### v1.2.37
+- 修复上一版弱网优化过激导致部分短视频解析更容易失败的问题。
+- 恢复更宽容的解析接口超时，保留自动重试和解析状态提示。
+- 强制解析接口使用 HTTP/1.1，规避部分网络/服务端 HTTP/2 连接异常。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.37.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

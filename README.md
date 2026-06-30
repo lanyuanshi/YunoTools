@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.35**
+**当前版本：v1.2.36**
 
-安装包下载：[release/YunoTools-v1.2.35.apk](release/YunoTools-v1.2.35.apk)
+安装包下载：[release/YunoTools-v1.2.36.apk](release/YunoTools-v1.2.36.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本新增用户提供图片主题，并将设置页检查更新改为应用内加载更新目录链接，由用户自行查看 APK 文件名和版本号。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本优化短视频去水印解析速度与弱网适应：缩短网络超时、启用连接复用、自动重试、短链展开和解析状态反馈。
 
 ## 功能列表
 
@@ -79,7 +79,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.35.apk](release/YunoTools-v1.2.35.apk)
+下载并安装：[release/YunoTools-v1.2.36.apk](release/YunoTools-v1.2.36.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -94,11 +94,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.35
-- 新增“云粉新主题”，将用户提供的图片作为可选图片背景主题加入主题列表。
-- 检查更新改为应用内加载 `https://www.lyyp.cloud/s/ErLug`，不跳转外部浏览器。
-- 用户可在更新目录中自行查看 APK 文件名和版本号，不再由 App 自动判断高低版本。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.35.apk`
+### v1.2.36
+- 优化短视频去水印解析速度：网络超时从长等待改为更快失败与更快反馈。
+- 增强弱网适应：启用连接复用、请求重试、短链快速展开和多候选链接尝试。
+- 解析页面新增状态提示，用户可看到请求、重试、展开链接等进度。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.36.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

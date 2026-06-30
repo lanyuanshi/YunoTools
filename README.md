@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.38**
+**当前版本：v1.2.39**
 
-安装包下载：[release/YunoTools-v1.2.38.apk](release/YunoTools-v1.2.38.apk)
+安装包下载：[release/YunoTools-v1.2.39.apk](release/YunoTools-v1.2.39.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本将短视频去水印解析流程恢复到 v1.2.35 的稳定逻辑，仅保留连接复用、调度和失败重连等不改变解析结果的速度优化。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本将短视频去水印解析相关实现原原本本恢复到 v1.2.35，包括解析流程、页面和 Retrofit 网络配置，去除后续解析优化改动。
 
 ## 功能列表
 
@@ -79,7 +79,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.38.apk](release/YunoTools-v1.2.38.apk)
+下载并安装：[release/YunoTools-v1.2.39.apk](release/YunoTools-v1.2.39.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -94,11 +94,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.38
-- 将短视频去水印解析流程恢复到 v1.2.35 的稳定实现，避免额外候选链接和过度重试影响成功率。
-- 保留网络速度优化：OkHttp 连接复用、请求调度和连接失败自动重试。
-- 保持原有解析入口、豆包解析、错误提示和结果跳转行为不变。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.38.apk`
+### v1.2.39
+- 将短视频去水印解析相关实现原原本本恢复到 v1.2.35。
+- 恢复 `VideoParseActivity`、`activity_video_parse.xml` 和 `RetrofitClient` 的 v1.2.35 行为。
+- 移除后续加入的连接池、调度、重试、协议和额外解析流程改动。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.39.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

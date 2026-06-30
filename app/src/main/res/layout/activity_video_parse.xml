@@ -131,17 +131,6 @@
                 android:layout_marginTop="24dp"
                 android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/tvParseState"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:gravity="center"
-                android:text=""
-                android:textColor="#8E8E93"
-                android:textSize="13sp"
-                android:visibility="gone" />
-
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

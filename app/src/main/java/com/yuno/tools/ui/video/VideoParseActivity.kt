@@ -9,7 +9,6 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
-import java.io.IOException
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
@@ -23,17 +22,14 @@ import com.yuno.tools.util.UrlExtractor
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import retrofit2.Response
 
 class VideoParseActivity : AppCompatActivity() {
 
     private lateinit var etUrl: EditText
     private lateinit var btnParse: MaterialButton
     private lateinit var progress: ProgressBar
-    private lateinit var tvParseState: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,7 +38,6 @@ class VideoParseActivity : AppCompatActivity() {
         etUrl = findViewById(R.id.etUrl)
         btnParse = findViewById(R.id.btnParse)
         progress = findViewById(R.id.progressBar)
-        tvParseState = findViewById(R.id.tvParseState)
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<TextView>(R.id.btnPaste).setOnClickListener { pasteUrl() }
@@ -68,121 +63,54 @@ class VideoParseActivity : AppCompatActivity() {
             return
         }
 
-        setParsingState(true, "正在准备解析链接...")
+        progress.visibility = View.VISIBLE
+        btnParse.isEnabled = false
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val startedAt = System.currentTimeMillis()
-            val outcome = runCatching { parseWithNetworkAdaptation(url) }
-            withContext(Dispatchers.Main) {
-                setParsingState(false, "")
-                outcome.onSuccess { result ->
-                    if (result.isImageSet && result.images.isEmpty()) {
-                        Toast.makeText(this@VideoParseActivity, "解析失败：未找到无水印图片", Toast.LENGTH_LONG).show()
-                        return@onSuccess
+            try {
+                if (isDoubaoThreadUrl(url)) {
+                    val result = parseDoubaoThread(url)
+                    withContext(Dispatchers.Main) {
+                        progress.visibility = View.GONE
+                        btnParse.isEnabled = true
+                        if (result.images.isNotEmpty()) {
+                            ParseHistoryStore.add(this@VideoParseActivity, result, url)
+                            showResult(result)
+                        } else {
+                            Toast.makeText(this@VideoParseActivity, "豆包解析失败：未找到无水印原图", Toast.LENGTH_LONG).show()
+                        }
                     }
-                    ParseHistoryStore.add(this@VideoParseActivity, result, url)
-                    Toast.makeText(this@VideoParseActivity, "解析完成，用时 ${(System.currentTimeMillis() - startedAt) / 1000.0}s", Toast.LENGTH_SHORT).show()
-                    showResult(result)
-                }.onFailure { error ->
-                    Toast.makeText(this@VideoParseActivity, friendlyParseError(error), Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+
+                val response = RetrofitClient.apiService.parseVideo(url)
+                withContext(Dispatchers.Main) {
+                    progress.visibility = View.GONE
+                    btnParse.isEnabled = true
+
+                    if (response.isSuccessful && response.body() != null) {
+                        val apiResp = response.body()!!
+                        if (apiResp.code == 200 && apiResp.data != null) {
+                            val result = convertToResult(apiResp.data)
+                            ParseHistoryStore.add(this@VideoParseActivity, result, url)
+                            showResult(result)
+                        } else {
+                            Toast.makeText(this@VideoParseActivity,
+                                apiResp.msg ?: "解析失败", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        Toast.makeText(this@VideoParseActivity,
+                            parseHttpError(response.code()), Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progress.visibility = View.GONE
+                    btnParse.isEnabled = true
+                    Toast.makeText(this@VideoParseActivity,
+                        "错误: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
-        }
-    }
-
-    private suspend fun parseWithNetworkAdaptation(url: String): VideoParseResult {
-        if (isDoubaoThreadUrl(url)) {
-            updateState("正在解析豆包无水印原图...")
-            return parseDoubaoThread(url).takeIf { it.images.isNotEmpty() } ?: error("豆包解析失败：未找到无水印原图")
-        }
-
-        var lastError: Throwable? = null
-        repeat(3) { attempt ->
-            try {
-                updateState(
-                    when (attempt) {
-                        0 -> "正在请求解析接口..."
-                        1 -> "当前网络响应慢，正在自动重试..."
-                        else -> "正在使用宽容超时继续重试..."
-                    }
-                )
-                if (attempt > 0) delay(900L * attempt)
-                val response = RetrofitClient.apiService.parseVideo(url)
-                val parsed = parseApiResponse(response)
-                if (parsed.hasUsefulContent()) return parsed
-                lastError = IllegalStateException("解析接口返回为空结果")
-            } catch (e: Exception) {
-                lastError = e
-                if (!e.isRetryableNetworkError()) throw e
-            }
-        }
-        throw lastError ?: IllegalStateException("解析失败，请稍后再试")
-    }
-
-    private fun parseApiResponse(response: Response<com.yuno.tools.data.ApiResponse>): VideoParseResult {
-        if (!response.isSuccessful) error(parseHttpError(response.code()))
-        val apiResp = response.body() ?: error("解析接口返回为空")
-        if (apiResp.code != 200 || apiResp.data == null) error(apiResp.msg.ifBlank { "解析失败：接口未返回可用数据" })
-        return convertToResult(apiResp.data)
-    }
-
-    private fun buildUrlCandidates(url: String): List<String> {
-        val result = linkedSetOf(url)
-        if (isShortShareUrl(url)) {
-            resolveRedirectUrl(url)?.let { result.add(it) }
-        }
-        return result.toList()
-    }
-
-    private fun isShortShareUrl(url: String): Boolean {
-        return listOf("v.douyin.com", "v.kuaishou.com", "xhslink.com", "b23.tv", "v.ixigua.com").any { url.contains(it, ignoreCase = true) }
-    }
-
-    private fun resolveRedirectUrl(url: String): String? {
-        return runCatching {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                instanceFollowRedirects = false
-                connectTimeout = 5000
-                readTimeout = 5000
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
-            }
-            try {
-                conn.responseCode
-                conn.getHeaderField("Location")?.takeIf { it.startsWith("http") }
-            } finally {
-                conn.disconnect()
-            }
-        }.getOrNull()
-    }
-
-    private fun VideoParseResult.hasUsefulContent(): Boolean {
-        return videoUrl.isNotBlank() || images.isNotEmpty() || coverUrl.isNotBlank()
-    }
-
-    private suspend fun updateState(text: String) {
-        withContext(Dispatchers.Main) { tvParseState.text = text }
-    }
-
-    private fun setParsingState(parsing: Boolean, state: String) {
-        progress.visibility = if (parsing) View.VISIBLE else View.GONE
-        tvParseState.visibility = if (parsing) View.VISIBLE else View.GONE
-        tvParseState.text = state
-        btnParse.isEnabled = !parsing
-        btnParse.text = if (parsing) "解析中..." else "开始解析"
-    }
-
-    private fun Throwable.isRetryableNetworkError(): Boolean {
-        val message = message.orEmpty()
-        return this is IOException || message.contains("timeout", true) || message.contains("timed out", true) || message.contains("reset", true) || message.contains("closed", true)
-    }
-
-    private fun friendlyParseError(error: Throwable): String {
-        val message = error.message.orEmpty()
-        return when {
-            error.isRetryableNetworkError() -> "解析接口连接不稳定，已自动重试仍失败；请稍后重试或切换网络"
-            message.contains("解析接口") || message.contains("HTTP") -> message
-            message.isNotBlank() -> "解析失败：$message"
-            else -> "解析失败，请检查链接或稍后再试"
         }
     }
 
@@ -223,8 +151,8 @@ class VideoParseActivity : AppCompatActivity() {
     private fun fetchDoubaoHtml(url: String): String {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = true
-            connectTimeout = 8000
-            readTimeout = 15000
+            connectTimeout = 15000
+            readTimeout = 30000
             setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
             setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json,*/*")
             setRequestProperty("Referer", "https://www.doubao.com/")

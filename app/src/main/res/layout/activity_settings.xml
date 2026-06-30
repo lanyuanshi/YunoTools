@@ -325,7 +325,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="点击后会在软件后台读取更新目录，识别是否存在更高版本 APK，不会跳转到浏览器或其他页面。"
+                        android:text="点击后会在软件内加载更新目录链接，不跳转外部浏览器；请自行查看 APK 文件名和版本号。"
                         android:textColor="#8E8E93"
                         android:textSize="13sp" />
 
@@ -334,7 +334,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="46dp"
                         android:layout_marginTop="12dp"
-                        android:text="检查更新"
+                        android:text="加载更新链接"
                         android:textColor="@android:color/white"
                         app:backgroundTint="#007AFF"
                         app:cornerRadius="14dp" />

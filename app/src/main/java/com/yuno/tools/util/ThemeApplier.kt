@@ -28,6 +28,7 @@ object ThemeApplier {
     private const val FEI_XUE_1_BG_TAG = "fei_xue_1_theme_background"
     private const val FEI_XUE_2_BG_TAG = "fei_xue_2_theme_background"
     private const val FEI_XUE_3_BG_TAG = "fei_xue_3_theme_background"
+    private const val USER_IMAGE_BG_TAG = "user_image_theme_background"
     const val THEME_PREVIEW_IMAGE_TAG = "theme_preview_image"
     private val skipTintIds = setOf("ivAvatar", "ivAvatarPreview", "ivCover", "ivPreview", "ivCompressed", "ivQRCode", "ivGridItem")
 
@@ -40,6 +41,7 @@ object ThemeApplier {
         UserSettingsStore.THEME_FEI_XUE_1 -> YunoTheme(Color.parseColor("#FFF7FA"), Color.argb(228, 255, 255, 255), Color.parseColor("#F26C9B"), Color.parseColor("#2B1A25"), Color.parseColor("#8B6677"), true)
         UserSettingsStore.THEME_FEI_XUE_2 -> YunoTheme(Color.parseColor("#FFF4F9"), Color.argb(228, 255, 255, 255), Color.parseColor("#E86FA9"), Color.parseColor("#2B1B2D"), Color.parseColor("#86647E"), true)
         UserSettingsStore.THEME_FEI_XUE_3 -> YunoTheme(Color.parseColor("#F2F4FF"), Color.argb(226, 255, 255, 255), Color.parseColor("#8D7BFF"), Color.parseColor("#1D2035"), Color.parseColor("#62677F"), true)
+        UserSettingsStore.THEME_USER_IMAGE -> YunoTheme(Color.parseColor("#FFF3F8"), Color.argb(226, 255, 255, 255), Color.parseColor("#FF6FAE"), Color.parseColor("#251A22"), Color.parseColor("#806576"), true)
         else -> YunoTheme(Color.parseColor("#F2F2F7"), Color.WHITE, Color.parseColor("#007AFF"), Color.parseColor("#1C1C1E"), Color.parseColor("#8E8E93"))
     }
 
@@ -52,6 +54,7 @@ object ThemeApplier {
                 UserSettingsStore.THEME_FEI_XUE_1 -> R.drawable.theme_fei_xue_1_bg to FEI_XUE_1_BG_TAG
                 UserSettingsStore.THEME_FEI_XUE_2 -> R.drawable.theme_fei_xue_2_bg to FEI_XUE_2_BG_TAG
                 UserSettingsStore.THEME_FEI_XUE_3 -> R.drawable.theme_fei_xue_3_bg to FEI_XUE_3_BG_TAG
+                UserSettingsStore.THEME_USER_IMAGE -> R.drawable.theme_user_bg to USER_IMAGE_BG_TAG
                 else -> R.drawable.theme_amis_bg to AMIS_BG_TAG
             }
             applyImageBackground(root, bgRes, bgTag)
@@ -69,7 +72,7 @@ object ThemeApplier {
         }
     }
 
-    private fun isThemeBgTag(tag: Any?): Boolean = tag == AMIS_BG_TAG || tag == YUNO_BG_TAG || tag == FEI_XUE_1_BG_TAG || tag == FEI_XUE_2_BG_TAG || tag == FEI_XUE_3_BG_TAG
+    private fun isThemeBgTag(tag: Any?): Boolean = tag == AMIS_BG_TAG || tag == YUNO_BG_TAG || tag == FEI_XUE_1_BG_TAG || tag == FEI_XUE_2_BG_TAG || tag == FEI_XUE_3_BG_TAG || tag == USER_IMAGE_BG_TAG
 
     private fun shouldKeepOriginalImage(tag: Any?): Boolean = isThemeBgTag(tag) || tag == THEME_PREVIEW_IMAGE_TAG
 

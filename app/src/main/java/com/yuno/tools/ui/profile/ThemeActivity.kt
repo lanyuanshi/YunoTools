@@ -154,7 +154,8 @@ class ThemeActivity : AppCompatActivity() {
             ThemeOption(UserSettingsStore.THEME_YUNO, "尤诺", "图片背景主题，按原比例预览", R.drawable.theme_yuno_bg, true),
             ThemeOption(UserSettingsStore.THEME_FEI_XUE_1, "绯雪1", "图片背景主题，按原比例预览", R.drawable.theme_fei_xue_1_bg, true),
             ThemeOption(UserSettingsStore.THEME_FEI_XUE_2, "绯雪2", "图片背景主题，按原比例预览", R.drawable.theme_fei_xue_2_bg, true),
-            ThemeOption(UserSettingsStore.THEME_FEI_XUE_3, "绯雪3", "图片背景主题，按原比例预览", R.drawable.theme_fei_xue_3_bg, true)
+            ThemeOption(UserSettingsStore.THEME_FEI_XUE_3, "绯雪3", "图片背景主题，按原比例预览", R.drawable.theme_fei_xue_3_bg, true),
+            ThemeOption(UserSettingsStore.THEME_USER_IMAGE, "云粉新主题", "使用你提供的图片作为背景", R.drawable.theme_user_bg, true)
         )
 
         fun themeDisplayName(key: String): String = when (key) {
@@ -166,6 +167,7 @@ class ThemeActivity : AppCompatActivity() {
             UserSettingsStore.THEME_FEI_XUE_1 -> "绯雪1主题"
             UserSettingsStore.THEME_FEI_XUE_2 -> "绯雪2主题"
             UserSettingsStore.THEME_FEI_XUE_3 -> "绯雪3主题"
+            UserSettingsStore.THEME_USER_IMAGE -> "云粉新主题"
             else -> "默认主题"
         }
     }

@@ -14,30 +14,14 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.yuno.tools.BuildConfig
 import com.yuno.tools.R
 import com.yuno.tools.data.UserSettingsStore
 import com.yuno.tools.ui.tools.AIChatActivity
 import com.yuno.tools.util.ThemeApplier
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
-import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 
 class SettingsActivity : AppCompatActivity() {
     private val updateUrl = "https://www.lyyp.cloud/s/ErLug"
-    private val updateShareId = "ErLug"
-    private val updateShareUri = "cloudreve://ErLug@share"
-    private val updateClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(18, TimeUnit.SECONDS)
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .build()
-    }
     private lateinit var switchDefaultApi: Switch
     private lateinit var etEndpoint: EditText
     private lateinit var etApiKey: EditText
@@ -247,127 +231,15 @@ class SettingsActivity : AppCompatActivity() {
 
 
     private fun bindUpdateChecker() {
-        findViewById<MaterialButton>(R.id.btnCheckUpdate).setOnClickListener { checkForUpdate() }
+        findViewById<MaterialButton>(R.id.btnCheckUpdate).setOnClickListener { openUpdateLink() }
         findViewById<TextView>(R.id.tvUpdateState).text = "当前版本：v${BuildConfig.VERSION_NAME}"
     }
 
-    private fun checkForUpdate() {
-        val button = findViewById<MaterialButton>(R.id.btnCheckUpdate)
-        val stateView = findViewById<TextView>(R.id.tvUpdateState)
-        button.isEnabled = false
-        button.text = "检查中..."
-        stateView.text = "正在后台读取更新目录，不会跳转到浏览器"
-        Thread {
-            val result = runCatching { fetchLatestApk() }
-            runOnUiThread {
-                button.isEnabled = true
-                button.text = "检查更新"
-                result.onSuccess { latest ->
-                    if (latest == null) {
-                        stateView.text = "当前已是最新：v${BuildConfig.VERSION_NAME}"
-                        showUpdateDialog("已是最新版本", "当前版本 v${BuildConfig.VERSION_NAME}，更新目录里没有发现更高版本 APK。")
-                    } else {
-                        stateView.text = "发现新版本：v${latest.version}"
-                        showUpdateDialog(
-                            "发现新版本 v${latest.version}",
-                            "检测到更高版本 APK：\n${latest.fileName}\n\n当前版本：v${BuildConfig.VERSION_NAME}\n来源：$updateUrl\n\n软件已在后台完成识别，没有跳转到其他页面。"
-                        )
-                    }
-                }.onFailure { error ->
-                    stateView.text = "检查失败：${error.message ?: "网络异常"}"
-                    showUpdateDialog("检查失败", "无法读取更新目录：${error.message ?: "网络异常"}\n\n请稍后重试。")
-                }
-            }
-        }.start()
+    private fun openUpdateLink() {
+        findViewById<TextView>(R.id.tvUpdateState).text = "已在应用内加载更新目录，请自行查看 APK 版本"
+        startActivity(UpdateWebActivity.createIntent(this, updateUrl))
+        overridePendingTransition(R.anim.profile_slide_up_in, R.anim.profile_stay)
     }
-
-    private fun fetchLatestApk(): ApkCandidate? {
-        ensureShareReadable()
-        val encodedUri = URLEncoder.encode(updateShareUri, "UTF-8")
-        val fileListJson = getUpdateText("https://www.lyyp.cloud/api/v4/file?uri=$encodedUri")
-        val candidates = parseCloudreveFileCandidates(fileListJson) + parseApkCandidates(fileListJson)
-        return candidates
-            .filter { compareVersion(it.version, BuildConfig.VERSION_NAME) > 0 }
-            .maxWithOrNull { a, b -> compareVersion(a.version, b.version) }
-    }
-
-    private fun ensureShareReadable() {
-        val infoJson = getUpdateText("https://www.lyyp.cloud/api/v4/share/info/$updateShareId?count_views=true&owner_extended=true")
-        val root = JSONObject(infoJson)
-        val code = root.optInt("code", -1)
-        if (code != 0) error(root.optString("msg", "分享信息读取失败"))
-        val data = root.optJSONObject("data") ?: error("分享信息为空")
-        if (data.optBoolean("expired", false)) error("分享链接已过期")
-        if (!data.optBoolean("unlocked", true)) error("分享链接需要访问密码")
-    }
-
-    private fun getUpdateText(url: String): String {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", "YunoTools/${BuildConfig.VERSION_NAME} Android UpdateChecker")
-            .header("Accept", "application/json, text/plain, */*")
-            .header("Referer", updateUrl)
-            .build()
-        updateClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("服务器返回 ${response.code}")
-            return response.body?.string().orEmpty().ifBlank { error("服务器返回为空") }
-        }
-    }
-
-    private fun parseCloudreveFileCandidates(json: String): List<ApkCandidate> {
-        val root = JSONObject(json)
-        val code = root.optInt("code", -1)
-        if (code != 0) error(root.optString("msg", "文件列表读取失败"))
-        val data = root.optJSONObject("data") ?: return emptyList()
-        val files = data.optJSONArray("files") ?: return emptyList()
-        val result = mutableListOf<ApkCandidate>()
-        for (i in 0 until files.length()) {
-            val file = files.optJSONObject(i) ?: continue
-            val name = file.optString("name")
-            if (!name.endsWith(".apk", ignoreCase = true)) continue
-            val version = extractApkVersion(name) ?: continue
-            result += ApkCandidate(name, version)
-        }
-        return result.distinctBy { it.fileName }
-    }
-
-    private fun parseApkCandidates(text: String): List<ApkCandidate> {
-        return Regex("[A-Za-z0-9_ .\\-()]*?(?:v|V)?(\\d+(?:\\.\\d+){1,3})[A-Za-z0-9_ .\\-()]*?\\.apk")
-            .findAll(text)
-            .mapNotNull { match ->
-                val fileName = match.value.trim().substringAfterLast('/').substringAfterLast('=')
-                val version = match.groupValues.getOrNull(1).orEmpty()
-                if (version.isBlank()) null else ApkCandidate(fileName, version)
-            }
-            .distinctBy { it.fileName }
-            .toList()
-    }
-
-    private fun extractApkVersion(name: String): String? {
-        return Regex("(?:v|V)?(\\d+(?:\\.\\d+){1,3})").find(name)?.groupValues?.getOrNull(1)
-    }
-
-    private fun compareVersion(left: String, right: String): Int {
-        val l = left.split('.').map { it.toIntOrNull() ?: 0 }
-        val r = right.split('.').map { it.toIntOrNull() ?: 0 }
-        val size = maxOf(l.size, r.size)
-        for (i in 0 until size) {
-            val diff = (l.getOrNull(i) ?: 0) - (r.getOrNull(i) ?: 0)
-            if (diff != 0) return diff
-        }
-        return 0
-    }
-
-    private fun showUpdateDialog(title: String, message: String) {
-        if (isFinishing || isDestroyed) return
-        MaterialAlertDialogBuilder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("知道了", null)
-            .show()
-    }
-
-    private data class ApkCandidate(val fileName: String, val version: String)
 
     private fun refreshThemeState() {
         findViewById<TextView>(R.id.tvCurrentTheme).text = "当前：${ThemeActivity.themeDisplayName(UserSettingsStore.getTheme(this))}"

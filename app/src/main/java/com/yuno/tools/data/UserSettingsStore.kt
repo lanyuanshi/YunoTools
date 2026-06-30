@@ -18,6 +18,7 @@ object UserSettingsStore {
     const val THEME_FEI_XUE_1 = "fei_xue_1"
     const val THEME_FEI_XUE_2 = "fei_xue_2"
     const val THEME_FEI_XUE_3 = "fei_xue_3"
+    const val THEME_USER_IMAGE = "user_image"
     const val MUSIC_BAR_BLUE = "blue"
     const val MUSIC_BAR_RED = "red"
     const val MUSIC_BAR_GREEN = "green"

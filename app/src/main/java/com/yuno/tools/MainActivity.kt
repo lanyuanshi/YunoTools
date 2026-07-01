@@ -113,6 +113,7 @@ import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
 import com.yuno.tools.ui.tools.MovieWarehouseActivity
+import com.yuno.tools.ui.tools.CloudDriveActivity
 import com.yuno.tools.ui.tools.GachaAnalysisActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.MemberCenterActivity
@@ -361,6 +362,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardMovieWarehouse).setOnClickListener {
             startActivity(Intent(this, MovieWarehouseActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardCloudDriveTool).setOnClickListener {
+            startActivity(Intent(this, CloudDriveActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardGachaAnalysis).setOnClickListener {
             startActivity(Intent(this, GachaAnalysisActivity::class.java))

@@ -711,7 +711,7 @@ class MainActivity : AppCompatActivity() {
                 .diskCacheStrategy(DiskCacheStrategy.NONE)
                 .circleCrop()
                 .dontAnimate()
-                .placeholder(R.drawable.bg_circle_blue)
+                .placeholder(R.drawable.bg_avatar_placeholder_transparent)
                 .error(R.drawable.ic_profile)
                 .into(iv)
         }

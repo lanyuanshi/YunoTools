@@ -57,7 +57,7 @@
                     <FrameLayout
                         android:layout_width="82dp"
                         android:layout_height="82dp"
-                        android:background="@drawable/bg_circle_blue"
+                        android:background="@drawable/bg_circle_avatar_neutral"
                         android:clipChildren="true"
                         android:clipToOutline="true"
                         android:clipToPadding="true">

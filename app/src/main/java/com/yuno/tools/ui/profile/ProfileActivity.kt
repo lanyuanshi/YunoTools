@@ -122,7 +122,7 @@ class ProfileActivity : AppCompatActivity() {
             val isVideo = contentResolver.getType(uri)?.startsWith("video/") == true
             if (isVideo) {
                 Glide.with(iv).clear(iv)
-                iv.setImageResource(R.drawable.bg_circle_blue)
+                iv.setImageDrawable(null)
                 iv.imageTintList = null
                 pv.visibility = View.VISIBLE
                 releaseAvatarPlayer()
@@ -143,7 +143,7 @@ class ProfileActivity : AppCompatActivity() {
                     .skipMemoryCache(true)
                     .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .circleCrop()
-                    .placeholder(R.drawable.bg_circle_blue)
+                    .placeholder(R.drawable.bg_avatar_placeholder_transparent)
                     .error(R.drawable.ic_profile)
                     .into(iv)
             }

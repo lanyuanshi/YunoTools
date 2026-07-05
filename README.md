@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.41**
+**当前版本：v1.2.42**
 
-安装包下载：[release/YunoTools-v1.2.41.apk](release/YunoTools-v1.2.41.apk)
+安装包下载：[release/YunoTools-v1.2.42.apk](release/YunoTools-v1.2.42.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本新增视频动态主题，将你提供的视频接入 APP 主题系统，支持循环动态背景、声音开关和模糊度调节。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本修复替换头像照片时短暂露出蓝色底的问题，头像照片/视频加载期间改为透明或中性圆底显示。
 
 ## 功能列表
 
@@ -49,7 +49,7 @@
 
 ### 个人中心
 - **解析历史** - 查看过往解析记录，点击可直接回放结果。
-- **自定义头像** - 支持 GIF / WebP / 视频动态头像。
+- **自定义头像** - 支持 GIF / WebP / 视频动态头像，替换照片时不再露出蓝色底。
 - **设置** - 支持主题切换、动态视频主题声音/模糊度调节、模型配置和功能参数管理。
 
 ## 技术栈
@@ -80,7 +80,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.41.apk](release/YunoTools-v1.2.41.apk)
+下载并安装：[release/YunoTools-v1.2.42.apk](release/YunoTools-v1.2.42.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -95,11 +95,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.41
-- 新增“动态视频主题”，使用本次提供的视频作为 APP 循环动态背景。
-- 主题页新增视频预览、动态主题声音开关和模糊度滑杆，设置会持久保存。
-- 扩展全局主题应用器，在已接入主题系统的页面自动应用动态视频背景并按生命周期暂停/清理。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.41.apk`
+### v1.2.42
+- 修复替换头像照片时加载占位露出蓝色底的问题。
+- 头像照片加载占位改为透明，个人页和主页头像容器改为中性圆底。
+- 视频头像切换时不再给 ImageView 设置蓝色圆形底，避免播放前闪蓝。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.42.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

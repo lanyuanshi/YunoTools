@@ -3,11 +3,15 @@ package com.yuno.tools.util
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.media.MediaPlayer
+import android.net.Uri
+import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.VideoView
 import androidx.core.view.WindowCompat
 import com.google.android.material.card.MaterialCardView
 import com.yuno.tools.R
@@ -19,7 +23,8 @@ data class YunoTheme(
     val primary: Int,
     val text: Int,
     val sub: Int,
-    val imageBg: Boolean = false
+    val imageBg: Boolean = false,
+    val dynamicBg: Boolean = false
 )
 
 object ThemeApplier {
@@ -29,6 +34,8 @@ object ThemeApplier {
     private const val FEI_XUE_2_BG_TAG = "fei_xue_2_theme_background"
     private const val FEI_XUE_3_BG_TAG = "fei_xue_3_theme_background"
     private const val USER_IMAGE_BG_TAG = "user_image_theme_background"
+    private const val DYNAMIC_VIDEO_BG_TAG = "dynamic_video_theme_background"
+    private const val DYNAMIC_BLUR_TAG = "dynamic_video_theme_blur"
     const val THEME_PREVIEW_IMAGE_TAG = "theme_preview_image"
     private val skipTintIds = setOf("ivAvatar", "ivAvatarPreview", "ivCover", "ivPreview", "ivCompressed", "ivQRCode", "ivGridItem")
 
@@ -42,13 +49,17 @@ object ThemeApplier {
         UserSettingsStore.THEME_FEI_XUE_2 -> YunoTheme(Color.parseColor("#FFF4F9"), Color.argb(228, 255, 255, 255), Color.parseColor("#E86FA9"), Color.parseColor("#2B1B2D"), Color.parseColor("#86647E"), true)
         UserSettingsStore.THEME_FEI_XUE_3 -> YunoTheme(Color.parseColor("#F2F4FF"), Color.argb(226, 255, 255, 255), Color.parseColor("#8D7BFF"), Color.parseColor("#1D2035"), Color.parseColor("#62677F"), true)
         UserSettingsStore.THEME_USER_IMAGE -> YunoTheme(Color.parseColor("#FFF3F8"), Color.argb(226, 255, 255, 255), Color.parseColor("#FF6FAE"), Color.parseColor("#251A22"), Color.parseColor("#806576"), true)
+        UserSettingsStore.THEME_DYNAMIC_VIDEO -> YunoTheme(Color.parseColor("#0F172A"), Color.argb(214, 255, 255, 255), Color.parseColor("#38BDF8"), Color.parseColor("#111827"), Color.parseColor("#64748B"), imageBg = true, dynamicBg = true)
         else -> YunoTheme(Color.parseColor("#F2F2F7"), Color.WHITE, Color.parseColor("#007AFF"), Color.parseColor("#1C1C1E"), Color.parseColor("#8E8E93"))
     }
 
     fun apply(activity: Activity) {
         val theme = current(activity)
         val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
-        if (theme.imageBg) {
+        if (theme.dynamicBg) {
+            applyDynamicBackground(activity, root)
+        } else if (theme.imageBg) {
+            clearDynamicBackground(activity)
             val (bgRes, bgTag) = when (UserSettingsStore.getTheme(activity)) {
                 UserSettingsStore.THEME_YUNO -> R.drawable.theme_yuno_bg to YUNO_BG_TAG
                 UserSettingsStore.THEME_FEI_XUE_1 -> R.drawable.theme_fei_xue_1_bg to FEI_XUE_1_BG_TAG
@@ -58,13 +69,16 @@ object ThemeApplier {
                 else -> R.drawable.theme_amis_bg to AMIS_BG_TAG
             }
             applyImageBackground(root, bgRes, bgTag)
-        } else clearImageBackground(root)
-        root.setBackgroundColor(if (theme.imageBg) Color.TRANSPARENT else theme.bg)
+        } else {
+            clearImageBackground(root)
+            clearDynamicBackground(activity)
+        }
+        root.setBackgroundColor(if (theme.imageBg || theme.dynamicBg) Color.TRANSPARENT else theme.bg)
         applyView(root, theme)
 
         val window = activity.window
-        window.statusBarColor = if (theme.imageBg) Color.argb(88, 255, 255, 255) else theme.bg
-        window.navigationBarColor = if (theme.imageBg) Color.argb(232, 255, 255, 255) else theme.bg
+        window.statusBarColor = if (theme.imageBg || theme.dynamicBg) Color.argb(88, 255, 255, 255) else theme.bg
+        window.navigationBarColor = if (theme.imageBg || theme.dynamicBg) Color.argb(232, 255, 255, 255) else theme.bg
         val isLightBg = isLight(theme.bg)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = isLightBg
@@ -72,7 +86,7 @@ object ThemeApplier {
         }
     }
 
-    private fun isThemeBgTag(tag: Any?): Boolean = tag == AMIS_BG_TAG || tag == YUNO_BG_TAG || tag == FEI_XUE_1_BG_TAG || tag == FEI_XUE_2_BG_TAG || tag == FEI_XUE_3_BG_TAG || tag == USER_IMAGE_BG_TAG
+    private fun isThemeBgTag(tag: Any?): Boolean = tag == AMIS_BG_TAG || tag == YUNO_BG_TAG || tag == FEI_XUE_1_BG_TAG || tag == FEI_XUE_2_BG_TAG || tag == FEI_XUE_3_BG_TAG || tag == USER_IMAGE_BG_TAG || tag == DYNAMIC_VIDEO_BG_TAG || tag == DYNAMIC_BLUR_TAG
 
     private fun shouldKeepOriginalImage(tag: Any?): Boolean = isThemeBgTag(tag) || tag == THEME_PREVIEW_IMAGE_TAG
 
@@ -98,30 +112,90 @@ object ThemeApplier {
     private fun clearImageBackground(root: ViewGroup) {
         val frame = root as? FrameLayout ?: return
         for (i in frame.childCount - 1 downTo 0) {
-            val tag = frame.getChildAt(i).tag
-            if (isThemeBgTag(tag)) frame.removeViewAt(i)
+            val child = frame.getChildAt(i)
+            val tag = child.tag
+            if (isThemeBgTag(tag) && tag != DYNAMIC_VIDEO_BG_TAG && tag != DYNAMIC_BLUR_TAG) frame.removeViewAt(i)
         }
+    }
+
+    private fun applyDynamicBackground(activity: Activity, root: ViewGroup) {
+        val frame = root as? FrameLayout ?: return
+        clearImageBackground(root)
+        val video = (0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it.tag == DYNAMIC_VIDEO_BG_TAG } as? VideoView
+            ?: VideoView(frame.context).apply {
+                tag = DYNAMIC_VIDEO_BG_TAG
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                setVideoURI(Uri.parse("android.resource://${activity.packageName}/${R.raw.theme_dynamic_user}"))
+                setOnPreparedListener { mp ->
+                    mp.isLooping = true
+                    mp.setVolumeForTheme(activity)
+                    start()
+                }
+                setOnCompletionListener { start() }
+                setOnErrorListener { _, _, _ -> true }
+                frame.addView(this, 0)
+            }
+        video.alpha = 0.48f
+        runCatching { if (!video.isPlaying) video.start() }
+        val blur = UserSettingsStore.getDynamicThemeBlur(activity)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            video.setRenderEffect(if (blur > 0) android.graphics.RenderEffect.createBlurEffect(blur.toFloat(), blur.toFloat(), android.graphics.Shader.TileMode.CLAMP) else null)
+        }
+        val overlay = (0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it.tag == DYNAMIC_BLUR_TAG }
+            ?: View(frame.context).apply {
+                tag = DYNAMIC_BLUR_TAG
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                frame.addView(this, 1.coerceAtMost(frame.childCount))
+            }
+        overlay.setBackgroundColor(Color.argb((70 + blur * 4).coerceIn(70, 205), 255, 255, 255))
+        video.setOnPreparedListener { mp ->
+            mp.isLooping = true
+            mp.setVolumeForTheme(activity)
+            video.start()
+        }
+    }
+
+    fun pauseDynamicBackground(activity: Activity) {
+        val frame = activity.findViewById<ViewGroup>(android.R.id.content) as? FrameLayout ?: return
+        ((0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it.tag == DYNAMIC_VIDEO_BG_TAG } as? VideoView)?.pause()
+    }
+
+    fun clearDynamicBackground(activity: Activity) {
+        val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
+        val frame = root as? FrameLayout ?: return
+        for (i in frame.childCount - 1 downTo 0) {
+            val child = frame.getChildAt(i)
+            if (child.tag == DYNAMIC_VIDEO_BG_TAG || child.tag == DYNAMIC_BLUR_TAG) {
+                if (child is VideoView) runCatching { child.stopPlayback() }
+                frame.removeViewAt(i)
+            }
+        }
+    }
+
+    private fun MediaPlayer.setVolumeForTheme(activity: Activity) {
+        val volume = if (UserSettingsStore.getDynamicThemeSound(activity)) 1f else 0f
+        setVolume(volume, volume)
     }
 
     private fun applyView(v: View, t: YunoTheme) {
         if (isThemeBgTag(v.tag)) return
         val idName = runCatching { v.resources.getResourceEntryName(v.id) }.getOrNull().orEmpty()
-        if (idName.endsWith("Root") || idName == "mainRoot" || idName == "profilePage" || idName == "mainPageHost") v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
+        if (idName.endsWith("Root") || idName == "mainRoot" || idName == "profilePage" || idName == "mainPageHost") v.setBackgroundColor(if (t.imageBg || t.dynamicBg) Color.TRANSPARENT else t.bg)
 
         when (idName) {
-            "statusBarPlaceholder" -> v.setBackgroundColor(if (t.imageBg) Color.argb(88, 255, 255, 255) else t.bg)
+            "statusBarPlaceholder" -> v.setBackgroundColor(if (t.imageBg || t.dynamicBg) Color.argb(88, 255, 255, 255) else t.bg)
             "tvMainTitle" -> {
-                v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
+                v.setBackgroundColor(if (t.imageBg || t.dynamicBg) Color.TRANSPARENT else t.bg)
                 (v as? TextView)?.setTextColor(t.text)
             }
-            "bottomNavContainer" -> v.setBackgroundColor(if (t.imageBg) Color.TRANSPARENT else t.bg)
+            "bottomNavContainer" -> v.setBackgroundColor(if (t.imageBg || t.dynamicBg) Color.TRANSPARENT else t.bg)
             "bottomNavInner" -> applyBottomNav(v, t)
         }
 
         when (v) {
             is MaterialCardView -> {
                 v.setCardBackgroundColor(t.card)
-                if (t.imageBg) {
+                if (t.imageBg || t.dynamicBg) {
                     v.strokeWidth = (0.7f * v.resources.displayMetrics.density).toInt().coerceAtLeast(1)
                     v.strokeColor = blend(t.primary, Color.WHITE, 0.30f)
                 }
@@ -156,7 +230,7 @@ object ThemeApplier {
 
     private fun applyBottomNav(v: View, t: YunoTheme) {
         val density = v.resources.displayMetrics.density
-        val capsuleColor = if (t.imageBg) Color.argb(226, 255, 255, 255) else t.card
+        val capsuleColor = if (t.imageBg || t.dynamicBg) Color.argb(226, 255, 255, 255) else t.card
         v.background = roundRect(capsuleColor, 28f * density)
     }
 

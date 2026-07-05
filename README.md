@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.40**
+**当前版本：v1.2.41**
 
-安装包下载：[release/YunoTools-v1.2.40.apk](release/YunoTools-v1.2.40.apk)
+安装包下载：[release/YunoTools-v1.2.41.apk](release/YunoTools-v1.2.41.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本在日常工具中新增 Cloudreve 网盘入口，先完成文件管理 UI 壳、容量概览、目录列表、搜索筛选和操作占位，后续可继续对接真实 Cloudreve 接口。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本新增视频动态主题，将你提供的视频接入 APP 主题系统，支持循环动态背景、声音开关和模糊度调节。
 
 ## 功能列表
 
@@ -50,7 +50,7 @@
 ### 个人中心
 - **解析历史** - 查看过往解析记录，点击可直接回放结果。
 - **自定义头像** - 支持 GIF / WebP / 视频动态头像。
-- **设置** - 支持主题切换、模型配置和功能参数管理。
+- **设置** - 支持主题切换、动态视频主题声音/模糊度调节、模型配置和功能参数管理。
 
 ## 技术栈
 - **语言**: Kotlin
@@ -60,7 +60,7 @@
 - **音视频播放**: AndroidX Media3 (ExoPlayer)
 - **系统播放通知**: AndroidX MediaSession + NotificationCompat
 - **二维码**: ZXing
-- **主题引擎**: 自定义 ThemeApplier 全局动态换色
+- **主题引擎**: 自定义 ThemeApplier 全局动态换色，支持图片背景与视频动态背景
 
 ## 项目结构
 ```
@@ -80,7 +80,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.39.apk](release/YunoTools-v1.2.39.apk)
+下载并安装：[release/YunoTools-v1.2.41.apk](release/YunoTools-v1.2.41.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -95,11 +95,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.40
-- 在日常工具中新增“网盘”入口，预留 Cloudreve 对接方向。
-- 新增 Cloudreve 网盘 UI 壳：容量概览、连接状态、路径栏、文件列表、搜索筛选和空状态。
-- 新增上传、新建文件夹、刷新、分享管理、连接设置等操作占位，后续可接真实接口。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.40.apk`
+### v1.2.41
+- 新增“动态视频主题”，使用本次提供的视频作为 APP 循环动态背景。
+- 主题页新增视频预览、动态主题声音开关和模糊度滑杆，设置会持久保存。
+- 扩展全局主题应用器，在已接入主题系统的页面自动应用动态视频背景并按生命周期暂停/清理。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.41.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

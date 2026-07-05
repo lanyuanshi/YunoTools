@@ -61,7 +61,7 @@
             android:layout_height="wrap_content"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:text="图片主题使用原图比例预览，不裁切、不拉伸变形。"
+            android:text="图片主题使用原图比例预览；动态视频主题支持循环预览，并可调声音和模糊度。"
             android:textColor="#8E8E93"
             android:textSize="13sp" />
 

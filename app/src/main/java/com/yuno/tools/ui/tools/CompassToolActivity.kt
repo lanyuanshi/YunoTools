@@ -1,6 +1,8 @@
 package com.yuno.tools.ui.tools
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -12,32 +14,58 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
 class CompassToolActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
+    private lateinit var locationManager: LocationManager
     private var rotationSensor: Sensor? = null
     private lateinit var compassView: CompassView
     private lateinit var degreeText: TextView
     private lateinit var directionText: TextView
     private lateinit var accuracyText: TextView
+    private lateinit var altitudeText: TextView
+    private lateinit var temperatureText: TextView
+    private lateinit var locationText: TextView
+    private var hasRequestedWeather = false
+    private var locationListener: LocationListener? = null
+
+    private val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true || result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) loadEnvironmentInfo() else {
+            altitudeText.text = "海拔：需要定位权限"
+            temperatureText.text = "温度：需要定位权限"
+            locationText.text = "位置：未授权，无法读取海拔和本地温度"
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(18), dp(16), dp(24))
             setBackgroundColor(Color.parseColor("#F8FAFC"))
-            addView(hero("指南针", "罗盘式方位显示，支持实时方位角、方向和校准提示。"))
+            addView(hero("指南针", "罗盘式方位显示，支持实时方位角、方向、海拔和当前位置温度。"))
             compassView = CompassView(context).apply { layoutParams = LinearLayout.LayoutParams(-1, dp(430)).apply { bottomMargin = dp(14) } }
             addView(compassView)
             addView(card().apply {
@@ -46,11 +74,30 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
                 accuracyText = hint("提示：如果指向不准，请拿手机画 8 字校准。")
                 addView(degreeText); addView(directionText); addView(accuracyText)
             })
+            addView(card().apply {
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }
+                altitudeText = line("海拔：定位中…")
+                temperatureText = line("温度：获取中…")
+                locationText = hint("位置：正在读取设备定位，用于海拔和天气温度。")
+                addView(altitudeText); addView(temperatureText); addView(locationText)
+            })
         })
+        ensureLocationPermissionAndLoad()
     }
 
-    override fun onResume() { super.onResume(); rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) } }
-    override fun onPause() { sensorManager.unregisterListener(this); super.onPause() }
+    override fun onResume() {
+        super.onResume()
+        rotationSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+        if (hasLocationPermission()) loadEnvironmentInfo()
+    }
+
+    override fun onPause() {
+        sensorManager.unregisterListener(this)
+        locationListener?.let { runCatching { locationManager.removeUpdates(it) } }
+        locationListener = null
+        super.onPause()
+    }
+
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         accuracyText.text = when (accuracy) {
             SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> "精度：高"
@@ -59,6 +106,7 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
             else -> "精度：未知"
         }
     }
+
     override fun onSensorChanged(event: SensorEvent) {
         val matrix = FloatArray(9)
         SensorManager.getRotationMatrixFromVector(matrix, event.values)
@@ -70,6 +118,104 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
         degreeText.text = "方位：${"%.0f".format(azimuth)}°"
         directionText.text = "方向：${directionOf(azimuth)}"
     }
+
+    private fun ensureLocationPermissionAndLoad() {
+        if (hasLocationPermission()) loadEnvironmentInfo() else {
+            altitudeText.text = "海拔：等待授权"
+            temperatureText.text = "温度：等待授权"
+            locationText.text = "位置：授权定位后显示海拔，并按当前位置获取温度。"
+            locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    private fun loadEnvironmentInfo() {
+        if (!hasLocationPermission()) return
+        altitudeText.text = "海拔：定位中…"
+        if (!hasRequestedWeather) temperatureText.text = "温度：获取中…"
+        val last = latestLastKnownLocation()
+        if (last != null) updateLocationInfo(last)
+        requestSingleLocationUpdate()
+    }
+
+    private fun latestLastKnownLocation(): Location? {
+        if (!hasLocationPermission()) return null
+        return runCatching {
+            locationManager.getProviders(true)
+                .mapNotNull { provider -> runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull() }
+                .maxByOrNull { it.time }
+        }.getOrNull()
+    }
+
+    private fun requestSingleLocationUpdate() {
+        if (!hasLocationPermission()) return
+        val provider = when {
+            runCatching { locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false) -> LocationManager.GPS_PROVIDER
+            runCatching { locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false) -> LocationManager.NETWORK_PROVIDER
+            else -> null
+        }
+        if (provider == null) {
+            if (latestLastKnownLocation() == null) {
+                altitudeText.text = "海拔：请开启定位服务"
+                temperatureText.text = "温度：请开启定位服务"
+                locationText.text = "位置：系统定位服务未开启"
+            }
+            return
+        }
+        locationListener?.let { runCatching { locationManager.removeUpdates(it) } }
+        locationListener = LocationListener { location ->
+            updateLocationInfo(location)
+            locationListener?.let { runCatching { locationManager.removeUpdates(it) } }
+            locationListener = null
+        }
+        runCatching { locationManager.requestLocationUpdates(provider, 0L, 0f, locationListener!!) }
+            .onFailure {
+                if (latestLastKnownLocation() == null) {
+                    altitudeText.text = "海拔：定位失败"
+                    locationText.text = "位置：${it.message ?: "无法读取定位"}"
+                }
+            }
+    }
+
+    private fun updateLocationInfo(location: Location) {
+        val altitude = if (location.hasAltitude()) "${location.altitude.roundToInt()} m" else "暂无海拔数据"
+        altitudeText.text = "海拔：$altitude"
+        locationText.text = "位置：${"%.5f".format(location.latitude)}, ${"%.5f".format(location.longitude)}"
+        if (!hasRequestedWeather) fetchTemperature(location.latitude, location.longitude)
+    }
+
+    private fun fetchTemperature(latitude: Double, longitude: Double) {
+        hasRequestedWeather = true
+        temperatureText.text = "温度：获取中…"
+        thread(name = "compass-weather") {
+            val result = runCatching {
+                val url = URL("https://wttr.in/${latitude},${longitude}?format=j1")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("User-Agent", "YunoTools Compass")
+                    setRequestProperty("Accept", "application/json")
+                }
+                val text = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                val current = JSONObject(text).getJSONArray("current_condition").getJSONObject(0)
+                val temp = current.optString("temp_C", "--")
+                val feels = current.optString("FeelsLikeC", "")
+                val desc = current.optJSONArray("weatherDesc")?.optJSONObject(0)?.optString("value", "") ?: ""
+                buildString {
+                    append("温度：${temp}°C")
+                    if (feels.isNotBlank()) append(" 体感 ${feels}°C")
+                    if (desc.isNotBlank()) append(" · $desc")
+                }
+            }.getOrElse { "温度：获取失败，检查网络后重试" }
+            runOnUiThread { temperatureText.text = result }
+        }
+    }
+
     private fun directionOf(a: Float) = when { a < 22.5 || a >= 337.5 -> "北 N"; a < 67.5 -> "东北 NE"; a < 112.5 -> "东 E"; a < 157.5 -> "东南 SE"; a < 202.5 -> "南 S"; a < 247.5 -> "西南 SW"; a < 292.5 -> "西 W"; else -> "西北 NW" }
 
     private class CompassView(context: Context) : View(context) {

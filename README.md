@@ -6,11 +6,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.42**
+**当前版本：v1.2.43**
 
-安装包下载：[release/YunoTools-v1.2.42.apk](release/YunoTools-v1.2.42.apk)
+安装包下载：[release/YunoTools-v1.2.43.apk](release/YunoTools-v1.2.43.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本修复替换头像照片时短暂露出蓝色底的问题，头像照片/视频加载期间改为透明或中性圆底显示。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本增强指南针工具，新增海拔显示和按当前位置获取的温度信息。
 
 ## 功能列表
 
@@ -18,7 +18,7 @@
 - **短视频去水印** - 支持抖音/快手/小红书/B站等短视频解析去水印。
 - **AI聊天** - 接入 OpenRouter，支持模型配置、本地历史记录与智能对话。
 - **音乐播放器** - 支持本地音乐、在线音乐搜索、收藏、下载、歌词和系统媒体识别。
-- **日常工具** - 集成全能计算器、每日一题、Cloudreve 网盘、Base64、订阅管理、横屏时钟、手持弹幕等工具入口。
+- **日常工具** - 集成全能计算器、每日一题、指南针海拔/温度、Cloudreve 网盘、Base64、订阅管理、横屏时钟、手持弹幕等工具入口。
 
 ### 音乐播放器
 - **本地音乐** - 读取手机音频库，也可手动添加 `audio/*` 文件播放。
@@ -80,7 +80,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.42.apk](release/YunoTools-v1.2.42.apk)
+下载并安装：[release/YunoTools-v1.2.43.apk](release/YunoTools-v1.2.43.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -95,11 +95,11 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.42
-- 修复替换头像照片时加载占位露出蓝色底的问题。
-- 头像照片加载占位改为透明，个人页和主页头像容器改为中性圆底。
-- 视频头像切换时不再给 ImageView 设置蓝色圆形底，避免播放前闪蓝。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.42.apk`
+### v1.2.43
+- 指南针工具新增海拔显示，授权定位后读取当前位置海拔。
+- 指南针工具新增当前位置温度，通过经纬度请求天气数据并显示温度、体感和天气描述。
+- 新增定位权限声明，并在指南针页提供未授权、定位关闭、网络失败等降级提示。
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.43.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

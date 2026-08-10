@@ -38,6 +38,7 @@ class MemberMagnetPlayerActivity : Activity() {
         val title = intent.getStringExtra("title").orEmpty().ifBlank { "会员在线播放" }
         val hash = intent.getStringExtra("hash").orEmpty()
         val isMagnet = intent.getBooleanExtra("isMagnet", url.startsWith("magnet:", true))
+        val forceDirect = intent.getBooleanExtra("forceDirect", false)
 
         if (url.isBlank()) {
             Toast.makeText(this, "链接为空", Toast.LENGTH_SHORT).show()
@@ -45,7 +46,7 @@ class MemberMagnetPlayerActivity : Activity() {
             return
         }
 
-        if (!isMagnet && isDirectMediaUrl(url)) {
+        if ((!isMagnet && isDirectMediaUrl(url)) || forceDirect) {
             buildDirectPlayer(url, title)
         } else {
             buildMagnetLocalPage(url, title, hash)
@@ -91,7 +92,7 @@ class MemberMagnetPlayerActivity : Activity() {
             setTextColor(Color.WHITE)
         })
         page.addView(TextView(this).apply {
-            text = "当前版本不跳外部网站，磁力只在本地解析展示；如需播放，请交给系统下载器、支持磁力的云播 App，或粘贴可直接播放的 m3u8/mp4 直链。"
+            text = "未拿到可播放文件时显示本地磁力信息；请回到解析页通过 Webtor API 获取文件列表后选择文件播放/下载。"
             textSize = 14f
             setLineSpacing(dp(5).toFloat(), 1f)
             setTextColor(Color.parseColor("#CBD5E1"))

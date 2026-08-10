@@ -35,10 +35,12 @@ import kotlin.math.roundToInt
 class MemberMagnetActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var resultBox: LinearLayout
+    private lateinit var apiKeyInput: EditText
     private var parsed: MagnetInfo? = null
     private var resourceId: String = ""
     private var resourceName: String = ""
     private val apiBase = "https://api.webtor.io/v1"
+    private val prefsName = "member_magnet_webtor"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +95,22 @@ class MemberMagnetActivity : AppCompatActivity() {
         row.addView(actionButton("解析文件", "#7C3AED") { parseInput() }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { rightMargin = dp(6) })
         row.addView(actionButton("粘贴", "#0F172A") { paste() }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(6) })
         box.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        box.addView(TextView(this).apply { text = "Webtor API Key"; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#111827")) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        apiKeyInput = EditText(this).apply {
+            hint = "粘贴 Webtor API key，不要带 Bearer"
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setText(getSavedApiKey())
+            setTextColor(Color.parseColor("#111827"))
+            setHintTextColor(Color.parseColor("#94A3B8"))
+            background = rounded(Color.parseColor("#F8FAFC"), dp(16), Color.parseColor("#E2E8F0"), 1)
+            setPadding(dp(12))
+        }
+        box.addView(apiKeyInput, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
+        val keyRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        keyRow.addView(actionButton("保存Key", "#475569") { saveApiKey() }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(6) })
+        keyRow.addView(actionButton("粘贴Key", "#64748B") { pasteApiKey() }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { leftMargin = dp(6) })
+        box.addView(keyRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         resultBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.addView(resultBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
         card.addView(box)
@@ -100,7 +118,7 @@ class MemberMagnetActivity : AppCompatActivity() {
 
         val note = card(Color.parseColor("#EEF2FF"))
         note.addView(TextView(this).apply {
-            text = "说明：磁力会通过 Webtor API 解析为真实文件列表。点“播放”会请求 stream 导出并交给本地播放器；点“下载”会请求 download 导出并交给系统下载器/浏览器。请只解析你有权访问的内容。"
+            text = "说明：Webtor API 需要账号 API Key，请在上方保存 Key 后解析。磁力会解析为真实文件列表；点“播放”请求 stream 导出并交给本地播放器，点“下载”请求 download 导出并交给系统下载器/浏览器。请只解析你有权访问的内容。"
             textSize = 13f; setLineSpacing(dp(4).toFloat(), 1f); setTextColor(Color.parseColor("#475569")); setPadding(dp(16))
         })
         content.addView(note, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
@@ -109,6 +127,12 @@ class MemberMagnetActivity : AppCompatActivity() {
     private fun parseInput() {
         val raw = input.text.toString().trim()
         if (raw.isBlank()) { toast("请先粘贴链接"); return }
+        saveApiKey(silent = true)
+        if (raw.startsWith("magnet:?", ignoreCase = true) && getSavedApiKey().isBlank()) {
+            resultBox.removeAllViews()
+            resultBox.addView(TextView(this).apply { text = "请先填写并保存 Webtor API Key，否则接口会返回 HTTP 401。Key 在 webtor.io 个人资料页创建，填入时不要带 Bearer 前缀。"; textSize = 14f; setTextColor(Color.parseColor("#DC2626")); setPadding(0, dp(8), 0, dp(8)) })
+            return
+        }
         parsed = parseMagnet(raw)
         if (!parsed!!.isMagnet) {
             renderDirectLink(raw, parsed!!)
@@ -242,7 +266,8 @@ class MemberMagnetActivity : AppCompatActivity() {
             doOutput = true
             setRequestProperty("Content-Type", "text/plain; charset=utf-8")
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "YunoTools/1.2.44")
+            setRequestProperty("User-Agent", "YunoTools/1.2.45")
+            getSavedApiKey().takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
         OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(raw) }
         return readJson(conn)
@@ -254,7 +279,8 @@ class MemberMagnetActivity : AppCompatActivity() {
             connectTimeout = 30000
             readTimeout = 120000
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "YunoTools/1.2.44")
+            setRequestProperty("User-Agent", "YunoTools/1.2.45")
+            getSavedApiKey().takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
         return readJson(conn)
     }
@@ -265,7 +291,7 @@ class MemberMagnetActivity : AppCompatActivity() {
         val body = BufferedReader(InputStreamReader(stream ?: conn.inputStream, Charsets.UTF_8)).use { it.readText() }
         if (code !in 200..299) {
             val msg = runCatching { JSONObject(body).optString("error") }.getOrNull().orEmpty().ifBlank { body.take(120) }
-            throw IllegalStateException("HTTP $code $msg")
+            throw IllegalStateException(if (code == 401) "HTTP 401：Webtor API Key 无效或未填写，请在上方保存正确 Key" else "HTTP $code $msg")
         }
         return JSONObject(body)
     }
@@ -286,6 +312,22 @@ class MemberMagnetActivity : AppCompatActivity() {
         mediaFormat = obj.optString("media_format"),
         mimeType = obj.optString("mime_type"),
     )
+
+
+    private fun saveApiKey(silent: Boolean = false) {
+        if (!::apiKeyInput.isInitialized) return
+        val key = apiKeyInput.text.toString().trim().removePrefix("Bearer ").trim()
+        getSharedPreferences(prefsName, MODE_PRIVATE).edit().putString("webtor_api_key", key).apply()
+        if (!silent) toast(if (key.isBlank()) "已清空 Webtor API Key" else "已保存 Webtor API Key")
+    }
+
+    private fun getSavedApiKey(): String = getSharedPreferences(prefsName, MODE_PRIVATE).getString("webtor_api_key", "").orEmpty()
+
+    private fun pasteApiKey() {
+        val clip = (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip
+        val text = clip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty().trim().removePrefix("Bearer ").trim()
+        if (text.isBlank()) toast("剪贴板为空") else { apiKeyInput.setText(text); saveApiKey() }
+    }
 
     private fun paste() {
         val clip = (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip

@@ -47,6 +47,7 @@ class MemberZoneActivity : AppCompatActivity() {
         addHeader(state)
         addVipCard(state)
         addExpressTool(state)
+        addMagnetTool(state)
         addComingSoon()
     }
 
@@ -85,6 +86,26 @@ class MemberZoneActivity : AppCompatActivity() {
             background = rounded(Color.parseColor(if (state.isVip) "#10B981" else "#8B5CF6"), dp(18), Color.TRANSPARENT, 0)
             setOnClickListener {
                 if (AccountStore.hasVipAccess(this@MemberZoneActivity)) startActivity(Intent(this@MemberZoneActivity, ExpressQueryActivity::class.java))
+                else { toast("请先在我的页面输入兑换码开通会员"); startActivity(Intent(this@MemberZoneActivity, ProfileActivity::class.java)) }
+            }
+        }
+        box.addView(btn, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(16) })
+        card.addView(box)
+        content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+    }
+
+
+    private fun addMagnetTool(state: AccountStore.AccountState) {
+        val card = card(Color.WHITE)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18)) }
+        box.addView(TextView(this).apply { text = "磁力链接解析"; textSize = 21f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#111827")) })
+        box.addView(TextView(this).apply { text = "会员专属工具，支持 magnet 信息解析、Hash/Tracker 展示、复制解析信息、调用下载器，以及黑底沉浸式在线播放入口。"; textSize = 14f; setLineSpacing(dp(4).toFloat(), 1f); setTextColor(Color.parseColor("#64748B")) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        val btn = Button(this).apply {
+            text = if (state.isVip) "进入磁力解析" else "未解锁 · 去我的页面兑换"
+            textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
+            background = rounded(Color.parseColor(if (state.isVip) "#7C3AED" else "#8B5CF6"), dp(18), Color.TRANSPARENT, 0)
+            setOnClickListener {
+                if (AccountStore.hasVipAccess(this@MemberZoneActivity)) startActivity(Intent(this@MemberZoneActivity, MemberMagnetActivity::class.java))
                 else { toast("请先在我的页面输入兑换码开通会员"); startActivity(Intent(this@MemberZoneActivity, ProfileActivity::class.java)) }
             }
         }

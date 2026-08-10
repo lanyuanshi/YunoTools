@@ -62,6 +62,14 @@
             android:name=".ui.profile.MemberZoneActivity"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.profile.MemberMagnetActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.profile.MemberMagnetPlayerActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.YunoTools" />
+        <activity
             android:name=".ui.profile.ParseHistoryActivity"
             android:screenOrientation="portrait" />
         <activity

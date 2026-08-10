@@ -44,7 +44,7 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var altitudeText: TextView
     private lateinit var temperatureText: TextView
     private lateinit var locationText: TextView
-    private var hasRequestedWeather = false
+    private var lastEnvironmentKey: String = ""
     private var locationListener: LocationListener? = null
 
     private val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -135,7 +135,7 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
     private fun loadEnvironmentInfo() {
         if (!hasLocationPermission()) return
         altitudeText.text = "海拔：定位中…"
-        if (!hasRequestedWeather) temperatureText.text = "温度：获取中…"
+        temperatureText.text = "温度：获取中…"
         val last = latestLastKnownLocation()
         if (last != null) updateLocationInfo(last)
         requestSingleLocationUpdate()
@@ -171,7 +171,7 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
             locationListener?.let { runCatching { locationManager.removeUpdates(it) } }
             locationListener = null
         }
-        runCatching { locationManager.requestLocationUpdates(provider, 0L, 0f, locationListener!!) }
+        runCatching { locationManager.requestLocationUpdates(provider, 2000L, 1f, locationListener!!) }
             .onFailure {
                 if (latestLastKnownLocation() == null) {
                     altitudeText.text = "海拔：定位失败"
@@ -181,18 +181,20 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun updateLocationInfo(location: Location) {
-        val altitude = if (location.hasAltitude()) "${location.altitude.roundToInt()} m" else "暂无海拔数据"
-        altitudeText.text = "海拔：$altitude"
-        locationText.text = "位置：${"%.5f".format(location.latitude)}, ${"%.5f".format(location.longitude)}"
-        if (!hasRequestedWeather) fetchTemperature(location.latitude, location.longitude)
+        val localAltitude = if (location.hasAltitude()) "设备 ${location.altitude.roundToInt()} m" else "设备暂无"
+        altitudeText.text = "海拔：$localAltitude · 网络校准中…"
+        locationText.text = "位置：${"%.5f".format(location.latitude)}, ${"%.5f".format(location.longitude)} · ${providerName(location.provider)}"
+        fetchEnvironment(location.latitude, location.longitude, localAltitude)
     }
 
-    private fun fetchTemperature(latitude: Double, longitude: Double) {
-        hasRequestedWeather = true
+    private fun fetchEnvironment(latitude: Double, longitude: Double, localAltitude: String) {
+        val key = "${"%.3f".format(latitude)},${"%.3f".format(longitude)}"
+        if (key == lastEnvironmentKey && !temperatureText.text.contains("获取失败")) return
+        lastEnvironmentKey = key
         temperatureText.text = "温度：获取中…"
-        thread(name = "compass-weather") {
+        thread(name = "compass-environment") {
             val result = runCatching {
-                val url = URL("https://wttr.in/${latitude},${longitude}?format=j1")
+                val url = URL("https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current_weather=true&elevation=true&timezone=auto")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 8000
@@ -200,20 +202,46 @@ class CompassToolActivity : AppCompatActivity(), SensorEventListener {
                     setRequestProperty("User-Agent", "YunoTools Compass")
                     setRequestProperty("Accept", "application/json")
                 }
-                val text = conn.inputStream.bufferedReader().use { it.readText() }
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
                 conn.disconnect()
-                val current = JSONObject(text).getJSONArray("current_condition").getJSONObject(0)
-                val temp = current.optString("temp_C", "--")
-                val feels = current.optString("FeelsLikeC", "")
-                val desc = current.optJSONArray("weatherDesc")?.optJSONObject(0)?.optString("value", "") ?: ""
-                buildString {
-                    append("温度：${temp}°C")
-                    if (feels.isNotBlank()) append(" 体感 ${feels}°C")
-                    if (desc.isNotBlank()) append(" · $desc")
-                }
-            }.getOrElse { "温度：获取失败，检查网络后重试" }
-            runOnUiThread { temperatureText.text = result }
+                val json = JSONObject(body)
+                val elevation = json.optDouble("elevation", Double.NaN)
+                val current = json.optJSONObject("current_weather")
+                val temp = current?.optDouble("temperature", Double.NaN) ?: Double.NaN
+                val wind = current?.optDouble("windspeed", Double.NaN) ?: Double.NaN
+                val weatherCode = current?.optInt("weathercode", -1) ?: -1
+                EnvironmentResult(
+                    altitude = if (!elevation.isNaN()) "${elevation.roundToInt()} m" else localAltitude,
+                    temperature = if (!temp.isNaN()) "${"%.1f".format(temp)}°C" else "--",
+                    detail = weatherText(weatherCode) + if (!wind.isNaN()) " · 风速 ${"%.0f".format(wind)} km/h" else ""
+                )
+            }.getOrElse { EnvironmentResult(localAltitude, "获取失败", "检查网络后点返回再进入重试") }
+            runOnUiThread {
+                altitudeText.text = "海拔：${result.altitude}"
+                temperatureText.text = "温度：${result.temperature}${if (result.detail.isNotBlank()) " · ${result.detail}" else ""}"
+            }
         }
+    }
+
+    private data class EnvironmentResult(val altitude: String, val temperature: String, val detail: String)
+
+    private fun providerName(provider: String?): String = when (provider) {
+        LocationManager.GPS_PROVIDER -> "GPS"
+        LocationManager.NETWORK_PROVIDER -> "网络定位"
+        else -> provider ?: "定位"
+    }
+
+    private fun weatherText(code: Int): String = when (code) {
+        0 -> "晴"
+        1, 2 -> "少云"
+        3 -> "阴"
+        45, 48 -> "雾"
+        51, 53, 55, 56, 57 -> "毛毛雨"
+        61, 63, 65, 66, 67 -> "雨"
+        71, 73, 75, 77 -> "雪"
+        80, 81, 82 -> "阵雨"
+        95, 96, 99 -> "雷雨"
+        else -> "天气"
     }
 
     private fun directionOf(a: Float) = when { a < 22.5 || a >= 337.5 -> "北 N"; a < 67.5 -> "东北 NE"; a < 112.5 -> "东 E"; a < 157.5 -> "东南 SE"; a < 202.5 -> "南 S"; a < 247.5 -> "西南 SW"; a < 292.5 -> "西 W"; else -> "西北 NW" }

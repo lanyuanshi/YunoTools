@@ -1,6 +1,5 @@
 package com.yuno.tools.ui.profile
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -15,10 +14,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -26,12 +22,10 @@ import android.widget.Toast
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import java.net.URLEncoder
 import kotlin.math.roundToInt
 
 class MemberMagnetPlayerActivity : Activity() {
     private var player: ExoPlayer? = null
-    private var playerView: PlayerView? = null
     private var chrome: LinearLayout? = null
     private val hideRunnable = Runnable { setChromeVisible(false) }
 
@@ -51,7 +45,11 @@ class MemberMagnetPlayerActivity : Activity() {
             return
         }
 
-        if (!isMagnet && isDirectMediaUrl(url)) buildDirectPlayer(url, title) else buildMagnetWebPlayer(url, title, hash)
+        if (!isMagnet && isDirectMediaUrl(url)) {
+            buildDirectPlayer(url, title)
+        } else {
+            buildMagnetLocalPage(url, title, hash)
+        }
     }
 
     private fun buildDirectPlayer(url: String, title: String) {
@@ -62,7 +60,6 @@ class MemberMagnetPlayerActivity : Activity() {
             setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
             setBackgroundColor(Color.BLACK)
         }
-        playerView = pv
         root.addView(pv, FrameLayout.LayoutParams(-1, -1))
         root.addView(topBar(title, "直链播放"), FrameLayout.LayoutParams(-1, dp(58), Gravity.TOP))
         root.setOnClickListener { showChromeTemporarily() }
@@ -76,38 +73,57 @@ class MemberMagnetPlayerActivity : Activity() {
         showChromeTemporarily()
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun buildMagnetWebPlayer(raw: String, title: String, hash: String) {
+    private fun buildMagnetLocalPage(raw: String, title: String, hash: String) {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        val web = WebView(this).apply {
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(84), dp(18), dp(24))
             setBackgroundColor(Color.BLACK)
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
-            webChromeClient = WebChromeClient()
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                    val uri = request.url.toString()
-                    return if (uri.startsWith("magnet:", true)) {
-                        openExternal(uri); true
-                    } else false
-                }
-            }
         }
-        root.addView(web, FrameLayout.LayoutParams(-1, -1))
-        root.addView(topBar(title, "磁力网页播放入口"), FrameLayout.LayoutParams(-1, dp(58), Gravity.TOP))
-        root.addView(bottomHint(raw), FrameLayout.LayoutParams(-1, dp(82), Gravity.BOTTOM))
+        root.addView(page, FrameLayout.LayoutParams(-1, -1))
+        root.addView(topBar(title, "本地磁力页"), FrameLayout.LayoutParams(-1, dp(58), Gravity.TOP))
         setContentView(root)
 
-        val target = if (hash.isNotBlank()) {
-            "https://webtor.io/" + Uri.encode(hash)
-        } else {
-            "https://webtor.io/#/show?magnet=" + URLEncoder.encode(raw, "UTF-8")
-        }
-        web.loadUrl(target)
-        Toast.makeText(this, "磁力需由网页/云播放服务解析；如无法播放请使用下载器", Toast.LENGTH_LONG).show()
+        page.addView(TextView(this).apply {
+            text = "本地磁力解析"
+            textSize = 26f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+        })
+        page.addView(TextView(this).apply {
+            text = "当前版本不跳外部网站，磁力只在本地解析展示；如需播放，请交给系统下载器、支持磁力的云播 App，或粘贴可直接播放的 m3u8/mp4 直链。"
+            textSize = 14f
+            setLineSpacing(dp(5).toFloat(), 1f)
+            setTextColor(Color.parseColor("#CBD5E1"))
+            setPadding(0, dp(10), 0, dp(18))
+        })
+        page.addView(infoLine("类型", "磁力链接"))
+        page.addView(infoLine("Hash", hash.ifBlank { "未识别" }))
+        page.addView(infoLine("链接", raw.take(180) + if (raw.length > 180) "…" else ""))
+        page.addView(Button(this).apply {
+            text = "复制磁力链接"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            background = rounded(Color.parseColor("#7C3AED"), dp(16), Color.TRANSPARENT, 0)
+            setOnClickListener { copy(raw) }
+        }, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(18) })
+        page.addView(Button(this).apply {
+            text = "交给下载器"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            background = rounded(Color.parseColor("#2563EB"), dp(16), Color.TRANSPARENT, 0)
+            setOnClickListener { openExternal(raw) }
+        }, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(10) })
+        page.addView(Button(this).apply {
+            text = "关闭"
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            background = rounded(Color.parseColor("#1F2937"), dp(16), Color.parseColor("#334155"), 1)
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(10) })
+        showChromeTemporarily()
     }
 
     private fun topBar(title: String, mode: String): LinearLayout {
@@ -139,41 +155,17 @@ class MemberMagnetPlayerActivity : Activity() {
         return bar
     }
 
-    private fun bottomHint(raw: String): LinearLayout {
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), 0, dp(16), 0)
-            setBackgroundColor(Color.argb(160, 0, 0, 0))
-        }
-        bar.addView(TextView(this).apply {
-            text = "若网页无法解析，可复制链接或交给第三方下载器。"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-        }, LinearLayout.LayoutParams(0, -1, 1f))
-        bar.addView(TextView(this).apply {
-            text = "复制"
-            gravity = Gravity.CENTER
-            textSize = 15f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setOnClickListener { copy(raw) }
-        }, LinearLayout.LayoutParams(dp(70), -1))
-        bar.addView(TextView(this).apply {
-            text = "下载"
-            gravity = Gravity.CENTER
-            textSize = 15f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setOnClickListener { openExternal(raw) }
-        }, LinearLayout.LayoutParams(dp(70), -1))
-        return bar
+    private fun infoLine(k: String, v: String) = TextView(this).apply {
+        text = "$k：$v"
+        textSize = 14f
+        setTextColor(Color.parseColor("#E2E8F0"))
+        setPadding(0, dp(6), 0, dp(6))
     }
 
     private fun showChromeTemporarily() {
         setChromeVisible(true)
         chrome?.removeCallbacks(hideRunnable)
-        chrome?.postDelayed(hideRunnable, 3000)
+        chrome?.postDelayed(hideRunnable, 2500)
     }
 
     private fun setChromeVisible(show: Boolean) { chrome?.visibility = if (show) View.VISIBLE else View.GONE }
@@ -210,5 +202,6 @@ class MemberMagnetPlayerActivity : Activity() {
             (lower.contains(".m3u8") || lower.contains(".mp4") || lower.contains(".m4v") || lower.contains(".webm") || lower.contains(".mkv"))
     }
 
+    private fun rounded(color: Int, radius: Int, stroke: Int, strokeWidth: Int) = android.graphics.drawable.GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); if (strokeWidth > 0) setStroke(dp(strokeWidth), stroke) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt()
 }

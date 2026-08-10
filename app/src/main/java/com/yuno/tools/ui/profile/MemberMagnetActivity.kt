@@ -90,7 +90,7 @@ class MemberMagnetActivity : AppCompatActivity() {
 
         val note = card(Color.parseColor("#EEF2FF"))
         note.addView(TextView(this).apply {
-            text = "说明：磁力链接本身不是可直接播放的视频地址。App 会先解析 Hash、名称和 Tracker；在线播放会进入黑底沉浸式播放页：m3u8/mp4 直链直接播放，magnet 进入网页/云播放入口；下载会调用系统/第三方下载器处理磁力任务。"
+            text = "说明：磁力链接本身不是可直接播放的视频地址。App 会先解析 Hash、名称和 Tracker；在线播放会进入本地页：m3u8/mp4 直链直接播放，magnet 保持本地展示并可交给下载器处理；下载会调用系统/第三方下载器处理磁力任务。"
             textSize = 13f; setLineSpacing(dp(4).toFloat(), 1f); setTextColor(Color.parseColor("#475569")); setPadding(dp(16))
         })
         content.addView(note, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
@@ -120,7 +120,7 @@ class MemberMagnetActivity : AppCompatActivity() {
     private fun play(raw: String, info: MagnetInfo) {
         startActivity(Intent(this, MemberMagnetPlayerActivity::class.java).apply {
             putExtra("url", raw)
-            putExtra("title", info.name.ifBlank { if (info.isMagnet) "磁力在线播放" else "在线播放" })
+            putExtra("title", info.name.ifBlank { if (info.isMagnet) "磁力本地页" else "在线播放" })
             putExtra("hash", info.hash)
             putExtra("isMagnet", info.isMagnet)
         })

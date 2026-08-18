@@ -4,7 +4,6 @@ import android.app.Activity
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaPlayer
-import android.net.Uri
 import android.os.Build
 import android.view.View
 import android.view.ViewGroup
@@ -49,7 +48,6 @@ object ThemeApplier {
         UserSettingsStore.THEME_FEI_XUE_2 -> YunoTheme(Color.parseColor("#FFF4F9"), Color.argb(228, 255, 255, 255), Color.parseColor("#E86FA9"), Color.parseColor("#2B1B2D"), Color.parseColor("#86647E"), true)
         UserSettingsStore.THEME_FEI_XUE_3 -> YunoTheme(Color.parseColor("#F2F4FF"), Color.argb(226, 255, 255, 255), Color.parseColor("#8D7BFF"), Color.parseColor("#1D2035"), Color.parseColor("#62677F"), true)
         UserSettingsStore.THEME_USER_IMAGE -> YunoTheme(Color.parseColor("#FFF3F8"), Color.argb(226, 255, 255, 255), Color.parseColor("#FF6FAE"), Color.parseColor("#251A22"), Color.parseColor("#806576"), true)
-        UserSettingsStore.THEME_DYNAMIC_VIDEO -> YunoTheme(Color.parseColor("#0F172A"), Color.argb(214, 255, 255, 255), Color.parseColor("#38BDF8"), Color.parseColor("#111827"), Color.parseColor("#64748B"), imageBg = true, dynamicBg = true)
         else -> YunoTheme(Color.parseColor("#F2F2F7"), Color.WHITE, Color.parseColor("#007AFF"), Color.parseColor("#1C1C1E"), Color.parseColor("#8E8E93"))
     }
 
@@ -57,9 +55,7 @@ object ThemeApplier {
         val theme = current(activity)
         val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
         if (theme.dynamicBg) {
-            applyDynamicBackground(activity, root)
         } else if (theme.imageBg) {
-            clearDynamicBackground(activity)
             val (bgRes, bgTag) = when (UserSettingsStore.getTheme(activity)) {
                 UserSettingsStore.THEME_YUNO -> R.drawable.theme_yuno_bg to YUNO_BG_TAG
                 UserSettingsStore.THEME_FEI_XUE_1 -> R.drawable.theme_fei_xue_1_bg to FEI_XUE_1_BG_TAG
@@ -71,7 +67,6 @@ object ThemeApplier {
             applyImageBackground(root, bgRes, bgTag)
         } else {
             clearImageBackground(root)
-            clearDynamicBackground(activity)
         }
         root.setBackgroundColor(if (theme.imageBg || theme.dynamicBg) Color.TRANSPARENT else theme.bg)
         applyView(root, theme)
@@ -115,60 +110,6 @@ object ThemeApplier {
             val child = frame.getChildAt(i)
             val tag = child.tag
             if (isThemeBgTag(tag) && tag != DYNAMIC_VIDEO_BG_TAG && tag != DYNAMIC_BLUR_TAG) frame.removeViewAt(i)
-        }
-    }
-
-    private fun applyDynamicBackground(activity: Activity, root: ViewGroup) {
-        val frame = root as? FrameLayout ?: return
-        clearImageBackground(root)
-        val video = (0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it.tag == DYNAMIC_VIDEO_BG_TAG } as? VideoView
-            ?: VideoView(frame.context).apply {
-                tag = DYNAMIC_VIDEO_BG_TAG
-                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-                setVideoURI(Uri.parse("android.resource://${activity.packageName}/${R.raw.theme_dynamic_user}"))
-                setOnPreparedListener { mp ->
-                    mp.isLooping = true
-                    mp.setVolumeForTheme(activity)
-                    start()
-                }
-                setOnCompletionListener { start() }
-                setOnErrorListener { _, _, _ -> true }
-                frame.addView(this, 0)
-            }
-        video.alpha = 0.48f
-        runCatching { if (!video.isPlaying) video.start() }
-        val blur = UserSettingsStore.getDynamicThemeBlur(activity)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            video.setRenderEffect(if (blur > 0) android.graphics.RenderEffect.createBlurEffect(blur.toFloat(), blur.toFloat(), android.graphics.Shader.TileMode.CLAMP) else null)
-        }
-        val overlay = (0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it.tag == DYNAMIC_BLUR_TAG }
-            ?: View(frame.context).apply {
-                tag = DYNAMIC_BLUR_TAG
-                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-                frame.addView(this, 1.coerceAtMost(frame.childCount))
-            }
-        overlay.setBackgroundColor(Color.argb((70 + blur * 4).coerceIn(70, 205), 255, 255, 255))
-        video.setOnPreparedListener { mp ->
-            mp.isLooping = true
-            mp.setVolumeForTheme(activity)
-            video.start()
-        }
-    }
-
-    fun pauseDynamicBackground(activity: Activity) {
-        val frame = activity.findViewById<ViewGroup>(android.R.id.content) as? FrameLayout ?: return
-        ((0 until frame.childCount).map { frame.getChildAt(it) }.firstOrNull { it.tag == DYNAMIC_VIDEO_BG_TAG } as? VideoView)?.pause()
-    }
-
-    fun clearDynamicBackground(activity: Activity) {
-        val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
-        val frame = root as? FrameLayout ?: return
-        for (i in frame.childCount - 1 downTo 0) {
-            val child = frame.getChildAt(i)
-            if (child.tag == DYNAMIC_VIDEO_BG_TAG || child.tag == DYNAMIC_BLUR_TAG) {
-                if (child is VideoView) runCatching { child.stopPlayback() }
-                frame.removeViewAt(i)
-            }
         }
     }
 

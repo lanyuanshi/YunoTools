@@ -112,9 +112,6 @@ import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
-import com.yuno.tools.ui.tools.MovieWarehouseActivity
-import com.yuno.tools.ui.tools.CloudDriveActivity
-import com.yuno.tools.ui.tools.GachaAnalysisActivity
 import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.MemberCenterActivity
 import com.yuno.tools.ui.profile.MemberZoneActivity
@@ -359,15 +356,6 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardTranslateTool).setOnClickListener {
             startActivity(Intent(this, TranslateActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.cardMovieWarehouse).setOnClickListener {
-            startActivity(Intent(this, MovieWarehouseActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.cardCloudDriveTool).setOnClickListener {
-            startActivity(Intent(this, CloudDriveActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.cardGachaAnalysis).setOnClickListener {
-            startActivity(Intent(this, GachaAnalysisActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardMagicCube).setOnClickListener {
             startActivity(Intent(this, MagicCubeActivity::class.java))
@@ -1322,7 +1310,7 @@ class MainActivity : AppCompatActivity() {
                         orientation = LinearLayout.VERTICAL
                         setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                     }
-                    listArea.addView(makeMusicRow("未搜索到结果", if (com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this).isBlank()) "请先点 Key 保存 QZQI API Key" else "可尝试输入完整歌名或歌手名；接口限流时请稍后重试", "", {}))
+                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试输入完整歌名或歌手名；接口限流时请稍后重试", "", {}))
                     replaceOnlineList(ScrollView(this).apply {
                         isFillViewport = true
                         addView(listArea)
@@ -1382,7 +1370,7 @@ class MainActivity : AppCompatActivity() {
                 onlineLastKeyword = keyword
                 if (keyword.isBlank()) {
                     onlineCachedSongs = emptyList()
-                    showOnlineHint(if (com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this).isBlank()) "先点 Key 保存 QZQI API Key，再搜索酷我音乐" else "输入歌曲名或歌手名搜索酷我音乐")
+                    showOnlineHint("输入歌曲名或歌手名搜索酷我音乐")
                     return@makeControlButton
                 }
 
@@ -1401,26 +1389,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             searchRow.addView(searchButton)
-            val keyButton = makeControlButton("Key") { _ ->
-                val edit = android.widget.EditText(this).apply {
-                    hint = "粘贴 QZQI API Key"
-                    setSingleLine(true)
-                    inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                    setText(com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this@MainActivity))
-                    setSelection(text.length)
-                }
-                android.app.AlertDialog.Builder(this)
-                    .setTitle("QZQI 酷我 API Key")
-                    .setMessage("新接口 https://api.qzqi.com/api/v1/KuwoMusic 需要 API Key。保存后会自动用于在线音乐搜索。")
-                    .setView(edit)
-                    .setPositiveButton("保存") { _, _ ->
-                        com.yuno.tools.util.MusicSearchHelper.saveQzqiApiKey(this@MainActivity, edit.text.toString())
-                        Toast.makeText(this, "已保存 QZQI API Key", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("取消", null)
-                    .show()
-            }
-            searchRow.addView(keyButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = (6 * density).toInt() })
             input.setOnEditorActionListener { _, actionId, event ->
                 val enterPressed = event?.keyCode == android.view.KeyEvent.KEYCODE_ENTER && event.action == android.view.KeyEvent.ACTION_UP
                 if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || enterPressed) {
@@ -1449,7 +1417,7 @@ class MainActivity : AppCompatActivity() {
             } else if (onlineLastKeyword.isNotBlank()) {
                 searchButton.performClick()
             } else {
-                showOnlineHint(if (com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this).isBlank()) "先点 Key 保存 QZQI API Key，再搜索酷我音乐" else "输入歌曲名或歌手名搜索酷我音乐")
+                showOnlineHint("输入歌曲名或歌手名搜索酷我音乐")
             }
         }
 
@@ -2482,7 +2450,7 @@ class MainActivity : AppCompatActivity() {
         private var barCount = 4
         private var levelProvider: (() -> Float)? = null
         private var spectrumStyle = false
-        private var spectrumMode = UserSettingsStore.MUSIC_SPECTRUM_MIRROR
+        private var spectrumMode = UserSettingsStore.MUSIC_SPECTRUM_UP
 
         fun setBarStyle(style: String) {
             colors = when (style) {
@@ -2505,7 +2473,7 @@ class MainActivity : AppCompatActivity() {
             invalidate()
         }
 
-        fun setSpectrumStyle(enabled: Boolean, mode: String = UserSettingsStore.MUSIC_SPECTRUM_MIRROR) {
+        fun setSpectrumStyle(enabled: Boolean, mode: String = UserSettingsStore.MUSIC_SPECTRUM_UP) {
             spectrumStyle = enabled
             spectrumMode = mode
             invalidate()
@@ -2539,7 +2507,7 @@ class MainActivity : AppCompatActivity() {
                 when (spectrumMode) {
                     UserSettingsStore.MUSIC_SPECTRUM_UP -> drawUpSpectrum(canvas, count)
                     UserSettingsStore.MUSIC_SPECTRUM_WAVE -> drawGlowWaveSpectrum(canvas)
-                    else -> drawVinylWrapSpectrum(canvas, count)
+                    else -> drawUpSpectrum(canvas, count)
                 }
                 return
             }
@@ -2710,7 +2678,8 @@ class MainActivity : AppCompatActivity() {
             animate().alpha(if (isPlaying) 1f else 0.72f).setDuration(160L).start()
         }
         val spectrumStyle = UserSettingsStore.getMusicSpectrumStyle(this@MainActivity)
-        val isVinylWrap = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_MIRROR
+        // “仅向上”必须保持原来的全宽横向向上柱状频谱，不能再包裹播放按钮。
+        val isVinylWrap = false
         val isWave = spectrumStyle == UserSettingsStore.MUSIC_SPECTRUM_WAVE
         if (isWave) {
             barSlot?.apply {

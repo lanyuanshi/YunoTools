@@ -1,7 +1,6 @@
 package com.yuno.tools
 
 import android.app.Application
-import com.yuno.tools.util.DynamicThemeLifecycle
 
 class YunoApp : Application() {
     companion object {
@@ -12,6 +11,5 @@ class YunoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        registerActivityLifecycleCallbacks(DynamicThemeLifecycle())
     }
 }

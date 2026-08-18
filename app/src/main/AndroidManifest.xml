@@ -139,21 +139,6 @@
             android:name=".ui.tools.TranslateActivity"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".ui.tools.MovieWarehouseActivity"
-            android:screenOrientation="portrait" />
-        <activity
-            android:name=".ui.tools.CloudDriveActivity"
-            android:screenOrientation="portrait" />
-        <activity
-            android:name=".ui.tools.MovieWarehousePlayerActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
-        <activity
-            android:name=".ui.tools.GachaAnalysisActivity"
-            android:screenOrientation="portrait" />
-        <activity
-            android:name=".ui.tools.WutheringWavesGachaActivity"
-            android:screenOrientation="portrait" />
-        <activity
             android:name=".ui.tools.HeisiImageActivity"
             android:screenOrientation="portrait" />
         <activity

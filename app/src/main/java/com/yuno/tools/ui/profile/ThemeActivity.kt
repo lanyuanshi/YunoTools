@@ -76,7 +76,6 @@ class ThemeActivity : AppCompatActivity() {
         }
 
         when {
-            option.videoPreview -> box.addView(createVideoPreview())
             option.imagePreview -> box.addView(createImagePreview(option))
             else -> box.addView(View(this).apply {
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58))
@@ -113,7 +112,6 @@ class ThemeActivity : AppCompatActivity() {
             visibility = View.GONE
         })
         box.addView(row)
-        if (option.videoPreview) box.addView(createDynamicControls())
         card.addView(box)
         return card
     }
@@ -130,88 +128,6 @@ class ThemeActivity : AppCompatActivity() {
         contentDescription = "${option.title}原图比例预览"
     }
 
-    private fun createVideoPreview(): FrameLayout {
-        val frame = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(220))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.parseColor("#0F172A"))
-                cornerRadius = dp(18).toFloat()
-            }
-        }
-        val video = VideoView(this).apply {
-            setVideoURI(Uri.parse("android.resource://$packageName/${R.raw.theme_dynamic_user}"))
-            setOnPreparedListener { mp ->
-                mp.isLooping = true
-                mp.setVolume(0f, 0f)
-                start()
-            }
-            setOnCompletionListener { start() }
-        }
-        frame.addView(video, FrameLayout.LayoutParams(-1, -1))
-        frame.addView(TextView(this).apply {
-            text = "动态预览"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            setPadding(dp(10), dp(6), dp(10), dp(6))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.argb(130, 15, 23, 42))
-                cornerRadius = dp(14).toFloat()
-            }
-        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply { leftMargin = dp(10); topMargin = dp(10) })
-        return frame
-    }
-
-    private fun createDynamicControls(): View {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(12), 0, 0)
-        }
-        val soundRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        soundRow.addView(TextView(this).apply {
-            text = "动态主题声音"
-            textSize = 14f
-            setTextColor(Color.parseColor("#111827"))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        val soundSwitch = android.widget.Switch(this).apply {
-            tag = R.id.dynamicThemeSound
-            isChecked = UserSettingsStore.getDynamicThemeSound(this@ThemeActivity)
-            setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
-                UserSettingsStore.setDynamicThemeSound(this@ThemeActivity, checked)
-                ThemeApplier.apply(this@ThemeActivity)
-            }
-        }
-        soundRow.addView(soundSwitch)
-        box.addView(soundRow)
-
-        val blurLabel = TextView(this).apply {
-            tag = R.id.dynamicThemeBlur
-            text = "模糊度：${UserSettingsStore.getDynamicThemeBlur(this@ThemeActivity)}"
-            textSize = 13f
-            setTextColor(Color.parseColor("#64748B"))
-            setPadding(0, dp(8), 0, dp(4))
-        }
-        box.addView(blurLabel)
-        box.addView(SeekBar(this).apply {
-            max = 40
-            progress = UserSettingsStore.getDynamicThemeBlur(this@ThemeActivity)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) min = 0
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (!fromUser) return
-                    blurLabel.text = "模糊度：$progress"
-                    UserSettingsStore.setDynamicThemeBlur(this@ThemeActivity, progress)
-                    ThemeApplier.apply(this@ThemeActivity)
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-            })
-        })
-        return box
-    }
 
     private fun selectTheme(option: ThemeOption) {
         UserSettingsStore.setTheme(this, option.key)
@@ -250,7 +166,6 @@ class ThemeActivity : AppCompatActivity() {
             ThemeOption(UserSettingsStore.THEME_FEI_XUE_2, "绯雪2", "图片背景主题，按原比例预览", R.drawable.theme_fei_xue_2_bg, true),
             ThemeOption(UserSettingsStore.THEME_FEI_XUE_3, "绯雪3", "图片背景主题，按原比例预览", R.drawable.theme_fei_xue_3_bg, true),
             ThemeOption(UserSettingsStore.THEME_USER_IMAGE, "云粉新主题", "使用你提供的图片作为背景", R.drawable.theme_user_bg, true),
-            ThemeOption(UserSettingsStore.THEME_DYNAMIC_VIDEO, "动态视频主题", "使用你提供的视频作为循环背景，可调声音和模糊度", R.raw.theme_dynamic_user, false, true)
         )
 
         fun themeDisplayName(key: String): String = when (key) {
@@ -263,7 +178,6 @@ class ThemeActivity : AppCompatActivity() {
             UserSettingsStore.THEME_FEI_XUE_2 -> "绯雪2主题"
             UserSettingsStore.THEME_FEI_XUE_3 -> "绯雪3主题"
             UserSettingsStore.THEME_USER_IMAGE -> "云粉新主题"
-            UserSettingsStore.THEME_DYNAMIC_VIDEO -> "动态视频主题"
             else -> "默认主题"
         }
     }

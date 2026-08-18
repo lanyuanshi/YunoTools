@@ -2,11 +2,11 @@
 
 ## 当前版本
 
-- 版本：`v1.2.45`
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.45.apk`
+- 版本：`v1.2.46`
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.46.apk`
 - 更新内容：
   - 修复指南针海拔/天气显示：改用定位经纬度请求 Open-Meteo 的网络高程和当前天气，海拔会随位置刷新，温度在环境卡中明确显示，并保留设备海拔作为降级提示。
-  - 会员专区磁力解析接入 Webtor Bearer API Key：支持 magnet 创建资源、解析文件列表、按文件导出 stream/download。
+  - 音乐播放器在线搜索切换为 https://api.qzqi.com/api/v1/KuwoMusic，支持保存 QZQI API Key 后搜索/播放/下载。
   - 新增会员磁力文件播放/下载：解析出的文件可导出播放地址交给 ExoPlayer，或导出下载地址交给系统下载器。
 
 
@@ -16,11 +16,11 @@
 
 # YunoTools
 
-**当前版本：v1.2.45**
+**当前版本：v1.2.46**
 
-安装包下载：[release/YunoTools-v1.2.45.apk](release/YunoTools-v1.2.45.apk)
+安装包下载：[release/YunoTools-v1.2.46.apk](release/YunoTools-v1.2.46.apk)
 
-一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本修复指南针海拔/天气刷新可见性，并在会员专区磁力解析新增 Webtor API Key 配置，解析文件列表后可播放/下载导出文件。
+一个功能丰富的 Android 工具箱应用，基于原生 Kotlin + Android SDK 开发。当前版本修复指南针海拔/天气刷新可见性，并在音乐播放器在线源更换为 QZQI 酷我音乐 API，并新增在线音乐 Key 配置入口；会员专区磁力解析保留 Webtor API Key 文件播放/下载。
 
 ## 功能列表
 
@@ -90,7 +90,7 @@ app/src/main/java/com/yuno/tools/
 ## 安装
 
 ### 方法 1: 下载 APK
-下载并安装：[release/YunoTools-v1.2.45.apk](release/YunoTools-v1.2.45.apk)
+下载并安装：[release/YunoTools-v1.2.46.apk](release/YunoTools-v1.2.46.apk)
 
 ### 方法 2: Android Studio
 1. 克隆仓库。
@@ -105,16 +105,16 @@ app/src/main/java/com/yuno/tools/
 
 ## 版本历史
 
-### v1.2.45
+### v1.2.46
 
 - 指南针海拔/温度改为网络高程 + 当前天气刷新方案，提升可见性和可用性。
-- 会员专区磁力解析新增 Webtor API Key 配置，解析文件列表后可播放/下载导出文件。
+- 音乐播放器在线源更换为 QZQI 酷我音乐 API，并新增在线音乐 Key 配置入口；会员专区磁力解析保留 Webtor API Key 文件播放/下载。
 
-## v1.2.45
+## v1.2.46
 - 指南针工具新增海拔显示，授权定位后读取当前位置海拔。
 - 指南针工具新增当前位置温度，通过经纬度请求天气数据并显示温度、体感和天气描述。
 - 新增定位权限声明，并在指南针页提供未授权、定位关闭、网络失败等降级提示。
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.45.apk`
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.46.apk`
 
 ## 维护约定
 - 每次同步 GitHub 时同步更新本介绍。

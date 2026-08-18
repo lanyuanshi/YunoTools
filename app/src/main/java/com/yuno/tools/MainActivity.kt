@@ -1322,7 +1322,7 @@ class MainActivity : AppCompatActivity() {
                         orientation = LinearLayout.VERTICAL
                         setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
                     }
-                    listArea.addView(makeMusicRow("未搜索到结果", "可尝试输入完整歌名或歌手名；接口限流时请稍后重试", "", {}))
+                    listArea.addView(makeMusicRow("未搜索到结果", if (com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this).isBlank()) "请先点 Key 保存 QZQI API Key" else "可尝试输入完整歌名或歌手名；接口限流时请稍后重试", "", {}))
                     replaceOnlineList(ScrollView(this).apply {
                         isFillViewport = true
                         addView(listArea)
@@ -1382,7 +1382,7 @@ class MainActivity : AppCompatActivity() {
                 onlineLastKeyword = keyword
                 if (keyword.isBlank()) {
                     onlineCachedSongs = emptyList()
-                    showOnlineHint("输入歌曲名或歌手名搜索酷我音乐")
+                    showOnlineHint(if (com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this).isBlank()) "先点 Key 保存 QZQI API Key，再搜索酷我音乐" else "输入歌曲名或歌手名搜索酷我音乐")
                     return@makeControlButton
                 }
 
@@ -1393,7 +1393,7 @@ class MainActivity : AppCompatActivity() {
                 loadingArea.addView(makeHintText("正在搜索：$keyword"))
                 replaceOnlineList(ScrollView(this).apply { addView(loadingArea) })
 
-                com.yuno.tools.util.MusicSearchHelper.searchOnline(keyword) { songs ->
+                com.yuno.tools.util.MusicSearchHelper.searchOnline(this, keyword) { songs ->
                     runOnUiThread {
                         onlineCachedSongs = songs
                         renderOnlineSongs(songs, keepScroll = true)
@@ -1401,6 +1401,26 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             searchRow.addView(searchButton)
+            val keyButton = makeControlButton("Key") { _ ->
+                val edit = android.widget.EditText(this).apply {
+                    hint = "粘贴 QZQI API Key"
+                    setSingleLine(true)
+                    inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    setText(com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this@MainActivity))
+                    setSelection(text.length)
+                }
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("QZQI 酷我 API Key")
+                    .setMessage("新接口 https://api.qzqi.com/api/v1/KuwoMusic 需要 API Key。保存后会自动用于在线音乐搜索。")
+                    .setView(edit)
+                    .setPositiveButton("保存") { _, _ ->
+                        com.yuno.tools.util.MusicSearchHelper.saveQzqiApiKey(this@MainActivity, edit.text.toString())
+                        Toast.makeText(this, "已保存 QZQI API Key", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+            searchRow.addView(keyButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = (6 * density).toInt() })
             input.setOnEditorActionListener { _, actionId, event ->
                 val enterPressed = event?.keyCode == android.view.KeyEvent.KEYCODE_ENTER && event.action == android.view.KeyEvent.ACTION_UP
                 if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || enterPressed) {
@@ -1429,7 +1449,7 @@ class MainActivity : AppCompatActivity() {
             } else if (onlineLastKeyword.isNotBlank()) {
                 searchButton.performClick()
             } else {
-                showOnlineHint("输入歌曲名或歌手名搜索酷我音乐")
+                showOnlineHint(if (com.yuno.tools.util.MusicSearchHelper.getQzqiApiKey(this).isBlank()) "先点 Key 保存 QZQI API Key，再搜索酷我音乐" else "输入歌曲名或歌手名搜索酷我音乐")
             }
         }
 
@@ -2072,7 +2092,7 @@ class MainActivity : AppCompatActivity() {
         refreshOnlineMusicList?.invoke()
         Toast.makeText(this, "正在刷新收藏歌曲播放链接…", Toast.LENGTH_SHORT).show()
         Thread {
-            val refreshed = com.yuno.tools.util.MusicSearchHelper.refreshPlayableSong(record.title, record.artist, record.songId, record.pageUrl)
+            val refreshed = com.yuno.tools.util.MusicSearchHelper.refreshPlayableSong(this, record.title, record.artist, record.songId, record.pageUrl)
             runOnUiThread {
                 val playable = refreshed?.let {
                     record.copy(

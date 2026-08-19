@@ -7,17 +7,18 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-
 object MusicSearchHelper {
-    private const val NETEASE_SEARCH_API = "https://music.163.com/api/search/get/web"
-    private const val NETEASE_PLAYER_API = "https://music.163.com/api/song/enhance/player/url"
-    private const val NETEASE_LYRIC_API = "https://music.163.com/api/song/lyric"
-    private const val KUGOU_SEARCH_API = "http://mobilecdn.kugou.com/api/v3/search/song"
-    private const val KUGOU_PLAY_API = "https://m.kugou.com/app/i/getSongInfo.php"
+    private const val NEXTMUSIC_API = "https://nextmusic.toubiec.cn"
+    private const val NEXTMUSIC_DEBUG_API = "http://localhost:3000"
+    private const val CLIENT_IP_API = "/api/ip"
+    private const val SEARCH_API = "/api/search"
+    private const val SONG_INFO_API = "/api/getSongInfo"
+    private const val SONG_URL_API = "/api/getSongUrl"
+    private const val LYRIC_API = "/api/getSongLyric"
+    @Volatile private var cachedClientIp: String = ""
 
     enum class OnlineSource(val label: String) {
-        NETEASE("网易云音乐"),
-        KUGOU("酷狗音乐")
+        NETEASE("网易云音乐")
     }
 
     data class TimedLyric(
@@ -34,16 +35,14 @@ object MusicSearchHelper {
         val songId: String = ""
     )
 
-    fun searchOnline(context: Context?, keyword: String, callback: (List<OnlineSong>) -> Unit) {
+    fun searchOnline(@Suppress("UNUSED_PARAMETER") context: Context?, keyword: String, callback: (List<OnlineSong>) -> Unit) {
         Thread {
             val trimmed = keyword.trim()
             if (trimmed.isBlank()) {
                 callback(emptyList())
                 return@Thread
             }
-            val songs = mutableListOf<OnlineSong>()
-            songs += runCatching { searchNetease(trimmed) }.getOrElse { emptyList() }
-            songs += runCatching { searchKugou(trimmed) }.getOrElse { emptyList() }
+            val songs = runCatching { searchNextMusic(trimmed) }.getOrElse { emptyList() }
             callback(songs.distinctBy { itemKey(it) }.take(24))
         }.start()
     }
@@ -53,16 +52,21 @@ object MusicSearchHelper {
         searchOnline(null as Context?, keyword, callback)
     }
 
-    private fun searchNetease(keyword: String): List<OnlineSong> {
-        val encoded = URLEncoder.encode(keyword, "UTF-8")
-        val searchUrl = "$NETEASE_SEARCH_API?csrf_token=&hlpretag=&hlposttag=&s=$encoded&type=1&offset=0&total=true&limit=30"
-        val raw = requestText(searchUrl, referer = "https://music.163.com/search/")
-        val root = JSONObject(raw.trim())
-        val arr = root.optJSONObject("result")?.optJSONArray("songs") ?: return emptyList()
+    private fun searchNextMusic(keyword: String): List<OnlineSong> {
+        val raw = requestJson(SEARCH_API, mapOf("keyword" to keyword, "type" to 1, "limit" to 50, "offset" to 0))
+        val root = JSONObject(raw)
+        val data = root.opt("data") ?: return emptyList()
+        val candidates = when (data) {
+            is JSONArray -> data.toJsonObjects()
+            is JSONObject -> data.optJSONArray("songs")?.toJsonObjects()
+                ?: data.optJSONArray("list")?.toJsonObjects()
+                ?: data.optJSONArray("data")?.toJsonObjects()
+                ?: emptyList()
+            else -> emptyList()
+        }
         val songs = mutableListOf<OnlineSong>()
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            parseNeteaseSong(obj)?.let { candidate ->
+        for (obj in candidates) {
+            parseSong(obj)?.let { candidate ->
                 val playable = refreshPlayableSong(null, candidate.title, candidate.artist, candidate.songId, candidate.pageUrl)
                 if (playable?.playUrl?.isNotBlank() == true) songs.add(playable)
             }
@@ -71,124 +75,79 @@ object MusicSearchHelper {
         return songs
     }
 
-    private fun searchKugou(keyword: String): List<OnlineSong> {
-        val encoded = URLEncoder.encode(keyword, "UTF-8")
-        val searchUrl = "$KUGOU_SEARCH_API?format=json&keyword=$encoded&page=1&pagesize=30"
-        val raw = requestText(searchUrl, referer = "https://m.kugou.com/search/index/")
-        val arr = JSONObject(raw.trim()).optJSONObject("data")?.optJSONArray("info") ?: return emptyList()
-        val songs = mutableListOf<OnlineSong>()
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            parseKugouSong(obj)?.let { candidate ->
-                val playable = refreshPlayableSong(null, candidate.title, candidate.artist, candidate.songId, candidate.pageUrl)
-                if (playable?.playUrl?.isNotBlank() == true) songs.add(playable)
-            }
-            if (songs.size >= 12) break
-        }
-        return songs
-    }
-
-    private fun parseNeteaseSong(obj: JSONObject): OnlineSong? {
+    private fun parseSong(obj: JSONObject): OnlineSong? {
         val id = obj.optLong("id", 0L).takeIf { it > 0 }?.toString().orEmpty()
         if (id.isBlank()) return null
-        val title = cleanField(obj.optString("name"))
+        val title = cleanField(obj.optString("name")).ifBlank { cleanField(obj.optString("songName")) }
         if (title.isBlank()) return null
-        val artists = obj.optJSONArray("artists")
-        val artist = joinNames(artists).ifBlank { "网易云音乐" }
-        val album = cleanField(obj.optJSONObject("album")?.optString("name").orEmpty())
-        val duration = formatDuration(obj.optLong("duration", 0L))
+        val artist = firstNonBlank(
+            joinNames(obj.optJSONArray("artists")),
+            cleanField(obj.optString("singer")),
+            cleanField(obj.optString("artist")),
+            cleanField(obj.optString("singerName")),
+            cleanField(obj.optString("artistName")),
+            "网易云音乐"
+        )
+        val album = firstNonBlank(
+            cleanField(obj.optJSONObject("album")?.optString("name").orEmpty()),
+            cleanField(obj.optString("album")),
+            cleanField(obj.optString("albumName"))
+        )
+        val duration = formatDuration(obj.optLong("duration", 0L).takeIf { it > 1000 } ?: obj.optLong("duration", 0L))
         val desc = listOf(artist, album, duration).filter { it.isNotBlank() }.joinToString(" · ")
         val pageUrl = "https://music.163.com/song?id=$id"
         return OnlineSong(title, desc, OnlineSource.NETEASE, pageUrl, null, id)
     }
 
-    private fun parseKugouSong(obj: JSONObject): OnlineSong? {
-        val hash = cleanField(obj.optString("hash")).uppercase()
-        if (hash.isBlank()) return null
-        val fileParts = cleanKugouFileName(obj.optString("filename"))
-        val title = cleanField(obj.optString("songname")).ifBlank { fileParts.first }
-        if (title.isBlank()) return null
-        val singer = cleanField(obj.optString("singername")).ifBlank { fileParts.second }
-        val album = cleanField(obj.optString("album_name"))
-        val duration = formatDuration(obj.optLong("duration", 0L) * 1000L)
-        val desc = listOf(singer.ifBlank { "酷狗音乐" }, album, duration).filter { it.isNotBlank() }.joinToString(" · ")
-        val pageUrl = "https://m.kugou.com/song/#hash=$hash"
-        return OnlineSong(title, desc, OnlineSource.KUGOU, pageUrl, null, "kg:$hash")
-    }
-
-    private fun cleanKugouFileName(filename: String): Pair<String, String> {
-        val text = cleanField(filename)
-        val parts = text.split(" - ", limit = 2)
-        return if (parts.size == 2) parts[1].trim() to parts[0].trim() else text to ""
-    }
-
-    private fun joinNames(arr: JSONArray?): String {
-        if (arr == null) return ""
-        val names = mutableListOf<String>()
-        for (i in 0 until arr.length()) {
-            val name = cleanField(arr.optJSONObject(i)?.optString("name").orEmpty())
-            if (name.isNotBlank()) names.add(name)
-        }
-        return names.distinct().joinToString("/")
-    }
-
-    fun refreshPlayableSong(context: Context?, title: String, artist: String, songId: String, pageUrl: String): OnlineSong? {
-        val rawId = songId.trim()
-        if (rawId.startsWith("kg:")) {
-            val hash = rawId.removePrefix("kg:").ifBlank { Regex("hash=([A-Fa-f0-9]+)").find(pageUrl)?.groupValues?.getOrNull(1).orEmpty() }
-            if (hash.isBlank()) return null
-            val playUrl = fetchKugouPlayUrl(hash) ?: return null
-            val cleanTitle = cleanField(title).ifBlank { "在线音乐" }
-            val cleanArtist = cleanField(artist).ifBlank { "酷狗音乐" }
-            return OnlineSong(cleanTitle, cleanArtist, OnlineSource.KUGOU, "https://m.kugou.com/song/#hash=${hash.uppercase()}", playUrl, "kg:${hash.uppercase()}")
-        }
-        val id = rawId.ifBlank { Regex("(?:id=|/song\\?id=)(\\d+)").find(pageUrl)?.groupValues?.getOrNull(1).orEmpty() }
+    fun refreshPlayableSong(@Suppress("UNUSED_PARAMETER") context: Context?, title: String, artist: String, songId: String, pageUrl: String): OnlineSong? {
+        val id = songId.trim().ifBlank { Regex("""(?:id=|/song\?id=)(\d+)""").find(pageUrl)?.groupValues?.getOrNull(1).orEmpty() }
         if (id.isBlank()) return null
-        val playUrl = fetchNeteasePlayUrl(id) ?: return null
-        val cleanTitle = cleanField(title).ifBlank { "在线音乐" }
-        val cleanArtist = cleanField(artist).ifBlank { "网易云音乐" }
-        return OnlineSong(cleanTitle, cleanArtist, OnlineSource.NETEASE, "https://music.163.com/song?id=$id", playUrl, id)
+        val info = runCatching { fetchSongInfo(id) }.getOrNull()
+        val playUrl = runCatching { fetchPlayUrl(id) }.getOrNull() ?: info?.optString("url").orEmpty()
+        if (playUrl.isBlank()) return null
+        val cleanTitle = cleanField(title).ifBlank { info?.optString("name").orEmpty() }.ifBlank { "在线音乐" }
+        val cleanArtist = cleanField(artist).ifBlank { info?.optString("singer").orEmpty() }.ifBlank { "网易云音乐" }
+        return OnlineSong(cleanTitle, cleanArtist, OnlineSource.NETEASE, "https://music.163.com/song?id=$id", playUrl.replace("http://", "https://"), id)
     }
 
     @Deprecated("Use context-aware overload")
     fun refreshPlayableSong(title: String, artist: String, songId: String, pageUrl: String): OnlineSong? =
         refreshPlayableSong(null, title, artist, songId, pageUrl)
 
-    private fun fetchNeteasePlayUrl(id: String): String? {
-        val url = "$NETEASE_PLAYER_API?id=$id&ids=[$id]&br=320000"
-        val raw = requestText(url, referer = "https://music.163.com/")
-        val data = JSONObject(raw.trim()).optJSONArray("data")?.optJSONObject(0) ?: return null
-        val code = data.optInt("code", 0)
-        val play = cleanField(data.optString("url"))
-        if (code != 200 || play.isBlank()) return null
-        return play.replace("http://", "https://").takeIf { isLikelyPlayableUrl(it) }
-    }
-
-    private fun fetchKugouPlayUrl(hash: String): String? {
-        val encodedHash = URLEncoder.encode(hash, "UTF-8")
-        val raw = requestText("$KUGOU_PLAY_API?cmd=playInfo&hash=$encodedHash", referer = "https://m.kugou.com/")
-        val root = JSONObject(raw.trim())
-        if (root.optInt("status", 0) != 1) return null
-        val play = cleanField(root.optString("url"))
-        if (play.isBlank()) return null
-        return play.replace("http://", "https://").takeIf { isLikelyPlayableUrl(it) }
-    }
-
     fun fetchKuwoLyrics(songId: String): List<String> = fetchKuwoTimedLyrics(songId).map { it.text }.distinct()
 
     fun fetchKuwoTimedLyrics(songId: String): List<TimedLyric> {
         val id = songId.trim()
-        if (id.isBlank() || id.startsWith("kg:")) return emptyList()
+        if (id.isBlank()) return emptyList()
         return runCatching {
-            val raw = requestText("$NETEASE_LYRIC_API?id=$id&lv=1&kv=1&tv=-1", referer = "https://music.163.com/")
-            val lrc = JSONObject(raw.trim()).optJSONObject("lrc")?.optString("lyric").orEmpty()
+            val raw = requestJson(LYRIC_API, mapOf("id" to id))
+            val root = JSONObject(raw)
+            val data = root.optJSONObject("data") ?: return emptyList()
+            val lrc = data.optString("lrc").ifBlank { data.optJSONObject("lrc")?.optString("lyric").orEmpty() }
             parseLrc(lrc)
         }.getOrElse { emptyList() }
     }
 
+    private fun fetchSongInfo(id: String): JSONObject? {
+        val raw = requestJson(SONG_INFO_API, mapOf("id" to id))
+        val root = JSONObject(raw)
+        if (root.optInt("code", 0) != 200) return null
+        return root.optJSONObject("data")
+    }
+
+    private fun fetchPlayUrl(id: String): String? {
+        val raw = requestJson(SONG_URL_API, mapOf("id" to id, "level" to "standard"))
+        val root = JSONObject(raw)
+        if (root.optInt("code", 0) == 429) return null
+        val data = root.optJSONObject("data") ?: return null
+        val url = data.optString("url").trim()
+        if (url.isBlank()) return null
+        return url.takeIf { isLikelyPlayableUrl(it) }
+    }
+
     private fun parseLrc(lrc: String): List<TimedLyric> {
         val result = mutableListOf<TimedLyric>()
-        val pattern = Regex("\\[(\\d{1,2}:\\d{1,2}(?:\\.\\d{1,3})?)\\](.*)")
+        val pattern = Regex("""\[(\d{1,2}:\d{1,2}(?:\.\d{1,3})?)\](.*)""")
         lrc.lines().forEach { line ->
             val m = pattern.find(line.trim()) ?: return@forEach
             val text = cleanField(m.groupValues.getOrNull(2).orEmpty())
@@ -213,27 +172,69 @@ object MusicSearchHelper {
 
     private fun itemKey(song: OnlineSong): String = song.source.name + "|" + song.songId.ifBlank { song.title + "|" + song.artist + "|" + song.playUrl.orEmpty() }
 
-    private fun requestText(urlStr: String, referer: String = "https://music.163.com/"): String {
-        val conn = URL(urlStr).openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 YunoTools/1.2.47")
-        conn.setRequestProperty("Accept", "application/json,text/plain,*/*")
-        conn.setRequestProperty("Referer", referer)
-        conn.connectTimeout = 8000
-        conn.readTimeout = 15000
-        return try {
-            val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
-            stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        } finally {
-            conn.disconnect()
+    private fun requestJson(path: String, payload: Map<String, Any>): String {
+        val bases = listOf(NEXTMUSIC_API, NEXTMUSIC_DEBUG_API)
+        var lastError: String? = null
+        for (base in bases) {
+            val body = JSONObject(payload + mapOf("timestamp" to System.currentTimeMillis()) + fetchClientIp().let { if (it.isBlank()) emptyMap() else mapOf("ip" to it) }).toString()
+            val conn = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doInput = true
+                doOutput = true
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 YunoTools/1.2.47")
+                setRequestProperty("Accept", "application/json,text/plain,*/*")
+                setRequestProperty("Content-Type", "application/json;charset=UTF-8")
+                setRequestProperty("Referer", base + "/")
+                connectTimeout = 8000
+                readTimeout = 15000
+            }
+            try {
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                if (text.isNotBlank()) return text
+                lastError = "HTTP $code empty response"
+            } catch (e: Exception) {
+                lastError = e.message
+            } finally {
+                conn.disconnect()
+            }
         }
+        throw IllegalStateException(lastError ?: "request failed")
+    }
+
+    private fun fetchClientIp(): String {
+        cachedClientIp.takeIf { it.isNotBlank() }?.let { return it }
+        return runCatching {
+            val conn = (URL(NEXTMUSIC_API + CLIENT_IP_API).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doInput = true
+                doOutput = true
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 YunoTools/1.2.47")
+                setRequestProperty("Accept", "application/json,text/plain,*/*")
+                setRequestProperty("Content-Type", "application/json;charset=UTF-8")
+                setRequestProperty("Referer", NEXTMUSIC_API + "/")
+                connectTimeout = 6000
+                readTimeout = 8000
+            }
+            try {
+                conn.outputStream.use { it.write(JSONObject(mapOf("timestamp" to System.currentTimeMillis())).toString().toByteArray(Charsets.UTF_8)) }
+                val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val root = JSONObject(text)
+                root.optJSONObject("data")?.optString("ip").orEmpty().trim().also { if (it.isNotBlank()) cachedClientIp = it }
+            } finally {
+                conn.disconnect()
+            }
+        }.getOrDefault("")
     }
 
     private fun isLikelyPlayableUrl(url: String): Boolean {
         val cleaned = decodeHtmlEntities(url).trim()
         return cleaned.startsWith("http", ignoreCase = true) &&
-            Regex("\\.(mp3|m4a|aac|wav|flac|ogg|opus|mflac)(\\?|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
+            Regex("""\.(mp3|m4a|aac|wav|flac|ogg|opus|mflac|mp4)(\?|$)""", RegexOption.IGNORE_CASE).containsMatchIn(cleaned)
     }
 
     private fun formatDuration(ms: Long): String {
@@ -247,6 +248,27 @@ object MusicSearchHelper {
             .takeUnless { it.equals("null", ignoreCase = true) || it.equals("undefined", ignoreCase = true) }
             .orEmpty()
             .trim()
+    }
+
+    private fun firstNonBlank(vararg values: String): String = values.firstOrNull { it.isNotBlank() } ?: ""
+
+    private fun joinNames(arr: JSONArray?): String {
+        if (arr == null) return ""
+        val names = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            val name = cleanField(item.optString("name").orEmpty())
+            if (name.isNotBlank()) names.add(name)
+        }
+        return names.distinct().joinToString("/")
+    }
+
+    private fun JSONArray.toJsonObjects(): List<JSONObject> {
+        val list = mutableListOf<JSONObject>()
+        for (i in 0 until length()) {
+            optJSONObject(i)?.let(list::add)
+        }
+        return list
     }
 
     private fun decodeHtmlEntities(text: String): String {

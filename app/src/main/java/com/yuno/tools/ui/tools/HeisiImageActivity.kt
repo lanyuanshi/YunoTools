@@ -2,6 +2,7 @@ package com.yuno.tools.ui.tools
 
 import android.content.ContentValues
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.net.Uri
@@ -37,10 +38,13 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-
 class HeisiImageActivity : AppCompatActivity() {
-    private val apiUrl = "https://v2.xxapi.cn/api/heisi?return=302"
+    private val blackSilkApiUrl = "https://v2.xxapi.cn/api/heisi?return=302"
+    private val whiteSilkApiUrl = "https://v2.xxapi.cn/api/baisi?return=302"
+    private var currentApiUrl = blackSilkApiUrl
+    private var currentMode = "黑丝"
     private var currentImageUrl: String = ""
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,10 +52,13 @@ class HeisiImageActivity : AppCompatActivity() {
         ThemeApplier.apply(this)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnRefresh).setOnClickListener { loadImage() }
+        findViewById<Button>(R.id.btnBlackSilk).setOnClickListener { selectMode("黑丝", blackSilkApiUrl) }
+        findViewById<Button>(R.id.btnWhiteSilk).setOnClickListener { selectMode("白丝", whiteSilkApiUrl) }
         findViewById<ImageView>(R.id.ivHeisi).setOnClickListener { loadImage() }
         findViewById<ImageView>(R.id.ivHeisi).setOnLongClickListener { showImageActions(); true }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveCurrentImage() }
         findViewById<Button>(R.id.btnShare).setOnClickListener { shareCurrentImage() }
+        updateModeButtons()
         loadImage()
     }
 
@@ -60,8 +67,26 @@ class HeisiImageActivity : AppCompatActivity() {
         ThemeApplier.apply(this)
     }
 
+    private fun selectMode(mode: String, url: String) {
+        currentMode = mode
+        currentApiUrl = url
+        updateModeButtons()
+        loadImage()
+    }
+
+    private fun updateModeButtons() {
+        val black = findViewById<Button>(R.id.btnBlackSilk)
+        val white = findViewById<Button>(R.id.btnWhiteSilk)
+        black.isSelected = currentMode == "黑丝"
+        white.isSelected = currentMode == "白丝"
+        black.backgroundTintList = ColorStateList.valueOf(if (black.isSelected) 0xFF536579.toInt() else 0xFFD7DEE5.toInt())
+        black.setTextColor(if (black.isSelected) 0xFFFFFFFF.toInt() else 0xFF243443.toInt())
+        white.backgroundTintList = ColorStateList.valueOf(if (white.isSelected) 0xFF536579.toInt() else 0xFFD7DEE5.toInt())
+        white.setTextColor(if (white.isSelected) 0xFFFFFFFF.toInt() else 0xFF243443.toInt())
+    }
+
     private fun loadImage() {
-        setLoading(true, "正在加载图片...")
+        setLoading(true, "正在加载${currentMode}图片...")
         CoroutineScope(Dispatchers.IO).launch {
             val result = runCatching { fetchImageUrl() }
             withContext(Dispatchers.Main) {
@@ -82,7 +107,7 @@ class HeisiImageActivity : AppCompatActivity() {
     }
 
     private fun fetchImageUrl(): String {
-        val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
+        val conn = (URL(currentApiUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             instanceFollowRedirects = true
             connectTimeout = 10000
@@ -101,7 +126,7 @@ class HeisiImageActivity : AppCompatActivity() {
         }
         if (contentType.startsWith("image/")) {
             conn.disconnect()
-            return finalUrl.ifBlank { apiUrl }
+            return finalUrl.ifBlank { currentApiUrl }
         }
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty().trim()
@@ -129,7 +154,7 @@ class HeisiImageActivity : AppCompatActivity() {
     private fun normalizeImageUrl(url: String): String = url.trim().trim('\"', '\'', ' ', '\n', '\r', '\t')
 
     private fun renderImage(url: String) {
-        setLoading(true, "图片加载中，点击图片可换一张")
+        setLoading(true, "${currentMode}图片加载中，点击图片可换一张")
         val iv = findViewById<ImageView>(R.id.ivHeisi)
         Glide.with(iv)
             .load(url)
@@ -190,7 +215,7 @@ class HeisiImageActivity : AppCompatActivity() {
     }
 
     private fun saveBitmapToGallery(bitmap: Bitmap): Uri {
-        val name = "YunoTools_Heisi_${System.currentTimeMillis()}.jpg"
+        val name = "YunoTools_${currentMode}_${System.currentTimeMillis()}.jpg"
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")

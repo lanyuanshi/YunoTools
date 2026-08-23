@@ -178,6 +178,7 @@
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardLiveParse"
+                    android:visibility="gone"
                     android:layout_width="0dp"
                     android:layout_height="100dp"
                     android:layout_weight="1"
@@ -642,6 +643,7 @@
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardAnimeSearch"
+                    android:visibility="gone"
                     android:layout_width="0dp"
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"
@@ -683,6 +685,7 @@
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardBangumiWatch"
+                    android:visibility="gone"
                     android:layout_width="0dp"
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"

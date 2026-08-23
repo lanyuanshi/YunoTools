@@ -45,9 +45,37 @@
                 android:id="@+id/btnRefresh"
                 android:layout_width="82dp"
                 android:layout_height="42dp"
-                android:backgroundTint="#111827"
+                android:backgroundTint="#536579"
                 android:text="换图"
                 android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:paddingBottom="10dp">
+            <Button
+                android:id="@+id/btnBlackSilk"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:backgroundTint="#536579"
+                android:text="黑丝"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+            <Button
+                android:id="@+id/btnWhiteSilk"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:backgroundTint="#D7DEE5"
+                android:text="白丝"
+                android:textColor="#243443"
                 android:textSize="14sp" />
         </LinearLayout>
 

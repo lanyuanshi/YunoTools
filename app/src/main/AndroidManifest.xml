@@ -42,6 +42,7 @@
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.AIChatActivity"
+            android:enabled="false"
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.video.ParseResultActivity"
@@ -153,9 +154,11 @@
             android:screenOrientation="fullSensor" />
         <activity
             android:name=".ui.tools.AnimeSearchActivity"
+            android:enabled="false"
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.BangumiWatchActivity"
+            android:enabled="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity
             android:name=".ui.tools.SubscriptionActivity"

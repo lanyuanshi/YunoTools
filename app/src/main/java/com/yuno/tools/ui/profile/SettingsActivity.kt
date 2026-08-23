@@ -38,7 +38,7 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, ThemeActivity::class.java))
             overridePendingTransition(R.anim.profile_slide_up_in, R.anim.profile_stay)
         }
-        bindAiSettings()
+        // AI chat settings temporarily disabled.
         bindMusicBarSettings()
         bindMusicSpectrumSettings()
         bindLyricHighlightSettings()
@@ -46,7 +46,7 @@ class SettingsActivity : AppCompatActivity() {
         refreshThemeState()
     }
 
-    override fun onResume() { super.onResume(); ThemeApplier.apply(this); refreshThemeState(); loadAiState(); refreshMusicBarState(); refreshMusicSpectrumState(); refreshLyricHighlightState() }
+    override fun onResume() { super.onResume(); ThemeApplier.apply(this); refreshThemeState(); refreshMusicBarState(); refreshMusicSpectrumState(); refreshLyricHighlightState() }
 
     private fun bindAiSettings() {
         switchDefaultApi = findViewById(R.id.switchDefaultApi)

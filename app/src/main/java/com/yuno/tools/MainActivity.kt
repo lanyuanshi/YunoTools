@@ -86,14 +86,13 @@ import androidx.media3.session.MediaSession
 import com.yuno.tools.data.UserSettingsStore
 import com.yuno.tools.data.AccountStore
 import com.yuno.tools.ui.video.VideoParseActivity
-import com.yuno.tools.ui.tools.AIChatActivity
+// AI chat temporarily disabled
 import com.yuno.tools.ui.image.ImageCompressActivity
 import com.yuno.tools.ui.image.QRCodeActivity
 import com.yuno.tools.ui.image.GridCropActivity
 import com.yuno.tools.ui.media.AudioSeparateActivity
 import com.yuno.tools.ui.media.VideoTrimActivity
-import com.yuno.tools.ui.tools.AnimeSearchActivity
-import com.yuno.tools.ui.tools.BangumiWatchActivity
+// Anime tools removed from the home list
 import com.yuno.tools.ui.tools.ExpressQueryActivity
 import com.yuno.tools.ui.tools.WallpaperToolActivity
 import com.yuno.tools.ui.tools.Base64ToolActivity
@@ -288,9 +287,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardVideoParse).setOnClickListener {
             startActivity(Intent(this, VideoParseActivity::class.java))
         }
-        findViewById<MaterialCardView>(R.id.cardLiveParse).setOnClickListener {
-            startActivity(Intent(this, AIChatActivity::class.java))
-        }
+        // AI chat entry temporarily disabled.
         findViewById<MaterialCardView>(R.id.cardImageCompress).setOnClickListener {
             startActivity(Intent(this, ImageCompressActivity::class.java))
         }
@@ -311,12 +308,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardClock).setOnClickListener {
             startActivity(Intent(this, ClockActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.cardAnimeSearch).setOnClickListener {
-            startActivity(Intent(this, AnimeSearchActivity::class.java))
-        }
-        findViewById<MaterialCardView>(R.id.cardBangumiWatch).setOnClickListener {
-            startActivity(Intent(this, BangumiWatchActivity::class.java))
+// Anime features removed from the home tool list.
         }
         findViewById<MaterialCardView>(R.id.cardSubscription).setOnClickListener {
             startActivity(Intent(this, SubscriptionActivity::class.java))

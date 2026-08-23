@@ -2,6 +2,7 @@ package com.yuno.tools.ui.profile
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
@@ -21,7 +22,7 @@ import com.yuno.tools.ui.tools.AIChatActivity
 import com.yuno.tools.util.ThemeApplier
 
 class SettingsActivity : AppCompatActivity() {
-    private val updateUrl = "https://www.lyyp.cloud/s/ErLug"
+    private val updateUrl = "https://github.com/lanyuanshi/YunoTools"
     private lateinit var switchDefaultApi: Switch
     private lateinit var etEndpoint: EditText
     private lateinit var etApiKey: EditText
@@ -235,9 +236,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun openUpdateLink() {
-        findViewById<TextView>(R.id.tvUpdateState).text = "已在应用内加载更新目录，请自行查看 APK 版本"
-        startActivity(UpdateWebActivity.createIntent(this, updateUrl))
-        overridePendingTransition(R.anim.profile_slide_up_in, R.anim.profile_stay)
+        findViewById<TextView>(R.id.tvUpdateState).text = "正在打开 YunoTools GitHub 仓库"
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
     }
 
     private fun refreshThemeState() {

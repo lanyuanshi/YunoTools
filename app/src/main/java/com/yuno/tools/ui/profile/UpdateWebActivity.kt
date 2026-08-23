@@ -103,7 +103,7 @@ class UpdateWebActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_URL = "extra_url"
-        private const val UPDATE_URL = "https://www.lyyp.cloud/s/ErLug"
+        private const val UPDATE_URL = "https://github.com/lanyuanshi/YunoTools"
 
         fun createIntent(context: Context, url: String): Intent {
             return Intent(context, UpdateWebActivity::class.java).putExtra(EXTRA_URL, url)

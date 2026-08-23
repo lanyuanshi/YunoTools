@@ -324,7 +324,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="点击后会在软件内加载更新目录链接，不跳转外部浏览器；请自行查看 APK 文件名和版本号。"
+                        android:text="点击后打开 YunoTools GitHub 仓库，可查看最新源码、简介和 APK 安装包。"
                         android:textColor="#8E8E93"
                         android:textSize="13sp" />
 
@@ -333,7 +333,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="46dp"
                         android:layout_marginTop="12dp"
-                        android:text="加载更新链接"
+                        android:text="打开 GitHub 仓库"
                         android:textColor="@android:color/white"
                         app:backgroundTint="#007AFF"
                         app:cornerRadius="14dp" />

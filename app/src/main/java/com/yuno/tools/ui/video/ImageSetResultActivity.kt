@@ -15,9 +15,12 @@ import android.view.ViewGroup
 import android.view.animation.OvershootInterpolator
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
@@ -40,6 +43,11 @@ class ImageSetResultActivity : AppCompatActivity() {
     private lateinit var imageAdapter: ImageGridAdapter
     private var result: VideoParseResult? = null
     private val selectedPositions = mutableSetOf<Int>()
+    private lateinit var downloadPanel: LinearLayout
+    private lateinit var downloadProgress: ProgressBar
+    private lateinit var tvDownloadStatus: TextView
+    private lateinit var tvDownloadPercent: TextView
+    private var downloadJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,6 +78,10 @@ class ImageSetResultActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnCopyContent).setOnClickListener { copyContent() }
         findViewById<MaterialCardView>(R.id.btnCopyText).setOnClickListener { copyContent() }
         findViewById<MaterialCardView>(R.id.btnSaveContent).setOnClickListener { downloadSelected() }
+        downloadPanel = findViewById(R.id.downloadProgressPanel)
+        downloadProgress = findViewById(R.id.downloadProgress)
+        tvDownloadStatus = findViewById(R.id.tvDownloadStatus)
+        tvDownloadPercent = findViewById(R.id.tvDownloadPercent)
     }
 
     private fun setupUI() {
@@ -102,6 +114,7 @@ class ImageSetResultActivity : AppCompatActivity() {
     }
 
     private fun downloadSelected() {
+        if (downloadJob?.isActive == true) return
         val images = result?.images ?: return
         val toDownload = if (selectedPositions.isEmpty()) {
             images.indices.toList()
@@ -114,16 +127,16 @@ class ImageSetResultActivity : AppCompatActivity() {
             return
         }
 
-        Toast.makeText(this, "开始下载 ${toDownload.size} 张图片...", Toast.LENGTH_SHORT).show()
-
-        CoroutineScope(Dispatchers.IO).launch {
+        setDownloadState(true, "准备保存 ${toDownload.size} 张图片", 0)
+        downloadJob = lifecycleScope.launch(Dispatchers.IO) {
             var success = 0
             var failed = 0
             var lastError = ""
 
-            toDownload.forEach { index ->
-                val url = images.getOrNull(index) ?: return@forEach
+            toDownload.forEachIndexed { position, index ->
+                val url = images.getOrNull(index) ?: return@forEachIndexed
                 try {
+                    withContext(Dispatchers.Main) { setDownloadState(true, "正在保存第 ${position + 1}/${toDownload.size} 张", (position * 100 / toDownload.size).coerceIn(0, 99)) }
                     downloadImageToGallery(url, index)
                     success++
                 } catch (e: Exception) {
@@ -138,9 +151,20 @@ class ImageSetResultActivity : AppCompatActivity() {
                 } else {
                     "下载完成: ${success}成功 ${failed}失败"
                 }
+                setDownloadState(false, "保存完成：${success} 成功，${failed} 失败", 100)
                 Toast.makeText(this@ImageSetResultActivity, msg, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun setDownloadState(active: Boolean, status: String, percent: Int) {
+        downloadPanel.visibility = View.VISIBLE
+        tvDownloadStatus.text = status
+        downloadProgress.isIndeterminate = false
+        downloadProgress.progress = percent
+        tvDownloadPercent.text = "$percent%"
+        findViewById<MaterialCardView>(R.id.btnSaveContent).isEnabled = !active
+        if (!active && percent == 100) downloadPanel.postDelayed({ downloadPanel.visibility = View.GONE }, 2600)
     }
 
     private fun downloadImageToGallery(imageUrl: String, index: Int) {

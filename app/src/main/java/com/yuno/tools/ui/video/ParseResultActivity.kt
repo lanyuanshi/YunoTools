@@ -9,10 +9,14 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.view.View
 import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -35,6 +39,11 @@ class ParseResultActivity : AppCompatActivity() {
     private lateinit var btnCopyContent: ImageButton
     private lateinit var btnSaveCover: MaterialCardView
     private lateinit var btnSaveContent: MaterialCardView
+    private lateinit var downloadPanel: LinearLayout
+    private lateinit var downloadProgress: ProgressBar
+    private lateinit var tvDownloadStatus: TextView
+    private lateinit var tvDownloadPercent: TextView
+    private var downloadJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +75,10 @@ class ParseResultActivity : AppCompatActivity() {
         btnCopyContent = findViewById(R.id.btnCopyContent)
         btnSaveCover = findViewById(R.id.btnSaveCover)
         btnSaveContent = findViewById(R.id.btnSaveContent)
+        downloadPanel = findViewById(R.id.downloadProgressPanel)
+        downloadProgress = findViewById(R.id.downloadProgress)
+        tvDownloadStatus = findViewById(R.id.tvDownloadStatus)
+        tvDownloadPercent = findViewById(R.id.tvDownloadPercent)
     }
 
     private fun setupUI() {
@@ -126,61 +139,78 @@ class ParseResultActivity : AppCompatActivity() {
     }
 
     private fun downloadFile(fileUrl: String, fileName: String, type: String, mimeType: String) {
-        Toast.makeText(this, "开始下载${type}...", Toast.LENGTH_SHORT).show()
-        CoroutineScope(Dispatchers.IO).launch {
+        if (downloadJob?.isActive == true) return
+        setDownloadState(true, "正在准备${type}", 0)
+        downloadJob = lifecycleScope.launch(Dispatchers.IO) {
             var pendingUri: Uri? = null
             try {
-                val url = URL(fileUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 30000
-                connection.readTimeout = 30000
+                val connection = (URL(fileUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 30000
+                    readTimeout = 30000
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+                }
                 connection.connect()
-
-                if (connection.responseCode == 200) {
-                    val isVideo = mimeType.startsWith("video/")
-                    val collection = if (isVideo) {
-                        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                    } else {
-                        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+                val isVideo = mimeType.startsWith("video/")
+                val collection = if (isVideo) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val relativeDir = if (isVideo) Environment.DIRECTORY_MOVIES + "/YunoTools" else Environment.DIRECTORY_PICTURES + "/YunoTools"
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(collection, values) ?: error("无法创建媒体文件")
+                pendingUri = uri
+                val total = connection.contentLengthLong
+                var copied = 0L
+                contentResolver.openOutputStream(uri)?.use { output ->
+                    connection.inputStream.use { input ->
+                        val buffer = ByteArray(32 * 1024)
+                        while (true) {
+                            ensureActive()
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                            copied += count
+                            val percent = if (total > 0) ((copied * 100) / total).toInt().coerceIn(0, 99) else -1
+                            withContext(Dispatchers.Main) { setDownloadState(true, "正在保存$type", percent) }
+                        }
                     }
-                    val relativeDir = if (isVideo) {
-                        Environment.DIRECTORY_MOVIES + "/YunoTools"
-                    } else {
-                        Environment.DIRECTORY_PICTURES + "/YunoTools"
-                    }
-                    val values = ContentValues().apply {
-                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                        put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                        put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)
-                        put(MediaStore.MediaColumns.IS_PENDING, 1)
-                    }
-                    val resolver = contentResolver
-                    val uri = resolver.insert(collection, values) ?: error("无法创建媒体文件")
-                    pendingUri = uri
-                    resolver.openOutputStream(uri)?.use { output ->
-                        connection.inputStream.use { input -> input.copyTo(output) }
-                    } ?: error("无法写入媒体文件")
-
-                    values.clear()
-                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(uri, values, null, null)
-
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ParseResultActivity, "${type}已保存到系统媒体库/YunoTools", Toast.LENGTH_LONG).show()
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@ParseResultActivity, "下载失败: ${connection.responseCode}", Toast.LENGTH_SHORT).show()
-                    }
+                } ?: error("无法写入媒体文件")
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+                withContext(Dispatchers.Main) {
+                    setDownloadState(false, "${type}已保存到媒体库 / YunoTools", 100)
+                    Toast.makeText(this@ParseResultActivity, "${type}已保存", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 pendingUri?.let { runCatching { contentResolver.delete(it, null, null) } }
                 withContext(Dispatchers.Main) {
+                    setDownloadState(false, "保存失败，请稍后重试", 0)
                     Toast.makeText(this@ParseResultActivity, "下载错误: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    private fun setDownloadState(active: Boolean, status: String, percent: Int) {
+        downloadPanel.visibility = View.VISIBLE
+        tvDownloadStatus.text = status
+        if (percent >= 0) {
+            downloadProgress.isIndeterminate = false
+            downloadProgress.progress = percent
+            tvDownloadPercent.text = "$percent%"
+        } else {
+            downloadProgress.isIndeterminate = true
+            tvDownloadPercent.text = ""
+        }
+        btnSaveCover.isEnabled = !active
+        btnSaveContent.isEnabled = !active
+        if (!active && percent == 100) downloadPanel.postDelayed({ downloadPanel.visibility = View.GONE }, 2600)
     }
 
     override fun onPause() {

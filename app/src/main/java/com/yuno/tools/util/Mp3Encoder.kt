@@ -93,13 +93,19 @@ class Mp3Encoder(
         val left = IntArray(frames)
         val right = IntArray(frames)
         if (gfp.num_channels == 1) {
-            for (i in 0 until frames) left[i] = interleaved[i].toInt()
-            for (i in 0 until frames) right[i] = left[i]
+            for (i in 0 until frames) {
+                val v = interleaved[i].toInt() shl 16
+                left[i] = v
+                right[i] = v
+            }
         } else {
             var i = 0
             while (i < frames) {
-                val l = interleaved[i * 2].toInt()
-                val r = interleaved[i * 2 + 1].toInt()
+                // lame_encode_buffer_int 按 32bit 满量程（±2^31）解释输入，
+                // 内部会乘以 1/65536。16bit PCM 必须先左移 16 位，
+                // 否则幅值被压缩约 96dB，导出的 MP3 听起来就是静音。
+                val l = interleaved[i * 2].toInt() shl 16
+                val r = interleaved[i * 2 + 1].toInt() shl 16
                 left[i] = l
                 right[i] = r
                 i++

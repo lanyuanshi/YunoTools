@@ -74,9 +74,6 @@
             android:name=".ui.profile.ParseHistoryActivity"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".ui.profile.MusicDownloadsActivity"
-            android:screenOrientation="portrait" />
-        <activity
             android:name=".ui.profile.SettingsActivity"
             android:screenOrientation="portrait" />
         <activity
@@ -111,6 +108,12 @@
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.WallpaperToolActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.tools.ApiWallpaperActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.tools.Gz360Activity"
             android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.ExpressQueryActivity"
@@ -154,12 +157,13 @@
             android:screenOrientation="fullSensor" />
         <activity
             android:name=".ui.tools.AnimeSearchActivity"
-            android:enabled="false"
             android:screenOrientation="portrait" />
         <activity
-            android:name=".ui.tools.BangumiWatchActivity"
-            android:enabled="false"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
+            android:name=".ui.tools.YiyanActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".ui.profile.MusicDownloadsActivity"
+            android:screenOrientation="portrait" />
         <activity
             android:name=".ui.tools.SubscriptionActivity"
             android:screenOrientation="portrait" />

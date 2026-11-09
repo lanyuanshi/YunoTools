@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -63,8 +64,8 @@ class MusicDownloadsActivity : AppCompatActivity() {
 
     private fun renderDownloads() {
         val downloads = loadDownloads()
-        val dir = File(getExternalFilesDir(null), "Music")
-        pathText.text = "保存目录：${dir.absolutePath}"
+        val publicDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "YunoTools")
+        pathText.text = "保存目录：${publicDir.absolutePath}"
         countText.text = "共 ${downloads.size} 首"
         listContainer.removeAllViews()
         emptyState.visibility = if (downloads.isEmpty()) View.VISIBLE else View.GONE

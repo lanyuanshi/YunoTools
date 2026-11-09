@@ -36,7 +36,7 @@
                 android:layout_marginStart="12dp"
                 android:layout_weight="1"
                 android:gravity="center_vertical"
-                android:text="黑丝图库"
+                android:text="图片图库"
                 android:textColor="#1C1C1E"
                 android:textSize="22sp"
                 android:textStyle="bold" />
@@ -45,11 +45,12 @@
                 android:id="@+id/btnRefresh"
                 android:layout_width="82dp"
                 android:layout_height="42dp"
-                android:backgroundTint="#536579"
+                android:backgroundTint="#2F343B"
                 android:text="换图"
                 android:textColor="#FFFFFF"
                 android:textSize="14sp" />
         </LinearLayout>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -57,26 +58,40 @@
             android:paddingStart="18dp"
             android:paddingEnd="18dp"
             android:paddingBottom="10dp">
+
             <Button
                 android:id="@+id/btnBlackSilk"
                 android:layout_width="0dp"
                 android:layout_height="42dp"
-                android:layout_marginEnd="6dp"
+                android:layout_marginEnd="5dp"
                 android:layout_weight="1"
-                android:backgroundTint="#536579"
+                android:backgroundTint="#2F343B"
                 android:text="黑丝"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp" />
+                android:textSize="13sp" />
+
             <Button
                 android:id="@+id/btnWhiteSilk"
                 android:layout_width="0dp"
                 android:layout_height="42dp"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="5dp"
+                android:layout_marginEnd="5dp"
                 android:layout_weight="1"
-                android:backgroundTint="#D7DEE5"
+                android:backgroundTint="#E7EBF0"
                 android:text="白丝"
-                android:textColor="#243443"
-                android:textSize="14sp" />
+                android:textColor="#303742"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnMeinv"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:backgroundTint="#E7EBF0"
+                android:text="小姐姐"
+                android:textColor="#303742"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <TextView
@@ -98,13 +113,13 @@
             android:layout_marginBottom="14dp"
             android:layout_weight="1"
             app:cardBackgroundColor="#FFFFFFFF"
-            app:cardCornerRadius="26dp"
+            app:cardCornerRadius="22dp"
             app:cardElevation="0dp">
 
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#FFEFF4">
+                android:background="#F7F8FA">
 
                 <ImageView
                     android:id="@+id/ivHeisi"
@@ -137,7 +152,7 @@
                 android:layout_height="52dp"
                 android:layout_marginEnd="7dp"
                 android:layout_weight="1"
-                android:backgroundTint="#5B6EE1"
+                android:backgroundTint="#2F343B"
                 android:text="保存"
                 android:textColor="#FFFFFF" />
 
@@ -147,9 +162,9 @@
                 android:layout_height="52dp"
                 android:layout_marginStart="7dp"
                 android:layout_weight="1"
-                android:backgroundTint="#E0569B"
+                android:backgroundTint="#E7EBF0"
                 android:text="分享"
-                android:textColor="#FFFFFF" />
+                android:textColor="#303742" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

@@ -27,6 +27,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Environment
 import android.provider.MediaStore
 import android.text.SpannableString
 import android.text.Spanned
@@ -66,6 +67,7 @@ import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.*
 import androidx.core.view.children
 import androidx.core.app.NotificationCompat
+import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.media.app.NotificationCompat.MediaStyle
@@ -86,15 +88,15 @@ import androidx.media3.session.MediaSession
 import com.yuno.tools.data.UserSettingsStore
 import com.yuno.tools.data.AccountStore
 import com.yuno.tools.ui.video.VideoParseActivity
-// AI chat temporarily disabled
 import com.yuno.tools.ui.image.ImageCompressActivity
 import com.yuno.tools.ui.image.QRCodeActivity
 import com.yuno.tools.ui.image.GridCropActivity
 import com.yuno.tools.ui.media.AudioSeparateActivity
 import com.yuno.tools.ui.media.VideoTrimActivity
-// Anime tools removed from the home list
 import com.yuno.tools.ui.tools.ExpressQueryActivity
 import com.yuno.tools.ui.tools.WallpaperToolActivity
+import com.yuno.tools.ui.tools.ApiWallpaperActivity
+import com.yuno.tools.ui.tools.Gz360Activity
 import com.yuno.tools.ui.tools.Base64ToolActivity
 import com.yuno.tools.ui.tools.BarrageActivity
 import com.yuno.tools.ui.tools.ClockActivity
@@ -111,7 +113,6 @@ import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
-import com.yuno.tools.ui.profile.MusicDownloadsActivity
 import com.yuno.tools.ui.profile.MemberCenterActivity
 import com.yuno.tools.ui.profile.MemberZoneActivity
 import com.yuno.tools.ui.profile.ProfileActivity
@@ -124,8 +125,11 @@ import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
     companion object {
-        private const val MUSIC_NOTIFICATION_CHANNEL_ID = "yuno_music_playback"
+        private const val MUSIC_NOTIFICATION_CHANNEL_ID = "yuno_music_playback_v2"
         private const val MUSIC_NOTIFICATION_ID = 71072
+        private const val MUSIC_ACTION_PREVIOUS = "com.yuno.tools.music.PREVIOUS"
+        private const val MUSIC_ACTION_TOGGLE = "com.yuno.tools.music.TOGGLE"
+        private const val MUSIC_ACTION_NEXT = "com.yuno.tools.music.NEXT"
         private const val MUSIC_PREFS = "yuno_music_records"
         private const val MUSIC_FAVORITES_KEY = "online_favorites"
         private const val MUSIC_DOWNLOADS_KEY = "online_downloads"
@@ -233,6 +237,21 @@ class MainActivity : AppCompatActivity() {
         lyricsHandler.post(lyricsTicker)
         musicProgressHandler.post(musicProgressTicker)
         showHome(animate = false)
+        handleMusicNotificationAction(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleMusicNotificationAction(intent)
+    }
+
+    private fun handleMusicNotificationAction(intent: Intent?) {
+        when (intent?.action) {
+            MUSIC_ACTION_PREVIOUS -> playPreviousMusic()
+            MUSIC_ACTION_TOGGLE -> toggleCurrentMusicPlayback()
+            MUSIC_ACTION_NEXT -> playNextMusic()
+        }
     }
 
     private fun enableFullscreenRendering(lightStatusBar: Boolean) {
@@ -287,7 +306,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardVideoParse).setOnClickListener {
             startActivity(Intent(this, VideoParseActivity::class.java))
         }
-        // AI chat entry temporarily disabled.
+        findViewById<MaterialCardView>(R.id.cardYiyanHome).setOnClickListener {
+            startActivity(Intent(this, com.yuno.tools.ui.tools.YiyanActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardAnimeSearch).setOnClickListener {
+            startActivity(Intent(this, com.yuno.tools.ui.tools.AnimeSearchActivity::class.java))
+        }
         findViewById<MaterialCardView>(R.id.cardImageCompress).setOnClickListener {
             startActivity(Intent(this, ImageCompressActivity::class.java))
         }
@@ -308,7 +332,6 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardClock).setOnClickListener {
             startActivity(Intent(this, ClockActivity::class.java))
-// Anime features removed from the home tool list.
         }
         findViewById<MaterialCardView>(R.id.cardSubscription).setOnClickListener {
             startActivity(Intent(this, SubscriptionActivity::class.java))
@@ -316,8 +339,21 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialCardView>(R.id.cardBase64Tool).setOnClickListener {
             startActivity(Intent(this, Base64ToolActivity::class.java))
         }
+        findViewById<MaterialCardView>(R.id.cardGz360).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("访问提示")
+                .setMessage("该功能需要科学上网，确认后将打开外部网页。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("继续访问") { _, _ ->
+                    startActivity(Intent(this, Gz360Activity::class.java))
+                }
+                .show()
+        }
         findViewById<MaterialCardView>(R.id.cardWallpaperTool).setOnClickListener {
             startActivity(Intent(this, WallpaperToolActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardApiWallpaper).setOnClickListener {
+            startActivity(Intent(this, ApiWallpaperActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardMemberZone).setOnClickListener {
             startActivity(Intent(this, MemberZoneActivity::class.java))
@@ -477,7 +513,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ParseHistoryActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardMusicDownloads).setOnClickListener {
-            startActivity(Intent(this, MusicDownloadsActivity::class.java))
+            startActivity(Intent(this, com.yuno.tools.ui.profile.MusicDownloadsActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardSettings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -1499,8 +1535,18 @@ class MainActivity : AppCompatActivity() {
             musicPlayer?.repeatMode = musicRepeatMode
             refreshPlayerPanelState?.invoke()
         }
+        val downloadBtn = makeIconPillButton("↓", false) {
+            val onlineKey = currentOnlinePlayKey
+            val record = musicPlaylist.firstOrNull { musicRecordKey(it) == onlineKey }
+            if (record != null && record.playUrl.isNotBlank()) {
+                downloadOnlineSong(record)
+            } else {
+                Toast.makeText(this@MainActivity, "当前歌曲没有可下载的在线链接", Toast.LENGTH_SHORT).show()
+            }
+        }
         optionRow.addView(randomBtn)
         optionRow.addView(loopBtn)
+        optionRow.addView(downloadBtn)
         nowPlayingCard.addView(optionRow)
         val karaokeLyricsView = KaraokeLyricsView(this).apply {
             setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), 0)
@@ -2124,40 +2170,75 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "开始下载：${record.title}", Toast.LENGTH_SHORT).show()
         Thread {
             val result = runCatching {
-                val dir = File(getExternalFilesDir(null), "Music").apply { mkdirs() }
                 val base = safeFileName(record.title.ifBlank { "online_music" })
                 val ext = record.playUrl.substringBefore('?').substringAfterLast('.', "mp3").lowercase().takeIf { it.length in 2..5 } ?: "mp3"
-                var out = File(dir, "$base.$ext")
-                var index = 1
-                while (out.exists()) {
-                    out = File(dir, "$base-$index.$ext")
-                    index++
-                }
+                val fileName = "$base.$ext"
                 val conn = (URL(record.playUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15000
                     readTimeout = 30000
                     instanceFollowRedirects = true
                     setRequestProperty("User-Agent", "Mozilla/5.0")
                 }
-                try {
+                val savedPath = try {
                     val code = conn.responseCode
                     if (code !in 200..299) error("HTTP $code")
-                    conn.inputStream.use { input -> FileOutputStream(out).use { output -> input.copyTo(output) } }
+                    saveOnlineSongToPublicMusic(conn.inputStream, fileName, ext)
                 } finally {
                     conn.disconnect()
                 }
-                if (!out.exists() || out.length() <= 0L) error("文件为空")
-                val saved = record.copy(localPath = out.absolutePath, savedAt = System.currentTimeMillis())
+                val savedFile = File(savedPath)
+                if (savedPath.isBlank() || (savedFile.exists() && savedFile.length() <= 0L)) error("文件为空")
+                val saved = record.copy(localPath = savedPath, savedAt = System.currentTimeMillis())
                 val downloads = loadMusicRecords(MUSIC_DOWNLOADS_KEY).filterNot { sameMusicRecord(it, saved) }.toMutableList()
                 downloads.add(0, saved)
                 saveMusicRecords(MUSIC_DOWNLOADS_KEY, downloads)
-                out.absolutePath
+                savedPath
             }
             runOnUiThread {
                 result.onSuccess { Toast.makeText(this, "下载完成：$it", Toast.LENGTH_LONG).show() }
                     .onFailure { Toast.makeText(this, "下载失败：${it.message ?: "网络或文件异常"}", Toast.LENGTH_LONG).show() }
             }
         }.start()
+    }
+
+    private fun saveOnlineSongToPublicMusic(input: InputStream, fileName: String, ext: String): String {
+        val mime = when (ext.lowercase(Locale.getDefault())) {
+            "m4a" -> "audio/mp4"
+            "aac" -> "audio/aac"
+            "flac" -> "audio/flac"
+            "wav" -> "audio/wav"
+            else -> "audio/mpeg"
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Audio.Media.MIME_TYPE, mime)
+                put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/YunoTools")
+                put(MediaStore.Audio.Media.IS_MUSIC, 1)
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values) ?: error("无法创建音乐文件")
+            try {
+                contentResolver.openOutputStream(uri)?.use { output -> input.use { it.copyTo(output) } } ?: error("无法写入音乐文件")
+                values.clear()
+                values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+                return "/storage/emulated/0/${Environment.DIRECTORY_MUSIC}/YunoTools/$fileName"
+            } catch (e: Throwable) {
+                runCatching { contentResolver.delete(uri, null, null) }
+                throw e
+            }
+        }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "YunoTools").apply { mkdirs() }
+        var out = File(dir, fileName)
+        var index = 1
+        while (out.exists()) {
+            out = File(dir, fileName.substringBeforeLast('.') + "-$index." + fileName.substringAfterLast('.', "mp3"))
+            index++
+        }
+        input.use { src -> FileOutputStream(out).use { dst -> src.copyTo(dst) } }
+        android.media.MediaScannerConnection.scanFile(this, arrayOf(out.absolutePath), arrayOf(mime), null)
+        return out.absolutePath
     }
 
     private fun safeFileName(name: String): String {
@@ -2904,7 +2985,7 @@ class MainActivity : AppCompatActivity() {
             val channel = NotificationChannel(
                 MUSIC_NOTIFICATION_CHANNEL_ID,
                 "音乐播放",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "YunoTools 当前播放音乐"
                 setShowBadge(false)
@@ -2935,16 +3016,36 @@ class MainActivity : AppCompatActivity() {
         )
         val title = currentMusicTitle.substringBefore(" · ", currentMusicTitle)
         val text = currentMusicTitle.substringAfter(" · ", "正在播放")
+        fun musicAction(action: String, requestCode: Int): PendingIntent = PendingIntent.getActivity(
+            this,
+            requestCode,
+            Intent(this, MainActivity::class.java).setAction(action).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val previousIntent = musicAction(MUSIC_ACTION_PREVIOUS, 71073)
+        val toggleIntent = musicAction(MUSIC_ACTION_TOGGLE, 71074)
+        val nextIntent = musicAction(MUSIC_ACTION_NEXT, 71075)
+        val collapsed = RemoteViews(packageName, R.layout.notification_music_island).apply {
+            setTextViewText(R.id.tvMusicIslandTitle, title)
+            setTextViewText(R.id.tvMusicIslandSubtitle, text)
+            setTextViewText(R.id.tvMusicIslandStatus, if (isPlaying) "播放中" else "已暂停")
+            setTextViewText(R.id.btnMusicIslandToggle, if (isPlaying) "Ⅱ" else "▶")
+            setImageViewResource(R.id.ivMusicIslandIcon, R.drawable.ic_nav_music_disc)
+            setOnClickPendingIntent(R.id.btnMusicIslandPrevious, previousIntent)
+            setOnClickPendingIntent(R.id.btnMusicIslandToggle, toggleIntent)
+            setOnClickPendingIntent(R.id.btnMusicIslandNext, nextIntent)
+        }
         val notification = NotificationCompat.Builder(this, MUSIC_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_nav_music_disc)
-            .setContentTitle(title)
-            .setContentText(text)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCustomContentView(collapsed)
+            .setCustomBigContentView(collapsed)
             .apply {
                 session?.sessionCompatToken?.let { setStyle(MediaStyle().setMediaSession(it).setShowActionsInCompactView()) }
             }

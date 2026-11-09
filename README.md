@@ -2,14 +2,15 @@
 
 ## 当前版本
 
-- 版本：`v1.2.47`
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.47.apk`
+- 版本：`v1.2.66`
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.66.apk`
 - 状态：已完成编译、签名和本地安装包导出
 - 变更重点：
-  - 指南针使用定位经纬度请求网络高程与当前天气，海拔和温度都能稳定显示。
-  - 音乐播放器改为基于 `wyapi.toubiec.cn / nextmusic.toubiec.cn` 的网易云解析接口。
-  - 保留短视频去水印、本地音乐、图像处理、媒体处理、日常工具和主题配置等核心能力；AI 聊天与看番功能暂时关闭。
-
+  - 新增独立 API 壁纸功能页，与“当前壁纸”功能完全独立。
+  - API 壁纸分类改为分组卡片：通用壁纸、二次元、人物写真、4K 超清四组，子项区分电脑横屏、手机竖屏、JK 写真、动漫 4K、风景 4K。
+  - 新增 gz360 影视站点应用内 WebView 页，避免跳转外部浏览器。
+  - 新增一言工具页、音乐通知灵动岛布局，优化黑丝图片页与设置页样式。
+  - 音乐下载目录统一到公共目录 /storage/emulated/0/Music/YunoTools，并补充下载记录入口。
 > 从代码编写、UI 设计到功能实现，本项目的每一行代码均由 AI 辅助生成。人类开发者仅负责需求描述与验收。
 
 ---
@@ -20,8 +21,8 @@ YunoTools 是一个基于原生 Kotlin + Android SDK 的 Android 工具箱应用
 
 ## 下载
 
-- 安装包：[release/YunoTools-v1.2.47.apk](release/YunoTools-v1.2.47.apk)
-- 当前导出包：`/storage/emulated/0/Download/YunoTools-v1.2.47.apk`
+- 安装包：[release/YunoTools-v1.2.66.apk](release/YunoTools-v1.2.66.apk)
+- 当前导出包：`/storage/emulated/0/Download/YunoTools-v1.2.66.apk`
 
 ## 核心功能
 
@@ -99,17 +100,16 @@ app/src/main/java/com/yuno/tools/
 签名发布包由项目 keystore 生成，当前发布文件为：
 
 ```text
-release/YunoTools-v1.2.47.apk
+release/YunoTools-v1.2.66.apk
 ```
 
 ## 版本说明
-
-### v1.2.47
-
-- 指南针高程和天气显示改为网络查询，提升实际可见性。
-- 音乐播放器改为wyapi.toubiec.cn / nextmusic.toubiec.cn 网易云解析接口，并在播放前过滤不可播结果。
-- 修复“仅向上”导航音频条样式，保持全宽横向向上柱状频谱，不再包裹播放按钮。
-- 删除过期入口和说明，保持 README 与当前代码状态一致。
+### v1.2.66
+- 新增独立 API 壁纸页，分类以分组卡片呈现，普通壁纸、二次元、JK、4K 清晰可辨。
+- 六个接口分类保持独立：普通壁纸、电脑横屏、手机竖屏、JK 写真、动漫 4K、风景 4K。
+- 新增 gz360 应用内网页、一言工具页与音乐通知灵动岛布局。
+- 修复个人中心绑定与音乐下载目录问题，统一导出到公共 Music 目录。
+- 版本号同步为 versionCode 266 / versionName 1.2.66，正式包已重新编译、签名并通过 V2/V3 校验。
 
 ## 维护约定
 

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#F2F2F7" android:orientation="vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="84dp" android:gravity="center_vertical" android:paddingStart="16dp" android:paddingTop="24dp" android:paddingEnd="16dp">
+        <ImageButton android:id="@+id/btnBack" android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/bg_circle_white" android:contentDescription="返回" android:padding="12dp" android:src="@android:drawable/ic_media_previous" app:tint="#1F1722" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="12dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="API 壁纸" android:textColor="#1C1C1E" android:textSize="22sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="随机获取高清图片" android:textColor="#6B7280" android:textSize="12sp" />
+        </LinearLayout>
+        <Button android:id="@+id/btnRefresh" android:layout_width="82dp" android:layout_height="42dp" android:backgroundTint="#252A31" android:text="换一张" android:textColor="#FFFFFF" android:textSize="13sp" />
+    </LinearLayout>
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="18dp" android:paddingTop="4dp" android:paddingEnd="18dp" android:text="选择壁纸类型" android:textColor="#1C1C1E" android:textSize="16sp" android:textStyle="bold" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="18dp" android:paddingTop="2dp" android:paddingEnd="18dp" android:paddingBottom="8dp" android:text="按内容和清晰度分类，点击即可切换" android:textColor="#8A8F98" android:textSize="12sp" />
+    <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="12dp" android:orientation="horizontal">
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="10dp" android:background="@drawable/bg_api_category_group" android:orientation="vertical" android:padding="10dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="通用壁纸" android:textColor="#1C1C1E" android:textSize="13sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="1dp" android:layout_marginBottom="7dp" android:text="随机高清图片" android:textColor="#8A8F98" android:textSize="10sp" />
+                <Button android:id="@+id/cat1" android:layout_width="116dp" android:layout_height="44dp" android:backgroundTint="#252A31" android:text="随机壁纸" android:textAllCaps="false" android:textColor="#FFFFFF" android:textSize="12sp" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="10dp" android:background="@drawable/bg_api_category_group" android:orientation="vertical" android:padding="10dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="二次元" android:textColor="#1C1C1E" android:textSize="13sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="1dp" android:layout_marginBottom="7dp" android:text="适配不同屏幕" android:textColor="#8A8F98" android:textSize="10sp" />
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <Button android:id="@+id/cat2" android:layout_width="86dp" android:layout_height="44dp" android:layout_marginEnd="6dp" android:backgroundTint="#E7EBF0" android:text="电脑横屏" android:textAllCaps="false" android:textColor="#303742" android:textSize="12sp" />
+                    <Button android:id="@+id/cat3" android:layout_width="86dp" android:layout_height="44dp" android:backgroundTint="#E7EBF0" android:text="手机竖屏" android:textAllCaps="false" android:textColor="#303742" android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginEnd="10dp" android:background="@drawable/bg_api_category_group" android:orientation="vertical" android:padding="10dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="人物写真" android:textColor="#1C1C1E" android:textSize="13sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="1dp" android:layout_marginBottom="7dp" android:text="JK 风格图片" android:textColor="#8A8F98" android:textSize="10sp" />
+                <Button android:id="@+id/cat4" android:layout_width="116dp" android:layout_height="44dp" android:backgroundTint="#E7EBF0" android:text="JK 写真" android:textAllCaps="false" android:textColor="#303742" android:textSize="12sp" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/bg_api_category_group" android:orientation="vertical" android:padding="10dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="4K 超清" android:textColor="#1C1C1E" android:textSize="13sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="1dp" android:layout_marginBottom="7dp" android:text="高分辨率壁纸" android:textColor="#8A8F98" android:textSize="10sp" />
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <Button android:id="@+id/cat5" android:layout_width="86dp" android:layout_height="44dp" android:layout_marginEnd="6dp" android:backgroundTint="#E7EBF0" android:text="动漫 4K" android:textAllCaps="false" android:textColor="#303742" android:textSize="12sp" />
+                    <Button android:id="@+id/cat6" android:layout_width="86dp" android:layout_height="44dp" android:backgroundTint="#E7EBF0" android:text="风景 4K" android:textAllCaps="false" android:textColor="#303742" android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </HorizontalScrollView>
+    <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="18dp" android:paddingEnd="18dp" android:paddingBottom="8dp" android:text="正在准备..." android:textColor="#6B7280" android:textSize="13sp" />
+    <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="14dp" android:layout_weight="1" app:cardBackgroundColor="#FFFFFF" app:cardCornerRadius="22dp" app:cardElevation="0dp">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent" android:background="#F7F8FA">
+            <ImageView android:id="@+id/image" android:layout_width="match_parent" android:layout_height="match_parent" android:contentDescription="壁纸预览" android:scaleType="centerCrop" />
+            <ProgressBar android:id="@+id/progress" android:layout_width="48dp" android:layout_height="48dp" android:layout_gravity="center" android:visibility="gone" />
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="72dp" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="14dp">
+        <Button android:id="@+id/btnSave" android:layout_width="0dp" android:layout_height="52dp" android:layout_marginEnd="5dp" android:layout_weight="1" android:backgroundTint="#252A31" android:text="保存" android:textColor="#FFFFFF" />
+        <Button android:id="@+id/btnSet" android:layout_width="0dp" android:layout_height="52dp" android:layout_marginStart="5dp" android:layout_marginEnd="5dp" android:layout_weight="1" android:backgroundTint="#E7EBF0" android:text="设为壁纸" android:textColor="#303742" />
+        <Button android:id="@+id/btnShare" android:layout_width="0dp" android:layout_height="52dp" android:layout_marginStart="5dp" android:layout_weight="1" android:backgroundTint="#E7EBF0" android:text="分享" android:textColor="#303742" />
+    </LinearLayout>
+</LinearLayout>

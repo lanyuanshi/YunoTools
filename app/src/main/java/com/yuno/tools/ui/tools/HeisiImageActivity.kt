@@ -41,6 +41,7 @@ import java.net.URL
 class HeisiImageActivity : AppCompatActivity() {
     private val blackSilkApiUrl = "https://v2.xxapi.cn/api/heisi?return=302"
     private val whiteSilkApiUrl = "https://v2.xxapi.cn/api/baisi?return=302"
+    private val meinvApiUrl = "https://v2.xxapi.cn/api/meinvpic?return=302"
     private var currentApiUrl = blackSilkApiUrl
     private var currentMode = "黑丝"
     private var currentImageUrl: String = ""
@@ -54,6 +55,7 @@ class HeisiImageActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnRefresh).setOnClickListener { loadImage() }
         findViewById<Button>(R.id.btnBlackSilk).setOnClickListener { selectMode("黑丝", blackSilkApiUrl) }
         findViewById<Button>(R.id.btnWhiteSilk).setOnClickListener { selectMode("白丝", whiteSilkApiUrl) }
+        findViewById<Button>(R.id.btnMeinv).setOnClickListener { selectMode("随机小姐姐", meinvApiUrl) }
         findViewById<ImageView>(R.id.ivHeisi).setOnClickListener { loadImage() }
         findViewById<ImageView>(R.id.ivHeisi).setOnLongClickListener { showImageActions(); true }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveCurrentImage() }
@@ -77,12 +79,14 @@ class HeisiImageActivity : AppCompatActivity() {
     private fun updateModeButtons() {
         val black = findViewById<Button>(R.id.btnBlackSilk)
         val white = findViewById<Button>(R.id.btnWhiteSilk)
+        val meinv = findViewById<Button>(R.id.btnMeinv)
         black.isSelected = currentMode == "黑丝"
         white.isSelected = currentMode == "白丝"
-        black.backgroundTintList = ColorStateList.valueOf(if (black.isSelected) 0xFF536579.toInt() else 0xFFD7DEE5.toInt())
-        black.setTextColor(if (black.isSelected) 0xFFFFFFFF.toInt() else 0xFF243443.toInt())
-        white.backgroundTintList = ColorStateList.valueOf(if (white.isSelected) 0xFF536579.toInt() else 0xFFD7DEE5.toInt())
-        white.setTextColor(if (white.isSelected) 0xFFFFFFFF.toInt() else 0xFF243443.toInt())
+        meinv.isSelected = currentMode == "随机小姐姐"
+        listOf(black, white, meinv).forEach { button ->
+            button.backgroundTintList = ColorStateList.valueOf(if (button.isSelected) 0xFF2F343B.toInt() else 0xFFE7EBF0.toInt())
+            button.setTextColor(if (button.isSelected) 0xFFFFFFFF.toInt() else 0xFF303742.toInt())
+        }
     }
 
     private fun loadImage() {

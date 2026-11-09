@@ -1,6 +1,7 @@
 package com.yuno.tools.ui.media
 
 import android.content.ContentValues
+import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -230,13 +231,28 @@ class AudioSeparateActivity : AppCompatActivity() {
             if (audioTrack < 0 || format == null) error("该视频没有可提取的音频轨道")
 
             val mime = format.getString(MediaFormat.KEY_MIME) ?: error("不支持的音频格式")
-            val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 44100
-            val channelCount = (if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2).coerceIn(1, 2)
+            var sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 44100
+            var channelCount = (if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2).coerceIn(1, 2)
             if (sampleRate <= 0) error("音频采样率无效")
 
             extractor.selectTrack(audioTrack)
             codec = MediaCodec.createDecoderByType(mime)
-            codec.configure(format, null, null, 0)
+            // 显式要求解码器输出 16bit 整型 PCM。若不指定，部分解码器会给 float PCM，
+            // 直接按 short 读取就会变成满幅白噪声（听感即「全是杂音」）。
+            val decodeFormat = MediaFormat.createAudioFormat(
+                mime,
+                format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
+                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            ).apply {
+                setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+                setString(MediaFormat.KEY_MIME, mime)
+                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                    setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+                }
+                // 保留原始 csd-0（如 AAC 的 AudioSpecificConfig），否则部分解码器无法初始化解码。
+                if (format.containsKey("csd-0")) setByteBuffer("csd-0", format.getByteBuffer("csd-0"))
+            }
+            codec.configure(decodeFormat, null, null, 0)
             codec.start()
 
             val created = createOutput("$outputName.mp3", "audio/mpeg", Environment.DIRECTORY_MUSIC, "YunoTools/Audio", true)
@@ -248,14 +264,14 @@ class AudioSeparateActivity : AppCompatActivity() {
                 FileOutputStream(created.path)
             }
 
-            val mp3 = Mp3Encoder(sampleRate, channelCount, 192)
-            encoder = mp3
-
             val bufferInfo = MediaCodec.BufferInfo()
             var sawInputEos = false
             var sawOutputEos = false
             var pcmTemp = ShortArray(0)
+            var floatTemp = FloatArray(0)
             var pending = ByteArray(0)
+            var mp3: Mp3Encoder? = null
+            var pcmEncoding = AudioFormat.ENCODING_PCM_16BIT
 
             while (!sawOutputEos) {
                 if (cancelled.get()) error("已取消")
@@ -277,21 +293,85 @@ class AudioSeparateActivity : AppCompatActivity() {
                 }
 
                 val outIndex = codec.dequeueOutputBuffer(bufferInfo, 10_000)
-                if (outIndex >= 0) {
+                if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    // 以解码器真实输出格式为准，容器声明可能与实际不一致。
+                    val of = codec.outputFormat
+                    if (of.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                        val sr = of.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        if (sr > 0 && sr != sampleRate && mp3 == null) sampleRate = sr
+                    }
+                    if (of.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                        val ch = of.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        if (ch > 0 && mp3 == null) channelCount = ch.coerceIn(1, 2)
+                    }
+                    if (of.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+                        pcmEncoding = of.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                    }
+                } else if (outIndex >= 0) {
                     val outBuf = codec.getOutputBuffer(outIndex)
                     if (outBuf != null && bufferInfo.size > 0) {
+                        if (mp3 == null) {
+                            // 首个输出缓冲到达，此时格式已确定，再创建编码器。
+                            val of = codec.outputFormat
+                            if (of.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                                val sr = of.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                                if (sr > 0) sampleRate = sr
+                            }
+                            if (of.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                                val ch = of.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                                if (ch > 0) channelCount = ch.coerceIn(1, 2)
+                            }
+                            if (of.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+                                pcmEncoding = of.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                            }
+                            mp3 = Mp3Encoder(sampleRate, channelCount, 192)
+                            encoder = mp3
+                        }
                         outBuf.position(bufferInfo.offset)
                         outBuf.limit(bufferInfo.offset + bufferInfo.size)
                         val chunk = ByteArray(bufferInfo.size)
                         outBuf.get(chunk)
-                        // 合并上次残留的奇数字节，保证 16bit 采样按字节对齐
+
+                        val bytesPerSample: Int
+                        if (pcmEncoding == AudioFormat.ENCODING_PCM_FLOAT) {
+                            // float PCM：按 4 字节一个小端 float 解析，再换算回 16bit 整型。
+                            // 若把 float 字节直接当 short 读，每个采样都会被重新解释成噪声，
+                            // 听感就是「全是杂音」。
+                            bytesPerSample = 4
+                        } else if (pcmEncoding == AudioFormat.ENCODING_PCM_8BIT) {
+                            bytesPerSample = 1
+                        } else {
+                            bytesPerSample = 2
+                        }
+                        // 合并上次残留的字节，并只编码完整帧：块尾不足一帧的字节留到下一块。
+                        // 直接丢掉尾部会让左右声道整体错位，同样会听成杂音。
                         val bytes = if (pending.isNotEmpty()) pending + chunk else chunk
-                        val shortCount = bytes.size / 2
-                        val usable = shortCount * 2
-                        if (shortCount > 0) {
-                            if (pcmTemp.size < shortCount) pcmTemp = ShortArray(shortCount)
-                            ByteBuffer.wrap(bytes, 0, usable).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcmTemp, 0, shortCount)
-                            mp3.encode(pcmTemp, shortCount / channelCount, output)
+                        val bytesPerFrame = bytesPerSample * channelCount
+                        val frameCount = if (bytesPerFrame > 0) bytes.size / bytesPerFrame else 0
+                        val usable = frameCount * bytesPerFrame
+                        if (frameCount > 0) {
+                            val sampleCount = frameCount * channelCount
+                            if (pcmTemp.size < sampleCount) pcmTemp = ShortArray(sampleCount)
+                            if (bytesPerSample == 4) {
+                                if (floatTemp.size < sampleCount) floatTemp = FloatArray(sampleCount)
+                                ByteBuffer.wrap(bytes, 0, usable).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(floatTemp, 0, sampleCount)
+                                for (i in 0 until sampleCount) {
+                                    val v = floatTemp[i]
+                                    pcmTemp[i] = when {
+                                        v >= 1f -> Short.MAX_VALUE
+                                        v <= -1f -> Short.MIN_VALUE
+                                        else -> (v * 32767f).toInt().toShort()
+                                    }
+                                }
+                            } else if (bytesPerSample == 1) {
+                                // 8bit PCM 是无符号的，中心点 128。
+                                for (i in 0 until sampleCount) {
+                                    pcmTemp[i] = (((bytes[i].toInt() and 0xFF) - 128) shl 8).toShort()
+                                }
+                            } else {
+                                ByteBuffer.wrap(bytes, 0, usable).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcmTemp, 0, sampleCount)
+                            }
+                            mp3.encode(pcmTemp, frameCount, output)
                         }
                         pending = if (usable < bytes.size) bytes.copyOfRange(usable, bytes.size) else ByteArray(0)
                     }
@@ -300,6 +380,7 @@ class AudioSeparateActivity : AppCompatActivity() {
                 }
             }
 
+            if (mp3 == null) error("解码器没有输出任何音频数据")
             mp3.flush(output)
             output.flush()
             output.close()

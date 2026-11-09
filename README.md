@@ -2,8 +2,8 @@
 
 ## 当前版本
 
-- 版本：`v1.2.68`
-- APK：`/storage/emulated/0/Download/YunoTools-v1.2.68.apk`
+- 版本：`v1.2.69`
+- APK：`/storage/emulated/0/Download/YunoTools-v1.2.69.apk`
 - 状态：已完成编译、签名和本地安装包导出
 - 变更重点：
   - 新增独立 API 壁纸功能页，与“当前壁纸”功能完全独立。
@@ -21,8 +21,8 @@ YunoTools 是一个基于原生 Kotlin + Android SDK 的 Android 工具箱应用
 
 ## 下载
 
-- 安装包：[release/YunoTools-v1.2.68.apk](release/YunoTools-v1.2.68.apk)
-- 当前导出包：`/storage/emulated/0/Download/YunoTools-v1.2.68.apk`
+- 安装包：[release/YunoTools-v1.2.69.apk](release/YunoTools-v1.2.69.apk)
+- 当前导出包：`/storage/emulated/0/Download/YunoTools-v1.2.69.apk`
 
 ## 核心功能
 
@@ -100,15 +100,16 @@ app/src/main/java/com/yuno/tools/
 签名发布包由项目 keystore 生成，当前发布文件为：
 
 ```text
-release/YunoTools-v1.2.68.apk
+release/YunoTools-v1.2.69.apk
 ```
 
 ## 版本说明
-### v1.2.68
-- 修复音频分离导出 MP3 无声的问题：16bit PCM 送入 `lame_encode_buffer_int` 前改为左移 16 位，对齐该接口要求的 32bit 满量程刻度。
-- 修复前输出幅值被内部换算压缩约 96dB，文件结构正常、时长正确但听感近乎静音；修复后实测 RMS 与源信号一致。
-- M4A 输出路径未改动，进度条与取消功能保持不变。
-- 版本号同步为 versionCode 268 / versionName 1.2.68，正式包已重新编译、签名并通过 V2/V3 校验。
+### v1.2.69
+- 修复音频分离导出 MP3 全是杂音的问题：解码器输出的 PCM 现在按真实编码格式解析，float PCM 会先换算为 16bit 整型，8bit PCM 按无符号中心点 128 还原。
+- 修复解码块尾不足一帧时被直接丢弃的问题：残留字节会与下一块拼接，避免左右声道整体错位产生持续噪声。
+- 解码器配置阶段显式请求 16bit PCM，并以 codec.outputFormat 的真实采样率、声道数为准创建编码器，避免容器声明与实际输出不一致。
+- 编码器侧保持不变：已用 jump3r 官方 short[] 路径做字节级对照，shl 16 输出与其完全一致，确认幅值换算正确。
+- 版本号同步为 versionCode 269 / versionName 1.2.69，正式包已重新编译、签名并通过 V2/V3 校验。
 
 ## 维护约定
 

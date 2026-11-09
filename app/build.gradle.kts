@@ -11,8 +11,8 @@ android {
         applicationId = "com.yuno.tools"
         minSdk = 24
         targetSdk = 32
-        versionCode = 266
-        versionName = "1.2.66"
+        versionCode = 267
+        versionName = "1.2.67"
     }
 
     buildFeatures {
@@ -64,4 +64,5 @@ dependencies {
     implementation("com.google.zxing:core:3.5.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.media3:media3-transformer:1.2.1")
+    implementation(files("libs/jump3r-lame.jar"))
 }

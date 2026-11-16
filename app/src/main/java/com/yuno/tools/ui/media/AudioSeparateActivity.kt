@@ -32,7 +32,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import net.sourceforge.javaflacencoder.FLACEncoder
-import net.sourceforge.javaflacencoder.FLACStreamOutputStream
+import net.sourceforge.javaflacencoder.FLACFileOutputStream
 import net.sourceforge.javaflacencoder.StreamConfiguration
 
 class AudioSeparateActivity : AppCompatActivity() {
@@ -235,7 +235,7 @@ class AudioSeparateActivity : AppCompatActivity() {
         var outUri: Uri? = null
         var outFile: File? = null
         var writer: DecodedAudioWriter? = null
-        var wavTemp: File? = null
+        var tempFile: File? = null
         val maxChannels = if (formatKind == AudioOutputFormat.MP3) 2 else Int.MAX_VALUE
         try {
             contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
@@ -260,6 +260,10 @@ class AudioSeparateActivity : AppCompatActivity() {
             val sourceChannelCount = (if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2).coerceAtLeast(1)
             var channelCount = sourceChannelCount.coerceIn(1, maxChannels)
             if (sampleRate <= 0) error("音频采样率无效")
+            if (formatKind == AudioOutputFormat.WAV && selectedDurationMs > 0) {
+                val estimatedBytes = (selectedDurationMs / 1000.0 * sampleRate * sourceChannelCount * 2).toLong()
+                if (estimatedBytes > MAX_WAV_DATA_BYTES) error("WAV 文件超过 4GB 限制，请改用 FLAC")
+            }
 
             extractor.selectTrack(audioTrack)
             codec = MediaCodec.createDecoderByType(mime)
@@ -293,10 +297,13 @@ class AudioSeparateActivity : AppCompatActivity() {
             outFile = created.file
             writer = when (formatKind) {
                 AudioOutputFormat.MP3 -> Mp3Writer(openDecodedOutput(created))
-                AudioOutputFormat.FLAC -> FlacWriter(openDecodedOutput(created))
+                AudioOutputFormat.FLAC -> {
+                    tempFile = File(cacheDir, "audio_flac_${System.currentTimeMillis()}.flac")
+                    FlacWriter(tempFile)
+                }
                 AudioOutputFormat.WAV -> {
-                    wavTemp = File(cacheDir, "audio_wav_${System.currentTimeMillis()}.wav")
-                    WavWriter(wavTemp)
+                    tempFile = File(cacheDir, "audio_wav_${System.currentTimeMillis()}.wav")
+                    WavWriter(tempFile)
                 }
                 AudioOutputFormat.M4A -> error("M4A 不应进入解码输出")
             }
@@ -419,8 +426,9 @@ class AudioSeparateActivity : AppCompatActivity() {
 
             if (!writerReady) error("解码器没有输出任何音频数据")
             writer?.finish()
-            if (formatKind == AudioOutputFormat.WAV) {
-                val temp = wavTemp ?: error("WAV 临时文件缺失")
+            if (formatKind == AudioOutputFormat.WAV || formatKind == AudioOutputFormat.FLAC) {
+                val temp = tempFile ?: error("临时音频文件缺失")
+                if (cancelled.get()) error("已取消")
                 copyFileToOutput(temp, created)
                 temp.delete()
             }
@@ -433,7 +441,7 @@ class AudioSeparateActivity : AppCompatActivity() {
             return created
         } catch (e: Exception) {
             runCatching { writer?.close() }
-            wavTemp?.delete()
+            tempFile?.delete()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && outUri != null) runCatching { contentResolver.delete(outUri, null, null) }
             outFile?.delete()
             throw e
@@ -453,13 +461,21 @@ class AudioSeparateActivity : AppCompatActivity() {
     }
 
     private fun copyFileToOutput(src: File, created: OutputInfo) {
-        if (created.uri != null) {
-            contentResolver.openOutputStream(created.uri)?.use { output ->
-                src.inputStream().use { input -> input.copyTo(output) }
-            } ?: error("无法写入输出文件")
+        val output: OutputStream = if (created.uri != null) {
+            contentResolver.openOutputStream(created.uri) ?: error("无法写入输出文件")
         } else {
-            FileOutputStream(created.path).use { output ->
-                src.inputStream().use { input -> input.copyTo(output) }
+            FileOutputStream(created.path)
+        }
+        output.use { out ->
+            src.inputStream().use { input ->
+                val buffer = ByteArray(1024 * 1024)
+                while (true) {
+                    if (cancelled.get()) error("已取消")
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    out.write(buffer, 0, read)
+                }
+                out.flush()
             }
         }
     }
@@ -541,6 +557,8 @@ class AudioSeparateActivity : AppCompatActivity() {
     }
 }
 
+private const val MAX_WAV_DATA_BYTES = 0xFFFFFFF0L
+
 private abstract class DecodedAudioWriter {
     abstract fun configure(sampleRate: Int, channelCount: Int)
     abstract fun write(pcm: ShortArray, frameCount: Int)
@@ -605,6 +623,7 @@ private class WavWriter(file: File) : DecodedAudioWriter() {
     }
 
     override fun finish() {
+        if (dataBytes > MAX_WAV_DATA_BYTES) error("WAV 文件超过 4GB 限制")
         raf.seek(4)
         writeIntLE((36L + dataBytes).toInt())
         raf.seek(40)
@@ -633,8 +652,8 @@ private class WavWriter(file: File) : DecodedAudioWriter() {
     }
 }
 
-private class FlacWriter(output: OutputStream) : DecodedAudioWriter() {
-    private val flacStream = FLACStreamOutputStream(output)
+private class FlacWriter(file: File) : DecodedAudioWriter() {
+    private val flacStream = FLACFileOutputStream(file)
     private var encoder: FLACEncoder? = null
     private var channelCount = 0
     private var intPcm = IntArray(0)

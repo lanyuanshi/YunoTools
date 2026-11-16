@@ -29,6 +29,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
@@ -335,8 +337,9 @@ class VideoTrimActivity : AppCompatActivity() {
                 }
                 outUri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: error("无法创建输出文件")
                 contentResolver.openOutputStream(outUri!!)?.use { output ->
-                    tempOutput.inputStream().use { input -> input.copyTo(output) }
+                    tempOutput.inputStream().use { input -> copyStreamCancellable(input, output) }
                 } ?: error("无法写入输出文件")
+                if (trimCancelled) error("已取消")
                 values.clear()
                 values.put(MediaStore.Video.Media.IS_PENDING, 0)
                 contentResolver.update(outUri!!, values, null, null)
@@ -344,7 +347,8 @@ class VideoTrimActivity : AppCompatActivity() {
             } else {
                 val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "YunoTools").apply { mkdirs() }
                 outFile = uniqueFile(dir, name)
-                tempOutput.inputStream().use { input -> FileOutputStream(outFile!!).use { output -> input.copyTo(output) } }
+                tempOutput.inputStream().use { input -> FileOutputStream(outFile!!).use { output -> copyStreamCancellable(input, output) } }
+                if (trimCancelled) error("已取消")
                 return outFile!!.absolutePath
             }
         } catch (e: Throwable) {
@@ -358,6 +362,17 @@ class VideoTrimActivity : AppCompatActivity() {
             trimProgressRunnable = null
             tempOutput.delete()
         }
+    }
+
+    private fun copyStreamCancellable(input: InputStream, output: OutputStream) {
+        val buffer = ByteArray(1024 * 1024)
+        while (true) {
+            if (trimCancelled) error("已取消")
+            val read = input.read(buffer)
+            if (read < 0) break
+            output.write(buffer, 0, read)
+        }
+        output.flush()
     }
 
     private fun startTrimProgress() {

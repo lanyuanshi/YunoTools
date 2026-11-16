@@ -27,9 +27,13 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
+import net.sourceforge.javaflacencoder.FLACEncoder
+import net.sourceforge.javaflacencoder.FLACStreamOutputStream
+import net.sourceforge.javaflacencoder.StreamConfiguration
 
 class AudioSeparateActivity : AppCompatActivity() {
     private lateinit var binding: ActivityAudioSeparateBinding
@@ -41,7 +45,14 @@ class AudioSeparateActivity : AppCompatActivity() {
     @Volatile
     private var lastPercent = -1
 
-    private var formatM4a = true
+    private enum class AudioOutputFormat(val extension: String, val mimeType: String) {
+        M4A("m4a", "audio/mp4"),
+        MP3("mp3", "audio/mpeg"),
+        WAV("wav", "audio/wav"),
+        FLAC("flac", "audio/flac")
+    }
+
+    private var outputFormat = AudioOutputFormat.M4A
 
     private val pickVideo = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@registerForActivityResult
@@ -64,7 +75,12 @@ class AudioSeparateActivity : AppCompatActivity() {
         binding.btnExtract.setOnClickListener { extractSelectedAudio() }
         binding.btnCancel.setOnClickListener { cancelWork() }
         binding.rgFormat.setOnCheckedChangeListener { _, checkedId ->
-            formatM4a = checkedId == R.id.rbM4a
+            outputFormat = when (checkedId) {
+                R.id.rbMp3 -> AudioOutputFormat.MP3
+                R.id.rbWav -> AudioOutputFormat.WAV
+                R.id.rbFlac -> AudioOutputFormat.FLAC
+                else -> AudioOutputFormat.M4A
+            }
             updateFormatHint()
         }
         updateFormatHint()
@@ -77,10 +93,11 @@ class AudioSeparateActivity : AppCompatActivity() {
     }
 
     private fun updateFormatHint() {
-        binding.tvFormatHint.text = if (formatM4a) {
-            "M4A：直接拷贝原始音频轨道，速度最快，无损保留原音质。"
-        } else {
-            "MP3：重新编码为 192kbps，兼容性最好，耗时随视频时长增加。"
+        binding.tvFormatHint.text = when (outputFormat) {
+            AudioOutputFormat.M4A -> "M4A：直接拷贝原始音频轨道，速度最快。"
+            AudioOutputFormat.MP3 -> "MP3：重新编码为 192kbps，兼容性最好，耗时随视频时长增加。"
+            AudioOutputFormat.WAV -> "WAV：无损 PCM，文件较大，适合后期编辑。"
+            AudioOutputFormat.FLAC -> "FLAC：无损压缩，体积比 WAV 小，耗时随视频时长增加。"
         }
     }
 
@@ -93,19 +110,24 @@ class AudioSeparateActivity : AppCompatActivity() {
 
         val rawName = sanitizeName(binding.etAudioName.text?.toString())
         val outputName = rawName.ifBlank { "Yuno_audio_${System.currentTimeMillis()}" }
-        val toMp3 = !formatM4a
+        val decoded = outputFormat != AudioOutputFormat.M4A
 
         cancelled.set(false)
         lastPercent = -1
         setBusy(true)
         binding.progressBar.progress = 0
         binding.tvProgress.text = "0%"
-        binding.tvStatus.text = if (toMp3) "正在解码并编码为 MP3..." else "正在提取音频轨道..."
+        binding.tvStatus.text = when (outputFormat) {
+            AudioOutputFormat.M4A -> "正在提取音频轨道..."
+            AudioOutputFormat.MP3 -> "正在解码并编码为 MP3..."
+            AudioOutputFormat.WAV -> "正在解码为无损 WAV..."
+            AudioOutputFormat.FLAC -> "正在解码并编码为 FLAC..."
+        }
 
         workJob = lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    if (toMp3) extractToMp3(uri, outputName) else extractToM4a(uri, outputName)
+                    if (decoded) extractToDecoded(uri, outputName, outputFormat) else extractToM4a(uri, outputName)
                 }
             }
             setBusy(false)
@@ -139,6 +161,8 @@ class AudioSeparateActivity : AppCompatActivity() {
         binding.btnExtract.text = if (busy) "正在分离..." else "开始分离音频"
         binding.rbM4a.isEnabled = !busy
         binding.rbMp3.isEnabled = !busy
+        binding.rbWav.isEnabled = !busy
+        binding.rbFlac.isEnabled = !busy
         binding.btnCancel.visibility = if (busy) View.VISIBLE else View.GONE
         binding.progressBox.visibility = if (busy) View.VISIBLE else View.GONE
     }
@@ -204,14 +228,15 @@ class AudioSeparateActivity : AppCompatActivity() {
         }
     }
 
-    /** 用 MediaCodec 解码音频为 PCM，再用 LAME 编码成 MP3。 */
-    private fun extractToMp3(inputUri: Uri, outputName: String): OutputInfo {
+    /** 用 MediaCodec 解码音频为 PCM，再按所选格式编码输出。 */
+    private fun extractToDecoded(inputUri: Uri, outputName: String, formatKind: AudioOutputFormat): OutputInfo {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         var outUri: Uri? = null
         var outFile: File? = null
-        var output: OutputStream? = null
-        var encoder: Mp3Encoder? = null
+        var writer: DecodedAudioWriter? = null
+        var wavTemp: File? = null
+        val maxChannels = if (formatKind == AudioOutputFormat.MP3) 2 else Int.MAX_VALUE
         try {
             contentResolver.openFileDescriptor(inputUri, "r")?.use { pfd ->
                 extractor.setDataSource(pfd.fileDescriptor)
@@ -232,7 +257,8 @@ class AudioSeparateActivity : AppCompatActivity() {
 
             val mime = format.getString(MediaFormat.KEY_MIME) ?: error("不支持的音频格式")
             var sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 44100
-            var channelCount = (if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2).coerceIn(1, 2)
+            val sourceChannelCount = (if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2).coerceAtLeast(1)
+            var channelCount = sourceChannelCount.coerceIn(1, maxChannels)
             if (sampleRate <= 0) error("音频采样率无效")
 
             extractor.selectTrack(audioTrack)
@@ -241,8 +267,8 @@ class AudioSeparateActivity : AppCompatActivity() {
             // 直接按 short 读取就会变成满幅白噪声（听感即「全是杂音」）。
             val decodeFormat = MediaFormat.createAudioFormat(
                 mime,
-                format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
-                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                sampleRate,
+                sourceChannelCount
             ).apply {
                 setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
                 setString(MediaFormat.KEY_MIME, mime)
@@ -255,13 +281,24 @@ class AudioSeparateActivity : AppCompatActivity() {
             codec.configure(decodeFormat, null, null, 0)
             codec.start()
 
-            val created = createOutput("$outputName.mp3", "audio/mpeg", Environment.DIRECTORY_MUSIC, "YunoTools/Audio", true)
+            val created = createOutput(
+                "$outputName.${formatKind.extension}",
+                formatKind.mimeType,
+                Environment.DIRECTORY_MUSIC,
+                "YunoTools/Audio",
+                true,
+                usePath = false
+            )
             outUri = created.uri
             outFile = created.file
-            output = if (created.uri != null) {
-                contentResolver.openOutputStream(created.uri) ?: error("无法写入输出文件")
-            } else {
-                FileOutputStream(created.path)
+            writer = when (formatKind) {
+                AudioOutputFormat.MP3 -> Mp3Writer(openDecodedOutput(created))
+                AudioOutputFormat.FLAC -> FlacWriter(openDecodedOutput(created))
+                AudioOutputFormat.WAV -> {
+                    wavTemp = File(cacheDir, "audio_wav_${System.currentTimeMillis()}.wav")
+                    WavWriter(wavTemp)
+                }
+                AudioOutputFormat.M4A -> error("M4A 不应进入解码输出")
             }
 
             val bufferInfo = MediaCodec.BufferInfo()
@@ -270,7 +307,7 @@ class AudioSeparateActivity : AppCompatActivity() {
             var pcmTemp = ShortArray(0)
             var floatTemp = FloatArray(0)
             var pending = ByteArray(0)
-            var mp3: Mp3Encoder? = null
+            var writerReady = false
             var pcmEncoding = AudioFormat.ENCODING_PCM_16BIT
 
             while (!sawOutputEos) {
@@ -298,11 +335,11 @@ class AudioSeparateActivity : AppCompatActivity() {
                     val of = codec.outputFormat
                     if (of.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
                         val sr = of.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                        if (sr > 0 && sr != sampleRate && mp3 == null) sampleRate = sr
+                        if (sr > 0 && sr != sampleRate && !writerReady) sampleRate = sr
                     }
                     if (of.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
                         val ch = of.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                        if (ch > 0 && mp3 == null) channelCount = ch.coerceIn(1, 2)
+                        if (ch > 0 && !writerReady) channelCount = ch.coerceIn(1, maxChannels)
                     }
                     if (of.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
                         pcmEncoding = of.getInteger(MediaFormat.KEY_PCM_ENCODING)
@@ -310,8 +347,8 @@ class AudioSeparateActivity : AppCompatActivity() {
                 } else if (outIndex >= 0) {
                     val outBuf = codec.getOutputBuffer(outIndex)
                     if (outBuf != null && bufferInfo.size > 0) {
-                        if (mp3 == null) {
-                            // 首个输出缓冲到达，此时格式已确定，再创建编码器。
+                        if (!writerReady) {
+                            // 首个输出缓冲到达，此时格式已确定，再初始化写入器。
                             val of = codec.outputFormat
                             if (of.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
                                 val sr = of.getInteger(MediaFormat.KEY_SAMPLE_RATE)
@@ -319,13 +356,13 @@ class AudioSeparateActivity : AppCompatActivity() {
                             }
                             if (of.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
                                 val ch = of.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                                if (ch > 0) channelCount = ch.coerceIn(1, 2)
+                                if (ch > 0) channelCount = ch.coerceIn(1, maxChannels)
                             }
                             if (of.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
                                 pcmEncoding = of.getInteger(MediaFormat.KEY_PCM_ENCODING)
                             }
-                            mp3 = Mp3Encoder(sampleRate, channelCount, 192)
-                            encoder = mp3
+                            writer?.configure(sampleRate, channelCount)
+                            writerReady = true
                         }
                         outBuf.position(bufferInfo.offset)
                         outBuf.limit(bufferInfo.offset + bufferInfo.size)
@@ -371,7 +408,7 @@ class AudioSeparateActivity : AppCompatActivity() {
                             } else {
                                 ByteBuffer.wrap(bytes, 0, usable).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcmTemp, 0, sampleCount)
                             }
-                            mp3.encode(pcmTemp, frameCount, output)
+                            writer?.write(pcmTemp, frameCount)
                         }
                         pending = if (usable < bytes.size) bytes.copyOfRange(usable, bytes.size) else ByteArray(0)
                     }
@@ -380,26 +417,50 @@ class AudioSeparateActivity : AppCompatActivity() {
                 }
             }
 
-            if (mp3 == null) error("解码器没有输出任何音频数据")
-            mp3.flush(output)
-            output.flush()
-            output.close()
-            output = null
+            if (!writerReady) error("解码器没有输出任何音频数据")
+            writer?.finish()
+            if (formatKind == AudioOutputFormat.WAV) {
+                val temp = wavTemp ?: error("WAV 临时文件缺失")
+                copyFileToOutput(temp, created)
+                temp.delete()
+            }
+            writer?.close()
+            writer = null
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && outUri != null) {
                 contentResolver.update(outUri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
             }
             return created
         } catch (e: Exception) {
-            runCatching { output?.close() }
+            runCatching { writer?.close() }
+            wavTemp?.delete()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && outUri != null) runCatching { contentResolver.delete(outUri, null, null) }
             outFile?.delete()
             throw e
         } finally {
-            runCatching { encoder?.close() }
             runCatching { codec?.stop() }
             runCatching { codec?.release() }
             runCatching { extractor.release() }
+        }
+    }
+
+    private fun openDecodedOutput(created: OutputInfo): OutputStream {
+        return if (created.uri != null) {
+            contentResolver.openOutputStream(created.uri) ?: error("无法写入输出文件")
+        } else {
+            FileOutputStream(created.path)
+        }
+    }
+
+    private fun copyFileToOutput(src: File, created: OutputInfo) {
+        if (created.uri != null) {
+            contentResolver.openOutputStream(created.uri)?.use { output ->
+                src.inputStream().use { input -> input.copyTo(output) }
+            } ?: error("无法写入输出文件")
+        } else {
+            FileOutputStream(created.path).use { output ->
+                src.inputStream().use { input -> input.copyTo(output) }
+            }
         }
     }
 
@@ -418,7 +479,7 @@ class AudioSeparateActivity : AppCompatActivity() {
 
     private data class OutputInfo(val path: String, val display: String, val uri: Uri? = null, val file: File? = null)
 
-    private fun createOutput(fileName: String, mime: String, directory: String, subDir: String, isAudio: Boolean): OutputInfo {
+    private fun createOutput(fileName: String, mime: String, directory: String, subDir: String, isAudio: Boolean, usePath: Boolean = true): OutputInfo {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -428,6 +489,7 @@ class AudioSeparateActivity : AppCompatActivity() {
             }
             val collection = if (isAudio) MediaStore.Audio.Media.EXTERNAL_CONTENT_URI else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             val uri = contentResolver.insert(collection, values) ?: error("无法创建输出文件")
+            if (!usePath) return OutputInfo("", "$directory/$subDir/$fileName", uri, null)
             val pfd = contentResolver.openFileDescriptor(uri, "rw") ?: error("无法打开输出文件")
             OutputInfo("/proc/self/fd/${pfd.detachFd()}", "$directory/$subDir/$fileName", uri, null)
         } else {
@@ -476,5 +538,135 @@ class AudioSeparateActivity : AppCompatActivity() {
             i++
         }
         return file
+    }
+}
+
+private abstract class DecodedAudioWriter {
+    abstract fun configure(sampleRate: Int, channelCount: Int)
+    abstract fun write(pcm: ShortArray, frameCount: Int)
+    abstract fun finish()
+    abstract fun close()
+}
+
+private class Mp3Writer(private val output: OutputStream) : DecodedAudioWriter() {
+    private var encoder: Mp3Encoder? = null
+
+    override fun configure(sampleRate: Int, channelCount: Int) {
+        encoder = Mp3Encoder(sampleRate, channelCount.coerceIn(1, 2), 192)
+    }
+
+    override fun write(pcm: ShortArray, frameCount: Int) {
+        encoder?.encode(pcm, frameCount, output)
+    }
+
+    override fun finish() {
+        encoder?.flush(output)
+        output.flush()
+    }
+
+    override fun close() {
+        runCatching { encoder?.close() }
+        runCatching { output.close() }
+    }
+}
+
+private class WavWriter(file: File) : DecodedAudioWriter() {
+    private val raf = RandomAccessFile(file, "rw")
+    private var channelCount = 0
+    private var dataBytes = 0L
+    private var pcmBytes = ByteArray(0)
+
+    override fun configure(sampleRate: Int, channelCount: Int) {
+        this.channelCount = channelCount
+        raf.setLength(0)
+        raf.seek(0)
+        writeAscii("RIFF")
+        writeIntLE(0)
+        writeAscii("WAVE")
+        writeAscii("fmt ")
+        writeIntLE(16)
+        writeShortLE(1)
+        writeShortLE(channelCount)
+        writeIntLE(sampleRate)
+        writeIntLE(sampleRate * channelCount * 2)
+        writeShortLE(channelCount * 2)
+        writeShortLE(16)
+        writeAscii("data")
+        writeIntLE(0)
+    }
+
+    override fun write(pcm: ShortArray, frameCount: Int) {
+        val sampleCount = frameCount * channelCount
+        val byteCount = sampleCount * 2
+        if (pcmBytes.size < byteCount) pcmBytes = ByteArray(byteCount)
+        ByteBuffer.wrap(pcmBytes, 0, byteCount).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(pcm, 0, sampleCount)
+        raf.write(pcmBytes, 0, byteCount)
+        dataBytes += byteCount
+    }
+
+    override fun finish() {
+        raf.seek(4)
+        writeIntLE((36L + dataBytes).toInt())
+        raf.seek(40)
+        writeIntLE(dataBytes.toInt())
+    }
+
+    override fun close() {
+        runCatching { raf.close() }
+    }
+
+    private fun writeAscii(text: String) {
+        val bytes = text.toByteArray(Charsets.US_ASCII)
+        raf.write(bytes)
+    }
+
+    private fun writeIntLE(value: Int) {
+        raf.write(value and 0xFF)
+        raf.write((value shr 8) and 0xFF)
+        raf.write((value shr 16) and 0xFF)
+        raf.write((value shr 24) and 0xFF)
+    }
+
+    private fun writeShortLE(value: Int) {
+        raf.write(value and 0xFF)
+        raf.write((value shr 8) and 0xFF)
+    }
+}
+
+private class FlacWriter(output: OutputStream) : DecodedAudioWriter() {
+    private val flacStream = FLACStreamOutputStream(output)
+    private var encoder: FLACEncoder? = null
+    private var channelCount = 0
+    private var intPcm = IntArray(0)
+
+    override fun configure(sampleRate: Int, channelCount: Int) {
+        this.channelCount = channelCount
+        require(channelCount in 1..StreamConfiguration.MAX_CHANNEL_COUNT) { "FLAC 最多支持 8 声道" }
+        require(sampleRate in StreamConfiguration.MIN_SAMPLE_RATE..StreamConfiguration.MAX_SAMPLE_RATE) { "FLAC 采样率超出支持范围" }
+        val flac = FLACEncoder()
+        val streamConfig = StreamConfiguration(channelCount, 4096, 4096, sampleRate, 16)
+        check(flac.setStreamConfiguration(streamConfig)) { "FLAC 流配置失败" }
+        flac.setOutputStream(flacStream)
+        flac.openFLACStream()
+        encoder = flac
+    }
+
+    override fun write(pcm: ShortArray, frameCount: Int) {
+        val sampleCount = frameCount * channelCount
+        if (intPcm.size < sampleCount) intPcm = IntArray(sampleCount)
+        for (i in 0 until sampleCount) intPcm[i] = pcm[i].toInt()
+        val flac = encoder ?: return
+        flac.addSamples(intPcm, frameCount)
+        val fullBlocks = flac.fullBlockSamplesAvailableToEncode()
+        if (fullBlocks > 0) flac.encodeSamples(fullBlocks, false)
+    }
+
+    override fun finish() {
+        val flac = encoder ?: return
+        flac.encodeSamples(flac.samplesAvailableToEncode(), true)
+    }
+
+    override fun close() {
+        runCatching { flacStream.close() }
     }
 }

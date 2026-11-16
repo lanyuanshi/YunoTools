@@ -20,9 +20,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.yuno.tools.databinding.ActivityVideoTrimBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -43,6 +45,19 @@ class VideoTrimActivity : AppCompatActivity() {
     private var endMs: Long = 0L
     private var isAdjustingSlider = false
     private val handler = Handler(Looper.getMainLooper())
+    private val trimStepsMs = longArrayOf(100L, 500L, 1000L, 5000L)
+    private var trimStepIndex = 2
+
+    @Volatile
+    private var trimTransformer: Transformer? = null
+
+    @Volatile
+    private var trimLatch: CountDownLatch? = null
+
+    @Volatile
+    private var trimCancelled = false
+    private var trimProgressRunnable: Runnable? = null
+    private var trimJob: Job? = null
 
     private val tick = object : Runnable {
         override fun run() {
@@ -110,10 +125,37 @@ class VideoTrimActivity : AppCompatActivity() {
             player?.seekTo(startMs)
         }
 
-        binding.btnStartMinus.setOnClickListener { adjustStart(-1000) }
-        binding.btnStartPlus.setOnClickListener { adjustStart(1000) }
-        binding.btnEndMinus.setOnClickListener { adjustEnd(-1000) }
-        binding.btnEndPlus.setOnClickListener { adjustEnd(1000) }
+        binding.btnStartMinus.setOnClickListener { adjustStart(-trimStepsMs[trimStepIndex]) }
+        binding.btnStartPlus.setOnClickListener { adjustStart(trimStepsMs[trimStepIndex]) }
+        binding.btnEndMinus.setOnClickListener { adjustEnd(-trimStepsMs[trimStepIndex]) }
+        binding.btnEndPlus.setOnClickListener { adjustEnd(trimStepsMs[trimStepIndex]) }
+        binding.tvStepBadge.setOnClickListener { cycleTrimStep() }
+        binding.btnMarkStart.setOnClickListener { markTrimPoint(isStart = true) }
+        binding.btnMarkEnd.setOnClickListener { markTrimPoint(isStart = false) }
+        binding.btnCancelTrim.setOnClickListener { cancelTrimExport() }
+        updateTrimStepBadge()
+    }
+
+    private fun cycleTrimStep() {
+        trimStepIndex = (trimStepIndex + 1) % trimStepsMs.size
+        updateTrimStepBadge()
+    }
+
+    private fun updateTrimStepBadge() {
+        val step = trimStepsMs[trimStepIndex]
+        binding.tvStepBadge.text = if (step >= 1000L) "${step / 1000L} sec" else "$step ms"
+    }
+
+    private fun markTrimPoint(isStart: Boolean) {
+        val position = player?.currentPosition ?: return
+        if (durationMs <= 0L) return
+        if (isStart) {
+            startMs = position.coerceIn(0L, max(0L, endMs - 1000L))
+            player?.seekTo(startMs)
+        } else {
+            endMs = position.coerceIn(min(durationMs, startMs + 1000L), durationMs)
+        }
+        syncSlider()
     }
 
     private fun loadVideo(uri: Uri) {
@@ -186,7 +228,11 @@ class VideoTrimActivity : AppCompatActivity() {
     private fun setTrimProcessing(processing: Boolean) {
         binding.fabTrim.isEnabled = !processing
         binding.progressTrim.visibility = if (processing) View.VISIBLE else View.GONE
+        binding.btnCancelTrim.visibility = if (processing) View.VISIBLE else View.GONE
         binding.fabTrim.alpha = if (processing) 0.55f else 1f
+        if (processing) {
+            binding.progressTrim.progress = 0
+        }
     }
 
     private fun trimSelectedVideo() {
@@ -199,16 +245,23 @@ class VideoTrimActivity : AppCompatActivity() {
             return
         }
         val outputName = sanitizeName(binding.etVideoName.text?.toString()).ifBlank { "Yuno_trim_${System.currentTimeMillis()}" }
+        trimCancelled = false
         setTrimProcessing(true)
         Toast.makeText(this, "正在生成剪切视频...", Toast.LENGTH_SHORT).show()
 
-        lifecycleScope.launch {
+        trimJob = lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { cutVideo(uri, outputName, startMs * 1000L, endMs * 1000L) } }
             setTrimProcessing(false)
             result.onSuccess {
+                binding.progressTrim.progress = 100
                 Toast.makeText(this@VideoTrimActivity, "视频已保存：$it", Toast.LENGTH_LONG).show()
             }.onFailure {
-                Toast.makeText(this@VideoTrimActivity, "剪切失败：${it.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                if (trimCancelled) {
+                    binding.progressTrim.progress = 0
+                    Toast.makeText(this@VideoTrimActivity, "已取消剪切", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@VideoTrimActivity, "剪切失败：${it.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -249,18 +302,26 @@ class VideoTrimActivity : AppCompatActivity() {
                 })
                 .build()
 
+            trimTransformer = transformer
+            trimLatch = latch
             Handler(Looper.getMainLooper()).post {
+                if (trimCancelled) {
+                    latch.countDown()
+                    return@post
+                }
                 runCatching { transformer.start(mediaItem, tempOutput.absolutePath) }
                     .onFailure {
                         errorRef.set(it)
                         latch.countDown()
                     }
             }
+            startTrimProgress()
 
             if (!latch.await(20, TimeUnit.MINUTES)) {
-                transformer.cancel()
+                Handler(Looper.getMainLooper()).post { transformer.cancel() }
                 error("剪切超时，请换一个更短区间重试")
             }
+            if (trimCancelled) error("已取消")
             errorRef.get()?.let { throw it }
             if (!tempOutput.exists() || tempOutput.length() <= 1024L) error("未生成有效视频文件")
 
@@ -282,7 +343,7 @@ class VideoTrimActivity : AppCompatActivity() {
                 return "Movies/YunoTools/$name"
             } else {
                 val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "YunoTools").apply { mkdirs() }
-                outFile = File(dir, name)
+                outFile = uniqueFile(dir, name)
                 tempOutput.inputStream().use { input -> FileOutputStream(outFile!!).use { output -> input.copyTo(output) } }
                 return outFile!!.absolutePath
             }
@@ -291,8 +352,37 @@ class VideoTrimActivity : AppCompatActivity() {
             outFile?.takeIf { it.exists() }?.delete()
             throw IllegalStateException(e.message ?: "剪切失败", e)
         } finally {
+            trimTransformer = null
+            trimLatch = null
+            trimProgressRunnable?.let { handler.removeCallbacks(it) }
+            trimProgressRunnable = null
             tempOutput.delete()
         }
+    }
+
+    private fun startTrimProgress() {
+        val runnable = object : Runnable {
+            override fun run() {
+                val transformer = trimTransformer
+                if (transformer != null && !trimCancelled) {
+                    val holder = ProgressHolder()
+                    val state = runCatching { transformer.getProgress(holder) }.getOrDefault(Transformer.PROGRESS_STATE_UNAVAILABLE)
+                    if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
+                        binding.progressTrim.progress = holder.progress.coerceIn(0, 100)
+                    }
+                }
+                if (trimLatch != null) handler.postDelayed(this, 300)
+            }
+        }
+        trimProgressRunnable = runnable
+        handler.post(runnable)
+    }
+
+    private fun cancelTrimExport() {
+        if (trimTransformer == null && trimLatch == null) return
+        trimCancelled = true
+        trimTransformer?.cancel()
+        trimLatch?.countDown()
     }
 
 
@@ -346,6 +436,9 @@ class VideoTrimActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        trimCancelled = true
+        trimJob?.cancel()
+        cancelTrimExport()
         handler.removeCallbacks(tick)
         binding.playerView.player = null
         player?.release()

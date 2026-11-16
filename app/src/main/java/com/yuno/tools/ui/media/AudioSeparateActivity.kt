@@ -260,10 +260,6 @@ class AudioSeparateActivity : AppCompatActivity() {
             val sourceChannelCount = (if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2).coerceAtLeast(1)
             var channelCount = sourceChannelCount.coerceIn(1, maxChannels)
             if (sampleRate <= 0) error("音频采样率无效")
-            if (formatKind == AudioOutputFormat.WAV && selectedDurationMs > 0) {
-                val estimatedBytes = (selectedDurationMs / 1000.0 * sampleRate * sourceChannelCount * 2).toLong()
-                if (estimatedBytes > MAX_WAV_DATA_BYTES) error("WAV 文件超过 4GB 限制，请改用 FLAC")
-            }
 
             extractor.selectTrack(audioTrack)
             codec = MediaCodec.createDecoderByType(mime)

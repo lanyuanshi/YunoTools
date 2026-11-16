@@ -144,6 +144,24 @@
                             android:text="MP3"
                             android:textColor="#1C1C1E"
                             android:textSize="14sp" />
+
+                        <RadioButton
+                            android:id="@+id/rbWav"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="WAV"
+                            android:textColor="#1C1C1E"
+                            android:textSize="14sp" />
+
+                        <RadioButton
+                            android:id="@+id/rbFlac"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="FLAC"
+                            android:textColor="#1C1C1E"
+                            android:textSize="14sp" />
                     </RadioGroup>
 
                     <TextView

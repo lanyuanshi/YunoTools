@@ -231,11 +231,14 @@
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/tvStepBadge"
                     android:layout_width="42dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
                     android:layout_marginEnd="6dp"
                     android:background="@drawable/bg_step_badge"
+                    android:clickable="true"
+                    android:focusable="true"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:paddingTop="5dp"
@@ -295,6 +298,34 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMarkStart"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:text="标记为开始"
+                    android:textSize="13sp"
+                    app:cornerRadius="12dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnMarkEnd"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="标记为结束"
+                    android:textSize="13sp"
+                    app:cornerRadius="12dp" />
+            </LinearLayout>
+
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -316,9 +347,21 @@
                 android:layout_width="match_parent"
                 android:layout_height="6dp"
                 android:layout_marginTop="14dp"
-                android:indeterminate="true"
-                android:indeterminateTint="#FF5252"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#FF5252"
                 android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelTrim"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="10dp"
+                android:text="取消剪切"
+                android:textSize="14sp"
+                android:visibility="gone"
+                app:cornerRadius="12dp" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

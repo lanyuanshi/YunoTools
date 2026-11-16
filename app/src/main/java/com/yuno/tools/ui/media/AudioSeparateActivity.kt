@@ -616,6 +616,7 @@ private class WavWriter(file: File) : DecodedAudioWriter() {
         ByteBuffer.wrap(pcmBytes, 0, byteCount).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(pcm, 0, sampleCount)
         raf.write(pcmBytes, 0, byteCount)
         dataBytes += byteCount
+        if (dataBytes > MAX_WAV_DATA_BYTES) error("WAV 文件超过 4GB 限制，请改用 FLAC")
     }
 
     override fun finish() {

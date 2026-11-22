@@ -113,6 +113,7 @@ import com.yuno.tools.ui.tools.DinoRunActivity
 import com.yuno.tools.ui.tools.PokiGamesActivity
 import com.yuno.tools.ui.tools.TranslateActivity
 import com.yuno.tools.ui.tools.HeisiImageActivity
+import com.yuno.tools.ui.tools.CloudDriveActivity
 import com.yuno.tools.ui.profile.MemberCenterActivity
 import com.yuno.tools.ui.profile.MemberZoneActivity
 import com.yuno.tools.ui.profile.ProfileActivity
@@ -311,6 +312,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<MaterialCardView>(R.id.cardAnimeSearch).setOnClickListener {
             startActivity(Intent(this, com.yuno.tools.ui.tools.AnimeSearchActivity::class.java))
+        }
+        findViewById<MaterialCardView>(R.id.cardCloudDrive).setOnClickListener {
+            startActivity(Intent(this, CloudDriveActivity::class.java))
         }
         findViewById<MaterialCardView>(R.id.cardImageCompress).setOnClickListener {
             startActivity(Intent(this, ImageCompressActivity::class.java))

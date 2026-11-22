@@ -45,6 +45,9 @@
             android:enabled="false"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".ui.tools.CloudDriveActivity"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".ui.video.ParseResultActivity"
             android:screenOrientation="portrait" />
         <activity
